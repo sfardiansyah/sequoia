@@ -1,7 +1,9 @@
 import { OTP, OTPCode, OTPInvalidError } from "./models/otp";
 import { RefreshToken, TokenResponse } from "./models/token";
 import {
+  LoginError,
   RegisterError,
+  type LoginRequest,
   type RegisterRequest,
   type RegisterRequestWithOTP,
   type User,
@@ -25,7 +27,7 @@ export class AuthService {
 
     const userId = payload.sub;
     if (!userId) {
-      throw new InternalServerError(); // TODO: Define Internal Server Error
+      throw new InternalServerError();
     }
 
     const user = await this.repository.getUser(new ID(userId));
@@ -51,6 +53,27 @@ export class AuthService {
     await this.mailer.sendOTP(req.email, otp.code);
   };
 
+  sendLoginOTP = async (username: string): Promise<void> => {
+    const otp = new OTP();
+
+    const email = await this.repository.getEmailByUsername(username);
+
+    await this.repository.insertGeneratedOTP(username, otp);
+    await this.mailer.sendOTP(email, otp.code);
+  };
+
+  login = async (req: LoginRequest): Promise<TokenResponse> => {
+    try {
+      this.validateOTP(req.username, req.otp);
+
+      const user = await this.repository.getUserByUsername(req.username);
+
+      return await this.generateToken(user);
+    } catch (error) {
+      throw LoginError.fromError(error);
+    }
+  };
+
   private generateToken = async (user: User): Promise<TokenResponse> => {
     const token = await this.jwt.generateToken(user.id);
     const refreshToken = RefreshToken.generate();
@@ -64,7 +87,7 @@ export class AuthService {
   ): Promise<void> => {
     const otp = await this.repository.getOTP(username, code);
     if (!otp) {
-      throw new OTPInvalidError(); // TODO: Define invalid OTP error
+      throw new OTPInvalidError();
     }
 
     otp.validateExpiry();
