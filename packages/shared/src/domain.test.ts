@@ -4,6 +4,7 @@ import {
   founderRedeemableBps,
   founderVestedBps,
   idr,
+  isMemberClass,
   splitContribution,
   type Result,
 } from "./index";
@@ -38,7 +39,7 @@ describe("IDR amounts and basis points", () => {
 
 describe("contribution split", () => {
   test("splits a standard contribution 70/30", () => {
-    const split = unwrap(splitContribution(unwrap(idr(1_000_000)), "standard"));
+    const split = unwrap(splitContribution(unwrap(idr(1_000_000)), "STANDARD"));
     expect({ deposit: n(split.deposit), project: n(split.project) }).toEqual({
       deposit: 700_000,
       project: 300_000,
@@ -46,7 +47,7 @@ describe("contribution split", () => {
   });
 
   test("splits a founder contribution 20/80", () => {
-    const split = unwrap(splitContribution(unwrap(idr(1_000_000)), "founder"));
+    const split = unwrap(splitContribution(unwrap(idr(1_000_000)), "FOUNDER"));
     expect({ deposit: n(split.deposit), project: n(split.project) }).toEqual({
       deposit: 200_000,
       project: 800_000,
@@ -54,8 +55,8 @@ describe("contribution split", () => {
   });
 
   test("assigns the rounding remainder to project capital", () => {
-    const standard = unwrap(splitContribution(unwrap(idr(101)), "standard"));
-    const founder = unwrap(splitContribution(unwrap(idr(101)), "founder"));
+    const standard = unwrap(splitContribution(unwrap(idr(101)), "STANDARD"));
+    const founder = unwrap(splitContribution(unwrap(idr(101)), "FOUNDER"));
 
     expect({ deposit: n(standard.deposit), project: n(standard.project) }).toEqual({
       deposit: 70,
@@ -68,11 +69,20 @@ describe("contribution split", () => {
   });
 
   test("never loses an IDR unit", () => {
-    for (const memberClass of ["standard", "founder"] as const) {
+    for (const memberClass of ["STANDARD", "FOUNDER"] as const) {
       const amount = unwrap(idr(101));
       const split = unwrap(splitContribution(amount, memberClass));
       expect(n(split.deposit) + n(split.project)).toBe(n(amount));
     }
+  });
+});
+
+describe("member class", () => {
+  test("accepts only declared classes", () => {
+    expect(isMemberClass("STANDARD")).toBe(true);
+    expect(isMemberClass("FOUNDER")).toBe(true);
+    expect(isMemberClass("standard")).toBe(false);
+    expect(isMemberClass("admin")).toBe(false);
   });
 });
 

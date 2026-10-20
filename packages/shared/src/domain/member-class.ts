@@ -1,20 +1,28 @@
-export const MEMBER_CLASSES = ["standard", "founder"] as const;
-
-export type MemberClass = (typeof MEMBER_CLASSES)[number];
-
-export const STANDARD_SPLIT = {
-  depositBps: 7_000,
-  projectBps: 3_000,
+export const MemberClass = {
+  Standard: "STANDARD",
+  Founder: "FOUNDER",
 } as const;
 
-export const FOUNDER_SPLIT = {
-  depositBps: 2_000,
-  projectBps: 8_000,
-} as const;
+export type MemberClass = (typeof MemberClass)[keyof typeof MemberClass];
 
-export function contributionSplitFor(memberClass: MemberClass): {
-  depositBps: number;
-  projectBps: number;
-} {
-  return memberClass === "founder" ? FOUNDER_SPLIT : STANDARD_SPLIT;
+export const MEMBER_CLASSES = Object.values(MemberClass) as MemberClass[];
+
+export type ContributionSplitBps = {
+  readonly depositBps: number;
+  readonly projectBps: number;
+};
+
+const SPLITS = {
+  [MemberClass.Standard]: { depositBps: 7_000, projectBps: 3_000 },
+  [MemberClass.Founder]: { depositBps: 2_000, projectBps: 8_000 },
+} satisfies Record<MemberClass, ContributionSplitBps>;
+
+export function contributionSplitFor(
+  memberClass: MemberClass,
+): ContributionSplitBps {
+  return SPLITS[memberClass];
+}
+
+export function isMemberClass(value: string): value is MemberClass {
+  return (MEMBER_CLASSES as readonly string[]).includes(value);
 }

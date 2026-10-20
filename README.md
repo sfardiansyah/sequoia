@@ -8,23 +8,26 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 1 is complete: Bun workspace and shared domain primitives.
+Milestone 2: Elysia API skeleton with `/health` and typed error envelopes.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- unit tests.
+- Elysia API with config loading and route tests.
 
-Not built yet: API, database, Aiken contracts, KYC/bank adapters, web app.
+Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 
 ## Commands
 
 ```sh
 bun install
 bun run check
+bun run dev:api
 ```
+
+`GET /health` returns the service name and version.
 
 ## Layout
 
