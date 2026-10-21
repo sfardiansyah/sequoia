@@ -1,4 +1,4 @@
-# Co-op on Cardano
+# Sequoia on Cardano
 
 Member-owned Indonesian co-op with member-only IDR deposit receipts, at-risk
 project capital, one member one vote, founder vesting, on-chain governance, and
@@ -8,14 +8,14 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 7: Membership composition root and admin admission CLI.
+Milestone 8: Sequoia rename and citty CLI.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership domain, Postgres repository, centralized migrations, and admin admission CLI.
+- Elysia API; membership domain, Postgres repository, centralized migrations, and citty admin CLI.
 
 Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 
@@ -25,8 +25,8 @@ Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 bun install
 bun run check
 bun run dev:api
-bun run db:migrate
-bun run member:admit --owner-pkh ... --kyc-commitment ...
+bun run sequoia migrate
+bun run sequoia member admit --owner-pkh ... --kyc-commitment ...
 ```
 
 `GET /health` returns the service name and version.
@@ -49,4 +49,4 @@ domain <- application <- adapters
 The domain must not import Elysia, Drizzle, Lucid, Bun APIs, `process.env`, or
 HTTP types. Concrete adapters are wired only in the composition root.
 
-Full plan: `/home/raynord/.opencode/plan/co-op-plan.md`
+Full plan: `/home/raynord/.opencode/plan/sequoia-plan.md`

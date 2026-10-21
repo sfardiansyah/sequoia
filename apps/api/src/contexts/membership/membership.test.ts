@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Result } from "@coop/shared";
+import type { Result } from "@sequoia/shared";
 import { InMemoryMemberRepository, SequentialIdGenerator } from "./adapters/in-memory";
 import { AdmitMember } from "./application/admit-member";
 import { Member, MemberStatus, type MembershipError } from "./domain/member";

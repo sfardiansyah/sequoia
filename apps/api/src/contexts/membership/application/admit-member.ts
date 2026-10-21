@@ -1,4 +1,4 @@
-import { err, type MemberClass, type Result } from "@coop/shared";
+import { err, type MemberClass, type Result } from "@sequoia/shared";
 import {
   Member,
   type MemberRepository,

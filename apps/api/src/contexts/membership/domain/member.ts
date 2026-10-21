@@ -1,4 +1,4 @@
-import { err, ok, type MemberClass, type Result } from "@coop/shared";
+import { err, ok, type MemberClass, type Result } from "@sequoia/shared";
 
 export type MemberId = string & { readonly __brand: "MemberId" };
 

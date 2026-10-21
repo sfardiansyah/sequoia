@@ -1,5 +1,5 @@
 {
-  "name": "@coop/api",
+  "name": "@sequoia/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.11",
+    "citty": "^0.2.2",
     "drizzle-orm": "^0.45.4",
     "elysia": "^1.4.30",
     "postgres": "^3.4.9"

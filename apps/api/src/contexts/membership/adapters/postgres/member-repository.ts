@@ -1,4 +1,4 @@
-import type { MemberClass } from "@coop/shared";
+import type { MemberClass } from "@sequoia/shared";
 import { eq } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {

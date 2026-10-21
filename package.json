@@ -1,5 +1,5 @@
 {
-  "name": "co-op",
+  "name": "sequoia",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.3",
@@ -10,8 +10,9 @@
   "scripts": {
     "dev:api": "bun --watch apps/api/src/index.ts",
     "start:api": "bun apps/api/src/index.ts",
-    "db:migrate": "bun apps/api/src/cli/migrate.ts",
-    "member:admit": "bun apps/api/src/cli/admit-member.ts",
+    "sequoia": "bun apps/api/src/cli/index.ts",
+    "db:migrate": "bun run sequoia migrate",
+    "member:admit": "bun run sequoia member admit",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test"

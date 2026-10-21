@@ -15,8 +15,8 @@
     "types": ["bun"],
     "baseUrl": ".",
     "paths": {
-      "@coop/shared": ["packages/shared/src/index.ts"],
-      "@coop/shared/*": ["packages/shared/src/*"]
+      "@sequoia/shared": ["packages/shared/src/index.ts"],
+      "@sequoia/shared/*": ["packages/shared/src/*"]
     }
   },
   "include": ["packages/**/*.ts", "apps/**/*.ts", "scripts/**/*.ts"]
