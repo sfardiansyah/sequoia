@@ -8,14 +8,14 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 8: Sequoia rename and citty CLI.
+Milestone 10: Auth stabilization.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership domain, Postgres repository, centralized migrations, and citty admin CLI.
+- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, JWT claims, rate limiting, and `/members/me`.
 
 Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 

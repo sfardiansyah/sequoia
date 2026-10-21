@@ -1,8 +1,16 @@
 import { Elysia } from "elysia";
+import type { AuthService } from "./contexts/auth/application/auth-service";
+import { authRoutes } from "./contexts/auth/http/routes";
+import type { RateLimiter } from "./contexts/auth/types";
 import type { AppConfig } from "./config";
 import { errorEnvelope } from "./shared/http/error-envelope";
 
-export function createApp(config: AppConfig) {
+export type AppDependencies = {
+  readonly auth: AuthService;
+  readonly rateLimiter: RateLimiter;
+};
+
+export function createApp(config: AppConfig, deps: AppDependencies) {
   return new Elysia()
     .onError(({ code, set }) => {
       if (code === "NOT_FOUND") {
@@ -22,5 +30,6 @@ export function createApp(config: AppConfig) {
       status: "ok",
       service: config.serviceName,
       version: config.version,
-    }));
+    }))
+    .use(authRoutes(deps));
 }

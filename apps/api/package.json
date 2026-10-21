@@ -8,10 +8,16 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.11",
+    "@cardano-foundation/cardano-verify-datasignature": "^1.0.11",
+    "@stricahq/cip08": "^2.0.0",
+    "blakejs": "^1.2.1",
     "citty": "^0.2.2",
     "drizzle-orm": "^0.45.4",
     "elysia": "^1.4.30",
+    "jose": "^6.2.13",
     "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11"
   }
 }

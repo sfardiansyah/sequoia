@@ -1,0 +1,45 @@
+export type AuthError =
+  | "INVALID_NONCE"
+  | "INVALID_SIGNATURE"
+  | "UNAUTHORIZED"
+  | "RATE_LIMITED";
+
+export type AuthChallenge = {
+  readonly nonce: string;
+  readonly payload: string;
+  readonly expiresAt: number;
+};
+
+export type WalletSignature = {
+  readonly address: string;
+  readonly nonce: string;
+  readonly signature: string;
+  readonly key: string;
+};
+
+export interface WalletVerifier {
+  verify(input: WalletSignature): boolean;
+  publicKeyHash(key: string): string;
+}
+
+export interface NonceStore {
+  create(input: {
+    nonce: string;
+    address: string;
+    expiresAt: number;
+  }): Promise<void>;
+  consume(input: {
+    nonce: string;
+    address: string;
+    now: number;
+  }): Promise<boolean>;
+}
+
+export interface TokenService {
+  sign(pkh: string): Promise<string>;
+  verify(token: string): Promise<{ pkh: string } | null>;
+}
+
+export interface RateLimiter {
+  allow(key: string): boolean;
+}

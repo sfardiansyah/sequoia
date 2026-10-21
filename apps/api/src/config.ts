@@ -29,7 +29,7 @@ export function loadConfig(
   }
 
   return {
-    serviceName: "coop-api",
+    serviceName: "sequoia-api",
     version: "0.1.0",
     environment: environment as AppEnvironment,
     port,
