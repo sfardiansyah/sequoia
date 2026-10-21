@@ -8,14 +8,14 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 2: Elysia API skeleton with `/health` and typed error envelopes.
+Milestone 3: Membership domain and admission use case.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API with config loading and route tests.
+- Elysia API with config loading and route tests; membership aggregate, repository port, and in-memory adapter.
 
 Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 
