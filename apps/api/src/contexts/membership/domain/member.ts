@@ -55,6 +55,35 @@ export class Member {
       ),
     );
   }
+
+  static rehydrate(input: {
+    id: string;
+    ownerPkh: string;
+    kycCommitment: string;
+    memberClass: MemberClass;
+    status: MemberStatus;
+    joinedAt: number;
+  }): Result<Member, MembershipError> {
+    const ownerPkh = input.ownerPkh.trim();
+    const kycCommitment = input.kycCommitment.trim();
+
+    if (!ownerPkh) return err("INVALID_OWNER");
+    if (!kycCommitment) return err("INVALID_KYC_COMMITMENT");
+    if (!Number.isInteger(input.joinedAt) || input.joinedAt < 0) {
+      return err("INVALID_JOIN_TIME");
+    }
+
+    return ok(
+      new Member(
+        input.id as MemberId,
+        ownerPkh,
+        kycCommitment,
+        input.memberClass,
+        input.status,
+        input.joinedAt,
+      ),
+    );
+  }
 }
 
 export interface MemberRepository {
