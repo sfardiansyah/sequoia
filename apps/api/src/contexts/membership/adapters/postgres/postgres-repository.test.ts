@@ -1,29 +1,26 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { Member } from "../../domain/member";
-import { PgliteMemberRepository } from "./member-repository";
+import { DrizzleMemberRepository } from "./member-repository";
 import * as schema from "./schema";
-
-const ddl = `
-  CREATE TABLE members (
-    id text PRIMARY KEY,
-    owner_pkh text NOT NULL UNIQUE,
-    kyc_commitment text NOT NULL,
-    member_class text NOT NULL CHECK (member_class IN ('STANDARD', 'FOUNDER')),
-    status text NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE', 'EXITED')),
-    joined_at bigint NOT NULL
-  )
-`;
 
 async function setup() {
   const client = new PGlite();
+  const ddl = await readFile(
+    new URL(
+      "../../../../infrastructure/database/migrations/0001_members.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   await client.exec(ddl);
   const db = drizzle(client, { schema });
-  return { client, repo: new PgliteMemberRepository(db) };
+  return { client, repo: new DrizzleMemberRepository(db) };
 }
 
-describe("PgliteMemberRepository", () => {
+describe("DrizzleMemberRepository", () => {
   test("saves and finds a member", async () => {
     const { client, repo } = await setup();
 

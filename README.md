@@ -8,14 +8,14 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 4: Postgres membership persistence.
+Milestone 6: Centralized database migrations.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership aggregate, repository port, in-memory adapter, Drizzle schema, and PGlite persistence adapter.
+- Elysia API; membership domain, Drizzle schema, shared Drizzle repository, PGlite tests, and centralized tracked migrations.
 
 Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 

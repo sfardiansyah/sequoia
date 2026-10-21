@@ -1,6 +1,6 @@
 import type { MemberClass } from "@coop/shared";
 import { eq } from "drizzle-orm";
-import type { PgliteDatabase } from "drizzle-orm/pglite";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
   Member,
   type MemberRepository,
@@ -8,6 +8,8 @@ import {
 } from "../../domain/member";
 import * as schema from "./schema";
 import { members, type MemberInsert, type MemberRow } from "./schema";
+
+type MembershipDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 function toRow(member: Member): MemberInsert {
   return {
@@ -34,8 +36,8 @@ function toDomain(row: MemberRow): Member {
   return member.value;
 }
 
-export class PgliteMemberRepository implements MemberRepository {
-  constructor(private readonly db: PgliteDatabase<typeof schema>) {}
+export class DrizzleMemberRepository implements MemberRepository {
+  constructor(private readonly db: MembershipDatabase) {}
 
   async findByOwnerPkh(ownerPkh: string): Promise<Member | null> {
     const rows = await this.db
