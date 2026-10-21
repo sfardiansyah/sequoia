@@ -8,14 +8,14 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 6: Centralized database migrations.
+Milestone 7: Membership composition root and admin admission CLI.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership domain, Drizzle schema, shared Drizzle repository, PGlite tests, and centralized tracked migrations.
+- Elysia API; membership domain, Postgres repository, centralized migrations, and admin admission CLI.
 
 Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 
@@ -25,6 +25,8 @@ Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 bun install
 bun run check
 bun run dev:api
+bun run db:migrate
+bun run member:admit --owner-pkh ... --kyc-commitment ...
 ```
 
 `GET /health` returns the service name and version.

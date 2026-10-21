@@ -11,6 +11,7 @@
     "dev:api": "bun --watch apps/api/src/index.ts",
     "start:api": "bun apps/api/src/index.ts",
     "db:migrate": "bun apps/api/src/cli/migrate.ts",
+    "member:admit": "bun apps/api/src/cli/admit-member.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test"
