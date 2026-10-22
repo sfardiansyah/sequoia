@@ -2,6 +2,7 @@ import { Elysia, t } from "elysia";
 import { errorEnvelope } from "../../../shared/http/error-envelope";
 import type { AuthService } from "../application/auth-service";
 import type { RateLimiter } from "../types";
+import { authFailure } from "./errors";
 
 export function authRoutes(deps: {
   auth: AuthService;
@@ -15,7 +16,15 @@ export function authRoutes(deps: {
           set.status = 429;
           return errorEnvelope("RATE_LIMITED", "Too many requests");
         }
-        return deps.auth.challenge(body.address);
+
+        const result = await deps.auth.challenge(body.address);
+        if (!result.ok) {
+          const failure = authFailure(result.error);
+          set.status = failure.status;
+          return failure.body;
+        }
+
+        return result.value;
       },
       { body: t.Object({ address: t.String({ minLength: 1 }) }) },
     )
@@ -29,9 +38,11 @@ export function authRoutes(deps: {
 
         const result = await deps.auth.verify(body);
         if (!result.ok) {
-          set.status = 401;
-          return errorEnvelope(result.error, "Authentication failed");
+          const failure = authFailure(result.error);
+          set.status = failure.status;
+          return failure.body;
         }
+
         return result.value;
       },
       {
@@ -42,31 +53,5 @@ export function authRoutes(deps: {
           key: t.String({ minLength: 1 }),
         }),
       },
-    )
-    .get("/members/me", async ({ headers, set }) => {
-      const authorization = headers.authorization;
-      const token = authorization?.startsWith("Bearer ")
-        ? authorization.slice(7)
-        : undefined;
-
-      if (!token) {
-        set.status = 401;
-        return errorEnvelope("UNAUTHORIZED", "Missing bearer token");
-      }
-
-      const result = await deps.auth.findMember(token);
-      if (!result.ok) {
-        set.status = 401;
-        return errorEnvelope(result.error, "Authentication failed");
-      }
-
-      const member = result.value;
-      return {
-        id: member.id,
-        ownerPkh: member.ownerPkh,
-        memberClass: member.memberClass,
-        status: member.status,
-        joinedAt: member.joinedAt,
-      };
-    });
+    );
 }

@@ -7,6 +7,7 @@ import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
 import { PostgresNonceStore } from "./contexts/auth/adapters/postgres-nonce-store";
 import { AuthService } from "./contexts/auth/application/auth-service";
 import { createPostgresMemberRepository } from "./contexts/membership/adapters/postgres/postgres-member-repository";
+import { FindMemberByPkh } from "./contexts/membership/application/find-member";
 
 const config = loadConfig();
 const databaseUrl = process.env.DATABASE_URL;
@@ -19,13 +20,18 @@ if (!databaseUrl || !privateKeys) {
 const tokens = new JwtTokenService(await loadJwtKeys(privateKeys));
 const { client, repository } = createPostgresMemberRepository(databaseUrl);
 const auth = new AuthService(
-  repository,
   new CardanoWalletVerifier(),
   new PostgresNonceStore(client),
   tokens,
 );
 const rateLimiter = new InMemoryRateLimiter(10, 60_000);
-const app = createApp(config, { auth, rateLimiter, jwks: tokens });
+const findMemberByPkh = new FindMemberByPkh(repository);
+const app = createApp(config, {
+  auth,
+  rateLimiter,
+  jwks: tokens,
+  findMemberByPkh,
+});
 
 app.listen(config.port);
 console.log(

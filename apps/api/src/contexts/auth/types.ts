@@ -1,8 +1,10 @@
+import type { UnexpectedError } from "../../shared/errors";
+
 export type AuthError =
-  | "INVALID_NONCE"
-  | "INVALID_SIGNATURE"
-  | "UNAUTHORIZED"
-  | "RATE_LIMITED";
+  | { readonly code: "INVALID_NONCE" }
+  | { readonly code: "INVALID_SIGNATURE" }
+  | { readonly code: "UNAUTHORIZED" }
+  | UnexpectedError;
 
 export type AuthChallenge = {
   readonly nonce: string;

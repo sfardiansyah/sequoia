@@ -1,4 +1,5 @@
 import { err, ok, type MemberClass, type Result } from "@sequoia/shared";
+import type { UnexpectedError } from "../../../shared/errors";
 
 export type MemberId = string & { readonly __brand: "MemberId" };
 
@@ -11,12 +12,14 @@ export const MemberStatus = {
 export type MemberStatus = (typeof MemberStatus)[keyof typeof MemberStatus];
 
 export type MembershipError =
-  | "INVALID_OWNER"
-  | "INVALID_KYC_COMMITMENT"
-  | "INVALID_JOIN_TIME"
-  | "KYC_NOT_VERIFIED"
-  | "BOARD_NOT_APPROVED"
-  | "ALREADY_MEMBER";
+  | { readonly code: "INVALID_OWNER" }
+  | { readonly code: "INVALID_KYC_COMMITMENT" }
+  | { readonly code: "INVALID_JOIN_TIME" }
+  | { readonly code: "KYC_NOT_VERIFIED" }
+  | { readonly code: "BOARD_NOT_APPROVED" }
+  | { readonly code: "ALREADY_MEMBER" }
+  | { readonly code: "MEMBER_NOT_FOUND" }
+  | UnexpectedError;
 
 export class Member {
   private constructor(
@@ -38,10 +41,10 @@ export class Member {
     const ownerPkh = input.ownerPkh.trim();
     const kycCommitment = input.kycCommitment.trim();
 
-    if (!ownerPkh) return err("INVALID_OWNER");
-    if (!kycCommitment) return err("INVALID_KYC_COMMITMENT");
+    if (!ownerPkh) return err({ code: "INVALID_OWNER" });
+    if (!kycCommitment) return err({ code: "INVALID_KYC_COMMITMENT" });
     if (!Number.isInteger(input.joinedAt) || input.joinedAt < 0) {
-      return err("INVALID_JOIN_TIME");
+      return err({ code: "INVALID_JOIN_TIME" });
     }
 
     return ok(
@@ -67,10 +70,10 @@ export class Member {
     const ownerPkh = input.ownerPkh.trim();
     const kycCommitment = input.kycCommitment.trim();
 
-    if (!ownerPkh) return err("INVALID_OWNER");
-    if (!kycCommitment) return err("INVALID_KYC_COMMITMENT");
+    if (!ownerPkh) return err({ code: "INVALID_OWNER" });
+    if (!kycCommitment) return err({ code: "INVALID_KYC_COMMITMENT" });
     if (!Number.isInteger(input.joinedAt) || input.joinedAt < 0) {
-      return err("INVALID_JOIN_TIME");
+      return err({ code: "INVALID_JOIN_TIME" });
     }
 
     return ok(

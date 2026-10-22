@@ -1,4 +1,5 @@
 import { err, type MemberClass, type Result } from "@sequoia/shared";
+import { unexpected } from "../../../shared/errors";
 import {
   Member,
   type MemberRepository,
@@ -27,11 +28,16 @@ export class AdmitMember {
   async execute(
     command: AdmitMemberCommand,
   ): Promise<Result<Member, MembershipError>> {
-    if (!command.kycVerified) return err("KYC_NOT_VERIFIED");
-    if (!command.boardApproved) return err("BOARD_NOT_APPROVED");
+    if (!command.kycVerified) return err({ code: "KYC_NOT_VERIFIED" });
+    if (!command.boardApproved) return err({ code: "BOARD_NOT_APPROVED" });
 
-    const existing = await this.members.findByOwnerPkh(command.ownerPkh);
-    if (existing) return err("ALREADY_MEMBER");
+    let existing: Member | null;
+    try {
+      existing = await this.members.findByOwnerPkh(command.ownerPkh);
+    } catch (cause) {
+      return err(unexpected(cause));
+    }
+    if (existing) return err({ code: "ALREADY_MEMBER" });
 
     const member = Member.admit({
       id: this.ids.next(),
@@ -42,7 +48,12 @@ export class AdmitMember {
     });
     if (!member.ok) return member;
 
-    await this.members.save(member.value);
+    try {
+      await this.members.save(member.value);
+    } catch (cause) {
+      return err(unexpected(cause));
+    }
+
     return member;
   }
 }

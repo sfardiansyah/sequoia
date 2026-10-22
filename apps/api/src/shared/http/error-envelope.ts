@@ -10,3 +10,8 @@ export interface ErrorEnvelope {
 export function errorEnvelope(code: string, message: string): ErrorEnvelope {
   return { error: { code, message } };
 }
+
+export function unexpectedErrorEnvelope(cause: unknown): ErrorEnvelope {
+  console.error("Unexpected error", cause);
+  return errorEnvelope("INTERNAL_ERROR", "Internal server error");
+}

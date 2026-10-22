@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Result } from "@sequoia/shared";
 import { decodeProtectedHeader } from "jose";
-import { InMemoryMemberRepository } from "../membership/adapters/in-memory";
-import { Member } from "../membership/domain/member";
 import { InMemoryNonceStore } from "./adapters/in-memory-nonce-store";
 import { loadJwtKeys } from "./adapters/jwt-keys";
 import { newJwtPrivateKey } from "./adapters/jwt-test-keys";
@@ -13,14 +11,12 @@ import type { AuthError } from "./types";
 const keys = await loadJwtKeys(await newJwtPrivateKey());
 
 function makeAuth(now: () => number = Date.now) {
-  const members = new InMemoryMemberRepository();
   let valid = true;
   const verifier = {
     verify: () => valid,
     publicKeyHash: () => "owner-pkh",
   };
   const auth = new AuthService(
-    members,
     verifier,
     new InMemoryNonceStore(),
     new JwtTokenService(keys),
@@ -28,7 +24,6 @@ function makeAuth(now: () => number = Date.now) {
   );
   return {
     auth,
-    members,
     setValid(value: boolean) {
       valid = value;
     },
@@ -36,26 +31,16 @@ function makeAuth(now: () => number = Date.now) {
 }
 
 function unwrap<T>(result: Result<T, AuthError>): T {
-  if (!result.ok) throw new Error(result.error);
+  if (!result.ok) throw new Error(result.error.code);
   return result.value;
 }
 
 const address = "addr_test1-member";
 
 describe("AuthService", () => {
-  test("challenges, verifies, and finds a member", async () => {
-    const { auth, members } = makeAuth();
-    const member = Member.admit({
-      id: "member-1",
-      ownerPkh: "owner-pkh",
-      kycCommitment: "kyc-1",
-      memberClass: "STANDARD",
-      joinedAt: 1,
-    });
-    if (!member.ok) throw new Error(member.error);
-    await members.save(member.value);
-
-    const challenge = await auth.challenge(address);
+  test("challenges, verifies, and authenticates", async () => {
+    const { auth } = makeAuth();
+    const challenge = unwrap(await auth.challenge(address));
     const session = unwrap(
       await auth.verify({
         address,
@@ -65,12 +50,14 @@ describe("AuthService", () => {
       }),
     );
 
-    expect((await auth.findMember(session.token)).ok).toBe(true);
+    expect(unwrap(await auth.authenticate(session.token))).toEqual({
+      pkh: "owner-pkh",
+    });
   });
 
   test("rejects replay and wrong address", async () => {
     const { auth } = makeAuth();
-    const challenge = await auth.challenge(address);
+    const challenge = unwrap(await auth.challenge(address));
     const input = {
       address,
       nonce: challenge.nonce,
@@ -81,15 +68,19 @@ describe("AuthService", () => {
     expect((await auth.verify(input)).ok).toBe(true);
     expect((await auth.verify(input)).ok).toBe(false);
 
-    const second = await auth.challenge(address);
-    const wrongAddress = await auth.verify({ ...input, nonce: second.nonce, address: "addr_test1-other" });
+    const second = unwrap(await auth.challenge(address));
+    const wrongAddress = await auth.verify({
+      ...input,
+      nonce: second.nonce,
+      address: "addr_test1-other",
+    });
     expect(wrongAddress.ok).toBe(false);
   });
 
   test("rejects expired nonces", async () => {
     let now = 1_000;
     const { auth } = makeAuth(() => now);
-    const challenge = await auth.challenge(address);
+    const challenge = unwrap(await auth.challenge(address));
     now += 5 * 60_000 + 1;
 
     const result = await auth.verify({
@@ -104,7 +95,7 @@ describe("AuthService", () => {
 
   test("rejects invalid signatures and tokens", async () => {
     const { auth, setValid } = makeAuth();
-    const challenge = await auth.challenge(address);
+    const challenge = unwrap(await auth.challenge(address));
     setValid(false);
 
     const result = await auth.verify({
@@ -114,14 +105,33 @@ describe("AuthService", () => {
       key: "key",
     });
     expect(result.ok).toBe(false);
-    expect((await auth.findMember("invalid-token")).ok).toBe(false);
+    expect((await auth.authenticate("invalid-token")).ok).toBe(false);
 
     const otherKeys = await loadJwtKeys(await newJwtPrivateKey());
     const wrongIssuer = new JwtTokenService(otherKeys, "other", "sequoia-api");
-    expect((await auth.findMember(await wrongIssuer.sign("owner-pkh"))).ok).toBe(false);
+    expect((await auth.authenticate(await wrongIssuer.sign("owner-pkh"))).ok).toBe(false);
 
     const foreignSigner = new JwtTokenService(otherKeys);
-    expect((await auth.findMember(await foreignSigner.sign("owner-pkh"))).ok).toBe(false);
+    expect((await auth.authenticate(await foreignSigner.sign("owner-pkh"))).ok).toBe(false);
+  });
+
+  test("returns UNEXPECTED when a nonce store fails", async () => {
+    const auth = new AuthService(
+      { verify: () => true, publicKeyHash: () => "owner-pkh" },
+      {
+        create: async () => {
+          throw new Error("database down");
+        },
+        consume: async () => {
+          throw new Error("database down");
+        },
+      },
+      new JwtTokenService(keys),
+    );
+
+    const result = await auth.challenge(address);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("UNEXPECTED");
   });
 
   test("signs EdDSA tokens with a kid and accepts rotated keys", async () => {

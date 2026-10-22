@@ -43,7 +43,10 @@ export default defineCommand({
       });
 
       if (!result.ok) {
-        console.error(`Admission failed: ${result.error}`);
+        console.error(`Admission failed: ${result.error.code}`);
+        if (result.error.code === "UNEXPECTED") {
+          console.error(result.error.cause);
+        }
         process.exitCode = 1;
         return;
       }

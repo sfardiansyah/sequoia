@@ -8,6 +8,7 @@ import { newJwtPrivateKey } from "./contexts/auth/adapters/jwt-test-keys";
 import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
 import { AuthService } from "./contexts/auth/application/auth-service";
 import { InMemoryMemberRepository } from "./contexts/membership/adapters/in-memory";
+import { FindMemberByPkh } from "./contexts/membership/application/find-member";
 import { Member } from "./contexts/membership/domain/member";
 import { errorEnvelope } from "./shared/http/error-envelope";
 
@@ -15,13 +16,18 @@ const config: AppConfig = { serviceName: "sequoia-api", version: "0.1.0", enviro
 const members = new InMemoryMemberRepository();
 const tokens = new JwtTokenService(await loadJwtKeys(await newJwtPrivateKey()));
 const auth = new AuthService(
-  members,
   { verify: () => true, publicKeyHash: () => "owner-pkh" },
   new InMemoryNonceStore(),
   tokens,
 );
 const rateLimiter = new InMemoryRateLimiter(100, 60_000);
-const app = createApp(config, { auth, rateLimiter, jwks: tokens });
+const findMemberByPkh = new FindMemberByPkh(members);
+const app = createApp(config, {
+  auth,
+  rateLimiter,
+  jwks: tokens,
+  findMemberByPkh,
+});
 
 function post(path: string, body: unknown) {
   return app.handle(new Request(`http://localhost${path}`, {
@@ -62,7 +68,7 @@ describe("api", () => {
       memberClass: "STANDARD",
       joinedAt: 1_700_000_000_000,
     });
-    if (!member.ok) throw new Error(member.error);
+    if (!member.ok) throw new Error(member.error.code);
     await members.save(member.value);
 
     const address = "addr_test1-member";
@@ -83,6 +89,20 @@ describe("api", () => {
 
     const replay = await post("/auth/verify", { address, nonce: challenge.nonce, signature: "signature", key: "key" });
     expect(replay.status).toBe(401);
+  });
+
+  test("GET /members/me rejects a token without a member", async () => {
+    const token = await tokens.sign("ghost-pkh");
+    const response = await app.handle(
+      new Request("http://localhost/members/me", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "MEMBER_NOT_FOUND", message: "Member not found" },
+    });
   });
 });
 

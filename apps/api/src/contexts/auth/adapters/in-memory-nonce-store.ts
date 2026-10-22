@@ -23,10 +23,9 @@ export class InMemoryNonceStore implements NonceStore {
     now: number;
   }): Promise<boolean> {
     const entry = this.entries.get(input.nonce);
-    if (entry) this.entries.delete(input.nonce);
+    if (!entry || entry.address !== input.address) return false;
 
-    return Boolean(
-      entry && entry.address === input.address && entry.expiresAt >= input.now,
-    );
+    this.entries.delete(input.nonce);
+    return entry.expiresAt >= input.now;
   }
 }

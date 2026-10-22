@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Result } from "@sequoia/shared";
 import { InMemoryMemberRepository, SequentialIdGenerator } from "./adapters/in-memory";
 import { AdmitMember } from "./application/admit-member";
+import { FindMemberByPkh } from "./application/find-member";
 import { Member, MemberStatus, type MembershipError } from "./domain/member";
 
 const base = {
@@ -13,21 +14,25 @@ const base = {
 const memberInput = { ...base, id: "member-1" };
 
 function unwrap<T>(result: Result<T, MembershipError>): T {
-  if (!result.ok) throw new Error(result.error);
+  if (!result.ok) throw new Error(result.error.code);
   return result.value;
 }
 
 function expectError<T>(
   result: Result<T, MembershipError>,
-  error: MembershipError,
+  code: MembershipError["code"],
 ): void {
   expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.error).toBe(error);
+  if (!result.ok) expect(result.error.code).toBe(code);
 }
 
 function setup() {
   const members = new InMemoryMemberRepository();
-  return { members, admit: new AdmitMember(members, new SequentialIdGenerator()) };
+  return {
+    members,
+    admit: new AdmitMember(members, new SequentialIdGenerator()),
+    find: new FindMemberByPkh(members),
+  };
 }
 
 describe("Member", () => {
@@ -61,5 +66,31 @@ describe("AdmitMember", () => {
     const command = { ...base, kycVerified: true, boardApproved: true };
     unwrap(await admit.execute(command));
     expectError(await admit.execute(command), "ALREADY_MEMBER");
+  });
+});
+
+describe("FindMemberByPkh", () => {
+  test("returns a member by wallet key hash", async () => {
+    const { members, find } = setup();
+    const member = unwrap(Member.admit(memberInput));
+    await members.save(member);
+
+    expect(unwrap(await find.execute(base.ownerPkh))).toBe(member);
+  });
+
+  test("returns MEMBER_NOT_FOUND for an unknown key hash", async () => {
+    const { find } = setup();
+    expectError(await find.execute("unknown-pkh"), "MEMBER_NOT_FOUND");
+  });
+
+  test("returns UNEXPECTED when the repository fails", async () => {
+    const find = new FindMemberByPkh({
+      findByOwnerPkh: async () => {
+        throw new Error("database down");
+      },
+      save: async () => {},
+    });
+
+    expectError(await find.execute("owner-pkh"), "UNEXPECTED");
   });
 });
