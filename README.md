@@ -8,14 +8,14 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 10: Auth stabilization.
+Milestone 11: EdDSA JWT keys.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, JWT claims, rate limiting, and `/members/me`.
+- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, rate limiting, and `/members/me`.
 
 Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
 
@@ -29,7 +29,23 @@ bun run sequoia migrate
 bun run sequoia member admit --owner-pkh ... --kyc-commitment ...
 ```
 
-`GET /health` returns the service name and version.
+`GET /health` returns the service name and version. `GET /.well-known/jwks.json`
+publishes the JWT verification keys.
+
+## Auth configuration
+
+The API needs `DATABASE_URL` and `JWT_PRIVATE_KEYS`. Generate an Ed25519 key and
+base64-encode its PKCS#8 PEM:
+
+```sh
+openssl genpkey -algorithm ed25519 -out jwt.pem
+base64 -w0 jwt.pem    # JWT_PRIVATE_KEYS=<output>
+```
+
+`JWT_PRIVATE_KEYS` accepts comma-separated keys. The last key signs; all keys
+verify and appear in the JWKS, so append a new key before retiring an old one.
+Keep the old key for at least the 1-hour access-token lifetime. Signing keys are
+separate from Cardano wallet keys; production keys belong in a secret manager.
 
 ## Layout
 

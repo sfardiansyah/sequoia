@@ -1,11 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { Result } from "@sequoia/shared";
+import { decodeProtectedHeader } from "jose";
 import { InMemoryMemberRepository } from "../membership/adapters/in-memory";
 import { Member } from "../membership/domain/member";
 import { InMemoryNonceStore } from "./adapters/in-memory-nonce-store";
+import { loadJwtKeys } from "./adapters/jwt-keys";
+import { newJwtPrivateKey } from "./adapters/jwt-test-keys";
 import { JwtTokenService } from "./adapters/jwt-token-service";
 import { AuthService } from "./application/auth-service";
 import type { AuthError } from "./types";
+
+const keys = await loadJwtKeys(await newJwtPrivateKey());
 
 function makeAuth(now: () => number = Date.now) {
   const members = new InMemoryMemberRepository();
@@ -18,7 +23,7 @@ function makeAuth(now: () => number = Date.now) {
     members,
     verifier,
     new InMemoryNonceStore(),
-    new JwtTokenService("test-secret"),
+    new JwtTokenService(keys),
     now,
   );
   return {
@@ -111,7 +116,30 @@ describe("AuthService", () => {
     expect(result.ok).toBe(false);
     expect((await auth.findMember("invalid-token")).ok).toBe(false);
 
-    const wrongIssuer = new JwtTokenService("test-secret", "other", "sequoia-api");
+    const otherKeys = await loadJwtKeys(await newJwtPrivateKey());
+    const wrongIssuer = new JwtTokenService(otherKeys, "other", "sequoia-api");
     expect((await auth.findMember(await wrongIssuer.sign("owner-pkh"))).ok).toBe(false);
+
+    const foreignSigner = new JwtTokenService(otherKeys);
+    expect((await auth.findMember(await foreignSigner.sign("owner-pkh"))).ok).toBe(false);
+  });
+
+  test("signs EdDSA tokens with a kid and accepts rotated keys", async () => {
+    const oldKey = await newJwtPrivateKey();
+    const newKey = await newJwtPrivateKey();
+    const oldTokens = new JwtTokenService(await loadJwtKeys(oldKey));
+    const oldToken = await oldTokens.sign("owner-pkh");
+
+    const rotated = new JwtTokenService(await loadJwtKeys(`${oldKey},${newKey}`));
+    const oldClaims = await rotated.verify(oldToken);
+    expect(oldClaims).toEqual({ pkh: "owner-pkh" });
+
+    const newToken = await rotated.sign("owner-pkh");
+    const header = decodeProtectedHeader(newToken);
+    const activeKid = (await rotated.jwks()).keys.at(-1)?.kid;
+    expect(header.alg).toBe("EdDSA");
+    expect(header.kid).toBe(activeKid);
+    expect(header.kid).not.toBe(decodeProtectedHeader(oldToken).kid);
+    expect(await rotated.verify(newToken)).toEqual({ pkh: "owner-pkh" });
   });
 });

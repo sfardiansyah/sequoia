@@ -40,6 +40,19 @@ export interface TokenService {
   verify(token: string): Promise<{ pkh: string } | null>;
 }
 
+export type JwtPublicKey = {
+  readonly kty: "OKP";
+  readonly crv: "Ed25519";
+  readonly x: string;
+  readonly kid: string;
+  readonly alg: "EdDSA";
+  readonly use: "sig";
+};
+
+export interface JwksProvider {
+  jwks(): Promise<{ keys: readonly JwtPublicKey[] }>;
+}
+
 export interface RateLimiter {
   allow(key: string): boolean;
 }

@@ -3,6 +3,8 @@ import { createApp } from "./app";
 import { loadConfig, type AppConfig } from "./config";
 import { InMemoryNonceStore } from "./contexts/auth/adapters/in-memory-nonce-store";
 import { InMemoryRateLimiter } from "./contexts/auth/adapters/in-memory-rate-limiter";
+import { loadJwtKeys } from "./contexts/auth/adapters/jwt-keys";
+import { newJwtPrivateKey } from "./contexts/auth/adapters/jwt-test-keys";
 import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
 import { AuthService } from "./contexts/auth/application/auth-service";
 import { InMemoryMemberRepository } from "./contexts/membership/adapters/in-memory";
@@ -11,14 +13,15 @@ import { errorEnvelope } from "./shared/http/error-envelope";
 
 const config: AppConfig = { serviceName: "sequoia-api", version: "0.1.0", environment: "test", port: 3000 };
 const members = new InMemoryMemberRepository();
+const tokens = new JwtTokenService(await loadJwtKeys(await newJwtPrivateKey()));
 const auth = new AuthService(
   members,
   { verify: () => true, publicKeyHash: () => "owner-pkh" },
   new InMemoryNonceStore(),
-  new JwtTokenService("test-secret"),
+  tokens,
 );
 const rateLimiter = new InMemoryRateLimiter(100, 60_000);
-const app = createApp(config, { auth, rateLimiter });
+const app = createApp(config, { auth, rateLimiter, jwks: tokens });
 
 function post(path: string, body: unknown) {
   return app.handle(new Request(`http://localhost${path}`, {
@@ -33,6 +36,16 @@ describe("api", () => {
     const response = await app.handle(new Request("http://localhost/health"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "ok", service: "sequoia-api", version: "0.1.0" });
+  });
+
+  test("GET /.well-known/jwks.json", async () => {
+    const response = await app.handle(new Request("http://localhost/.well-known/jwks.json"));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=300");
+    const body = (await response.json()) as { keys: Record<string, unknown>[] };
+    expect(body.keys).toHaveLength(1);
+    expect(body.keys[0]).toMatchObject({ kty: "OKP", crv: "Ed25519", alg: "EdDSA", use: "sig" });
+    expect(body.keys[0]).not.toHaveProperty("d");
   });
 
   test("unknown route returns the error envelope", async () => {
