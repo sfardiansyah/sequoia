@@ -33,7 +33,7 @@ const app = createApp(config, {
   findMemberByPkh,
 });
 
-app.listen(config.port);
+app.listen({ port: config.port, hostname: "0.0.0.0" });
 console.log(
   `${config.serviceName} ${config.version} listening on http://localhost:${config.port}`,
 );

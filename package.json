@@ -14,6 +14,7 @@
     "db:migrate": "bun run sequoia migrate",
     "member:admit": "bun run sequoia member admit",
     "test": "bun test",
+    "test:integration": "bun scripts/test-integration.ts",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test"
   },

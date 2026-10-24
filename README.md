@@ -8,22 +8,24 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 11: EdDSA JWT keys.
+Milestone 12: Docker Compose and Postgres integration.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, rate limiting, and `/members/me`.
+- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, rate limiting, and `/members/me`;
+- Docker Compose stack and integration tests against real PostgreSQL.
 
-Not built yet: database, Aiken contracts, KYC/bank adapters, web app.
+Not built yet: Aiken contracts, KYC/bank adapters, web app.
 
 ## Commands
 
 ```sh
 bun install
 bun run check
+bun run test:integration             # requires TEST_DATABASE_URL
 bun run dev:api
 bun run sequoia migrate
 bun run sequoia member admit --owner-pkh ... --kyc-commitment ...
@@ -31,6 +33,40 @@ bun run sequoia member admit --owner-pkh ... --kyc-commitment ...
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`
 publishes the JWT verification keys.
+
+## Local stack
+
+```sh
+cp .env.example .env
+# Add JWT_PRIVATE_KEYS to .env using the command below.
+docker compose up --build
+```
+
+This starts PostgreSQL 18, Redis 7, a one-shot migration service, and the API
+with healthchecks. Redis is available but not yet wired into the API.
+Use `docker compose down -v` to reset local data.
+
+PostgreSQL 18 changed its data volume path. If you previously ran this stack
+with PostgreSQL 17, remove the old volume once before starting v18:
+
+```sh
+docker compose down -v
+```
+
+Run the integration tests against PostgreSQL:
+
+```sh
+docker compose --profile test run --rm test
+```
+
+Or against any PostgreSQL database you control:
+
+```sh
+TEST_DATABASE_URL=postgres://sequoia:sequoia@localhost:5432/sequoia_test bun run test:integration
+```
+
+The target database must already exist. The Compose test service creates
+`sequoia_test` automatically on a fresh volume.
 
 ## Auth configuration
 
