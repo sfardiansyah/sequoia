@@ -9,13 +9,16 @@ import { AuthService } from "./contexts/auth/application/auth-service";
 import { InMemoryMemberRepository } from "./contexts/membership/adapters/in-memory";
 import { FindMemberByPkh } from "./contexts/membership/application/find-member";
 import { Member } from "./contexts/membership/domain/member";
+import { OwnerPkh } from "./contexts/membership/domain/owner-pkh";
 import { errorEnvelope } from "./shared/http/error-envelope";
 
 const config: AppConfig = { serviceName: "sequoia-api", version: "0.1.0", environment: "test", port: 3000 };
+const ownerPkhValue = "a".repeat(56);
+const ownerPkh = OwnerPkh.parse(ownerPkhValue)!;
 const members = new InMemoryMemberRepository();
 const tokens = new JwtTokenService(await loadJwtKeys(await newJwtPrivateKey()));
 const auth = new AuthService(
-  { verify: () => true, publicKeyHash: () => "owner-pkh" },
+  { verify: () => true, publicKeyHash: () => ownerPkhValue },
   new InMemoryNonceStore(),
   tokens,
 );
@@ -24,6 +27,7 @@ const app = createApp(config, {
   auth,
   jwks: tokens,
   findMemberByPkh,
+  checkDatabase: async () => {},
 });
 
 function post(path: string, body: unknown) {
@@ -39,6 +43,33 @@ describe("api", () => {
     const response = await app.handle(new Request("http://localhost/health"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "ok", service: "sequoia-api", version: "0.1.0" });
+  });
+
+  test("GET /health returns 503 when the database is down", async () => {
+    const failingApp = createApp(config, {
+      auth,
+      jwks: tokens,
+      findMemberByPkh,
+      checkDatabase: async () => {
+        throw new Error("database down");
+      },
+    });
+
+    const response = await failingApp.handle(
+      new Request("http://localhost/health"),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: { code: "SERVICE_UNAVAILABLE", message: "Database unavailable" },
+    });
+  });
+
+  test("rejects an oversized auth address", async () => {
+    const response = await post("/auth/nonce", { address: "a".repeat(129) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "VALIDATION_ERROR", message: "Invalid request" },
+    });
   });
 
   test("GET /.well-known/jwks.json", async () => {
@@ -60,7 +91,7 @@ describe("api", () => {
   test("CIP-30 auth and GET /members/me", async () => {
     const member = Member.admit({
       id: "member-1",
-      ownerPkh: "owner-pkh",
+      ownerPkh,
       kycCommitment: "kyc-1",
       memberClass: "STANDARD",
       joinedAt: 1_700_000_000_000,
@@ -78,7 +109,7 @@ describe("api", () => {
     expect(me.status).toBe(200);
     expect(await me.json()).toEqual({
       id: "member-1",
-      ownerPkh: "owner-pkh",
+      ownerPkh: ownerPkhValue,
       memberClass: "STANDARD",
       status: "ACTIVE",
       joinedAt: 1_700_000_000_000,
@@ -103,7 +134,12 @@ describe("api", () => {
   });
 
   test("rate limits auth requests", async () => {
-    const limitedApp = createApp(config, { auth, jwks: tokens, findMemberByPkh });
+    const limitedApp = createApp(config, {
+      auth,
+      jwks: tokens,
+      findMemberByPkh,
+      checkDatabase: async () => {},
+    });
     let response: Response | undefined;
 
     for (let index = 0; index < 11; index += 1) {

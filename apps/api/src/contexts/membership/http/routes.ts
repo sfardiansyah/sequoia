@@ -43,7 +43,7 @@ export function membershipRoutes(deps: {
     const member = result.value;
     return {
       id: member.id,
-      ownerPkh: member.ownerPkh,
+      ownerPkh: member.ownerPkh.value,
       memberClass: member.memberClass,
       status: member.status,
       joinedAt: member.joinedAt,

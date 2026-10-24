@@ -5,6 +5,7 @@ import {
   type MemberRepository,
   type MembershipError,
 } from "../domain/member";
+import { OwnerPkh } from "../domain/owner-pkh";
 
 export class FindMemberByPkh {
   constructor(private readonly members: MemberRepository) {}
@@ -12,9 +13,12 @@ export class FindMemberByPkh {
   async execute(
     pkh: string,
   ): Promise<Result<Member, MembershipError>> {
+    const ownerPkh = OwnerPkh.parse(pkh);
+    if (!ownerPkh) return err({ code: "MEMBER_NOT_FOUND" });
+
     let member: Member | null;
     try {
-      member = await this.members.findByOwnerPkh(pkh);
+      member = await this.members.findByOwnerPkh(ownerPkh);
     } catch (cause) {
       return err(unexpected(cause));
     }

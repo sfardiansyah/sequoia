@@ -4,16 +4,23 @@ import {
   MemberStatus,
   type MemberRepository,
 } from "../domain/member";
+import { OwnerPkh } from "../domain/owner-pkh";
 
 export type MemberRepositoryHarness = {
   repository: MemberRepository;
   close: () => Promise<void>;
 };
 
-function admitted(id = "member-1", ownerPkh = "addr_test1-member"): Member {
+function admitted(
+  id = "member-1",
+  ownerPkh = "18987c1612069d4080a0eb247820cb987fea81bddeaafdd41f996281",
+): Member {
+  const parsed = OwnerPkh.parse(ownerPkh);
+  if (!parsed) throw new Error("Invalid test owner pkh");
+
   const member = Member.admit({
     id,
-    ownerPkh,
+    ownerPkh: parsed,
     kycCommitment: "kyc-1",
     memberClass: "STANDARD",
     joinedAt: 1_700_000_000_000,
@@ -31,7 +38,22 @@ export function describeMemberRepository(
       const { repository, close } = await create();
 
       try {
-        expect(await repository.findByOwnerPkh("missing")).toBeNull();
+        expect(
+          await repository.findByOwnerPkh(
+            OwnerPkh.parse("b".repeat(56))!,
+          ),
+        ).toBeNull();
+      } finally {
+        await close();
+      }
+    });
+
+    test("rejects a second member for the same owner", async () => {
+      const { repository, close } = await create();
+
+      try {
+        await repository.save(admitted("member-1"));
+        await expect(repository.save(admitted("member-2"))).rejects.toThrow();
       } finally {
         await close();
       }
@@ -51,7 +73,7 @@ export function describeMemberRepository(
 
         const updated = Member.rehydrate({
           id: member.id,
-          ownerPkh: member.ownerPkh,
+          ownerPkh: member.ownerPkh.value,
           kycCommitment: member.kycCommitment,
           memberClass: member.memberClass,
           status: MemberStatus.Exited,

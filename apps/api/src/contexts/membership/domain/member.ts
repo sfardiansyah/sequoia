@@ -1,5 +1,6 @@
 import { err, ok, type MemberClass, type Result } from "@sequoia/shared";
 import type { UnexpectedError } from "../../../shared/errors";
+import { OwnerPkh } from "./owner-pkh";
 
 export type MemberId = string & { readonly __brand: "MemberId" };
 
@@ -24,7 +25,7 @@ export type MembershipError =
 export class Member {
   private constructor(
     readonly id: MemberId,
-    readonly ownerPkh: string,
+    readonly ownerPkh: OwnerPkh,
     readonly kycCommitment: string,
     readonly memberClass: MemberClass,
     readonly status: MemberStatus,
@@ -33,15 +34,13 @@ export class Member {
 
   static admit(input: {
     id: string;
-    ownerPkh: string;
+    ownerPkh: OwnerPkh;
     kycCommitment: string;
     memberClass: MemberClass;
     joinedAt: number;
   }): Result<Member, MembershipError> {
-    const ownerPkh = input.ownerPkh.trim();
     const kycCommitment = input.kycCommitment.trim();
 
-    if (!ownerPkh) return err({ code: "INVALID_OWNER" });
     if (!kycCommitment) return err({ code: "INVALID_KYC_COMMITMENT" });
     if (!Number.isInteger(input.joinedAt) || input.joinedAt < 0) {
       return err({ code: "INVALID_JOIN_TIME" });
@@ -50,7 +49,7 @@ export class Member {
     return ok(
       new Member(
         input.id as MemberId,
-        ownerPkh,
+        input.ownerPkh,
         kycCommitment,
         input.memberClass,
         MemberStatus.Active,
@@ -67,7 +66,7 @@ export class Member {
     status: MemberStatus;
     joinedAt: number;
   }): Result<Member, MembershipError> {
-    const ownerPkh = input.ownerPkh.trim();
+    const ownerPkh = OwnerPkh.parse(input.ownerPkh);
     const kycCommitment = input.kycCommitment.trim();
 
     if (!ownerPkh) return err({ code: "INVALID_OWNER" });
@@ -90,6 +89,6 @@ export class Member {
 }
 
 export interface MemberRepository {
-  findByOwnerPkh(ownerPkh: string): Promise<Member | null>;
+  findByOwnerPkh(ownerPkh: OwnerPkh): Promise<Member | null>;
   save(member: Member): Promise<void>;
 }

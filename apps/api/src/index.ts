@@ -28,6 +28,9 @@ const app = createApp(config, {
   auth,
   jwks: tokens,
   findMemberByPkh,
+  checkDatabase: async () => {
+    await client`SELECT 1`;
+  },
 });
 
 app.listen({ port: config.port, hostname: "0.0.0.0" });

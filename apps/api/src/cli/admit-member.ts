@@ -53,7 +53,7 @@ export default defineCommand({
 
       const output = {
         id: result.value.id,
-        ownerPkh: result.value.ownerPkh,
+        ownerPkh: result.value.ownerPkh.value,
         status: result.value.status,
       };
 

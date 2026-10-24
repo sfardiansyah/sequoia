@@ -6,6 +6,7 @@ import {
   type MemberRepository,
   type MemberStatus,
 } from "../../domain/member";
+import type { OwnerPkh } from "../../domain/owner-pkh";
 import * as schema from "./schema";
 import { members, type MemberInsert, type MemberRow } from "./schema";
 
@@ -14,7 +15,7 @@ type MembershipDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
 function toRow(member: Member): MemberInsert {
   return {
     id: member.id,
-    ownerPkh: member.ownerPkh,
+    ownerPkh: member.ownerPkh.value,
     kycCommitment: member.kycCommitment,
     memberClass: member.memberClass,
     status: member.status,
@@ -39,11 +40,11 @@ function toDomain(row: MemberRow): Member {
 export class DrizzleMemberRepository implements MemberRepository {
   constructor(private readonly db: MembershipDatabase) {}
 
-  async findByOwnerPkh(ownerPkh: string): Promise<Member | null> {
+  async findByOwnerPkh(ownerPkh: OwnerPkh): Promise<Member | null> {
     const rows = await this.db
       .select()
       .from(members)
-      .where(eq(members.ownerPkh, ownerPkh))
+      .where(eq(members.ownerPkh, ownerPkh.value))
       .limit(1);
 
     const row = rows[0];

@@ -5,6 +5,7 @@ import {
   type MemberRepository,
   type MembershipError,
 } from "../domain/member";
+import { OwnerPkh } from "../domain/owner-pkh";
 
 export interface IdGenerator {
   next(): string;
@@ -31,9 +32,12 @@ export class AdmitMember {
     if (!command.kycVerified) return err({ code: "KYC_NOT_VERIFIED" });
     if (!command.boardApproved) return err({ code: "BOARD_NOT_APPROVED" });
 
+    const ownerPkh = OwnerPkh.parse(command.ownerPkh);
+    if (!ownerPkh) return err({ code: "INVALID_OWNER" });
+
     let existing: Member | null;
     try {
-      existing = await this.members.findByOwnerPkh(command.ownerPkh);
+      existing = await this.members.findByOwnerPkh(ownerPkh);
     } catch (cause) {
       return err(unexpected(cause));
     }
@@ -41,7 +45,7 @@ export class AdmitMember {
 
     const member = Member.admit({
       id: this.ids.next(),
-      ownerPkh: command.ownerPkh,
+      ownerPkh,
       kycCommitment: command.kycCommitment,
       memberClass: command.memberClass,
       joinedAt: command.joinedAt,

@@ -18,7 +18,11 @@ export function authRoutes(deps: { auth: AuthService }) {
 
         return result.value;
       },
-      { body: t.Object({ address: t.String({ minLength: 1 }) }) },
+      {
+        body: t.Object({
+          address: t.String({ minLength: 1, maxLength: 128 }),
+        }),
+      },
     )
     .post(
       "/auth/verify",
@@ -34,10 +38,10 @@ export function authRoutes(deps: { auth: AuthService }) {
       },
       {
         body: t.Object({
-          address: t.String({ minLength: 1 }),
-          nonce: t.String({ minLength: 1 }),
-          signature: t.String({ minLength: 1 }),
-          key: t.String({ minLength: 1 }),
+          address: t.String({ minLength: 1, maxLength: 128 }),
+          nonce: t.String({ minLength: 1, maxLength: 128 }),
+          signature: t.String({ minLength: 1, maxLength: 4096 }),
+          key: t.String({ minLength: 1, maxLength: 4096 }),
         }),
       },
     );

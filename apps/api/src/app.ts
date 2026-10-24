@@ -11,10 +11,11 @@ export type AppDependencies = {
   readonly auth: AuthService;
   readonly jwks: JwksProvider;
   readonly findMemberByPkh: FindMemberByPkh;
+  readonly checkDatabase: () => Promise<void>;
 };
 
 export function createApp(config: AppConfig, deps: AppDependencies) {
-  return new Elysia()
+  return new Elysia({ serve: { maxRequestBodySize: 16 * 1024 } })
     .onError(({ code, error, set }) => {
       if (code === "NOT_FOUND") {
         set.status = 404;
@@ -30,11 +31,20 @@ export function createApp(config: AppConfig, deps: AppDependencies) {
       set.status = 500;
       return errorEnvelope("INTERNAL_ERROR", "Internal server error");
     })
-    .get("/health", () => ({
-      status: "ok",
-      service: config.serviceName,
-      version: config.version,
-    }))
+    .get("/health", async ({ set }) => {
+      try {
+        await deps.checkDatabase();
+      } catch {
+        set.status = 503;
+        return errorEnvelope("SERVICE_UNAVAILABLE", "Database unavailable");
+      }
+
+      return {
+        status: "ok",
+        service: config.serviceName,
+        version: config.version,
+      };
+    })
     .get("/.well-known/jwks.json", async ({ set }) => {
       set.headers["cache-control"] = "public, max-age=300";
       return deps.jwks.jwks();
