@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { createApp } from "./app";
 import { loadConfig, type AppConfig } from "./config";
 import { InMemoryNonceStore } from "./contexts/auth/adapters/in-memory-nonce-store";
-import { InMemoryRateLimiter } from "./contexts/auth/adapters/in-memory-rate-limiter";
 import { loadJwtKeys } from "./contexts/auth/adapters/jwt-keys";
 import { newJwtPrivateKey } from "./contexts/auth/adapters/jwt-test-keys";
 import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
@@ -20,11 +19,9 @@ const auth = new AuthService(
   new InMemoryNonceStore(),
   tokens,
 );
-const rateLimiter = new InMemoryRateLimiter(100, 60_000);
 const findMemberByPkh = new FindMemberByPkh(members);
 const app = createApp(config, {
   auth,
-  rateLimiter,
   jwks: tokens,
   findMemberByPkh,
 });
@@ -103,6 +100,31 @@ describe("api", () => {
     expect(await response.json()).toEqual({
       error: { code: "MEMBER_NOT_FOUND", message: "Member not found" },
     });
+  });
+
+  test("rate limits auth requests", async () => {
+    const limitedApp = createApp(config, { auth, jwks: tokens, findMemberByPkh });
+    let response: Response | undefined;
+
+    for (let index = 0; index < 11; index += 1) {
+      response = await limitedApp.handle(
+        new Request("http://localhost/auth/nonce", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ address: `addr_test1-${index}` }),
+        }),
+      );
+    }
+
+    expect(response?.status).toBe(429);
+    expect(await response?.json()).toEqual({
+      error: { code: "RATE_LIMITED", message: "Too many requests" },
+    });
+
+    const health = await limitedApp.handle(
+      new Request("http://localhost/health"),
+    );
+    expect(health.status).toBe(200);
   });
 });
 

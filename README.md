@@ -8,14 +8,14 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 12: Docker Compose and Postgres integration.
+Milestone 13: Package-based auth rate limiting.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, rate limiting, and `/members/me`;
+- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
 Not built yet: Aiken contracts, KYC/bank adapters, web app.

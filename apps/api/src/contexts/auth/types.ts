@@ -54,7 +54,3 @@ export type JwtPublicKey = {
 export interface JwksProvider {
   jwks(): Promise<{ keys: readonly JwtPublicKey[] }>;
 }
-
-export interface RateLimiter {
-  allow(key: string): boolean;
-}

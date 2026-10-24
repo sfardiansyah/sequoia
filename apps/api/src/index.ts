@@ -1,7 +1,6 @@
 import { createApp } from "./app";
 import { loadConfig } from "./config";
 import { CardanoWalletVerifier } from "./contexts/auth/adapters/cardano-verifier";
-import { InMemoryRateLimiter } from "./contexts/auth/adapters/in-memory-rate-limiter";
 import { loadJwtKeys } from "./contexts/auth/adapters/jwt-keys";
 import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
 import { PostgresNonceStore } from "./contexts/auth/adapters/postgres-nonce-store";
@@ -24,11 +23,9 @@ const auth = new AuthService(
   new PostgresNonceStore(client),
   tokens,
 );
-const rateLimiter = new InMemoryRateLimiter(10, 60_000);
 const findMemberByPkh = new FindMemberByPkh(repository);
 const app = createApp(config, {
   auth,
-  rateLimiter,
   jwks: tokens,
   findMemberByPkh,
 });
