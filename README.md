@@ -101,4 +101,4 @@ domain <- application <- adapters
 The domain must not import Elysia, Drizzle, Lucid, Bun APIs, `process.env`, or
 HTTP types. Concrete adapters are wired only in the composition root.
 
-Full plan: `/home/raynord/.opencode/plan/sequoia-plan.md`
+Full plan: [docs/plan/sequoia-plan.md](docs/plan/sequoia-plan.md).
