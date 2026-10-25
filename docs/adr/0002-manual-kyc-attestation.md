@@ -46,9 +46,9 @@ issues them from the CLI; there is no third-party provider yet.
 - **Revocation does not freeze a member.** Governance and exit gates do not
   exist yet; when they do, they must check attestation validity.
 - **Reverification is annual**, intended to run inside the annual
-  enrollment/deposit window (plan §3.1, §3.13 step 1). That window and the
-  deposit flow do not exist yet; until they do, `sequoia kyc issue` defaults to
-  365 days from issue. PDP Law (UU 27/2022) does not require periodic
+  enrollment/contribution window (plan §3.1, §3.13 step 1). That window and the
+  contribution flow do not exist yet; until they do, `sequoia kyc issue` defaults to
+  365 days from issue. PDP Law (Law No. 27 of 2022) does not require periodic
   reverification; the cadence comes from ongoing due-diligence practice.
   Retention, not refresh, is the PDP exposure.
 

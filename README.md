@@ -1,7 +1,7 @@
 # Sequoia on Cardano
 
-Member-owned Indonesian co-op with member-only IDR deposit receipts, at-risk
-project capital, one member one vote, founder vesting, on-chain governance, and
+Member-owned Indonesian co-op with Member Capital equity, at-risk
+`Capital Participation`, one member one vote, founder vesting, on-chain governance, and
 bank IDR custody.
 
 Architecture: modular monolith + DDD + hexagonal ports/adapters.
@@ -13,7 +13,9 @@ Milestone 14: Manual KYC attestations.
 Implemented:
 
 - IDR amount and basis-point value objects;
-- standard 70/30 and founder 20/80 contribution splits;
+- parameterized contribution split primitive; it still defaults to the old standard
+  70/30 and founder 20/80, while ADR 0003 now specifies 70/30 for every member
+  (pending the capital milestone);
 - founder vesting: 50% at year 4 and 50% at year 5;
 - Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
 - identity context with manual KYC attestations: issuers, expiry, revocation, renewal, and an admission gate that requires a valid attestation;
