@@ -2,15 +2,15 @@ import { Elysia } from "elysia";
 import type { AuthService } from "./contexts/auth/application/auth-service";
 import { authRoutes } from "./contexts/auth/http/routes";
 import type { JwksProvider } from "./contexts/auth/types";
-import type { FindMemberByPkh } from "./contexts/membership/application/find-member";
 import { membershipRoutes } from "./contexts/membership/http/routes";
+import type { MemberProfileReader } from "./contexts/membership/read-models/member-profile";
 import type { AppConfig } from "./config";
 import { errorEnvelope } from "./shared/http/error-envelope";
 
 export type AppDependencies = {
   readonly auth: AuthService;
   readonly jwks: JwksProvider;
-  readonly findMemberByPkh: FindMemberByPkh;
+  readonly memberProfile: MemberProfileReader;
   readonly checkDatabase: () => Promise<void>;
 };
 

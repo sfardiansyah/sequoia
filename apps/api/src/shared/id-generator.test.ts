@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { CryptoIdGenerator } from "./crypto-id-generator";
+import { UuidGenerator } from "./id-generator";
 
-describe("CryptoIdGenerator", () => {
+describe("UuidGenerator", () => {
   test("generates unique UUIDs", () => {
-    const ids = new CryptoIdGenerator();
+    const ids = new UuidGenerator();
     const first = ids.next();
     const second = ids.next();
 

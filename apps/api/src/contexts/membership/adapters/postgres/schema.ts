@@ -3,7 +3,7 @@ import { bigint, pgTable, text } from "drizzle-orm/pg-core";
 export const members = pgTable("members", {
   id: text("id").primaryKey(),
   ownerPkh: text("owner_pkh").notNull().unique(),
-  kycCommitment: text("kyc_commitment").notNull(),
+  kycAttestationId: text("kyc_attestation_id").notNull(),
   memberClass: text("member_class").notNull(),
   status: text("status").notNull(),
   joinedAt: bigint("joined_at", { mode: "number" }).notNull(),

@@ -1,5 +1,5 @@
-import { defineCommand } from "citty";
 import { isMemberClass } from "@sequoia/shared";
+import { defineCommand } from "citty";
 import { createMembershipContainer } from "../composition/membership";
 
 export default defineCommand({
@@ -9,7 +9,7 @@ export default defineCommand({
   },
   args: {
     "owner-pkh": { type: "string", required: true },
-    "kyc-commitment": { type: "string", required: true },
+    attestation: { type: "string", required: true },
     "member-class": { type: "string", default: "STANDARD" },
     "joined-at": { type: "string" },
     json: { type: "boolean", default: false },
@@ -32,14 +32,12 @@ export default defineCommand({
     const { admitMember, close } = createMembershipContainer(databaseUrl);
 
     try {
-      // Admin CLI: the operator is responsible for KYC and board approval.
       const result = await admitMember.execute({
         ownerPkh: args.ownerPkh as string,
-        kycCommitment: args.kycCommitment as string,
+        kycAttestationId: args.attestation as string,
         memberClass,
         joinedAt,
-        kycVerified: true,
-        boardApproved: true,
+        now: Date.now(),
       });
 
       if (!result.ok) {
@@ -54,13 +52,16 @@ export default defineCommand({
       const output = {
         id: result.value.id,
         ownerPkh: result.value.ownerPkh.value,
+        kycAttestationId: result.value.kycAttestationId,
         status: result.value.status,
       };
 
       if (Boolean(args.json)) {
         console.log(JSON.stringify(output));
       } else {
-        console.log(`Admitted ${output.id} (${output.ownerPkh})`);
+        console.log(
+          `Admitted ${output.id} (${output.ownerPkh}) with ${output.kycAttestationId}`,
+        );
       }
     } finally {
       await close();

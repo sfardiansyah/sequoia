@@ -6,27 +6,30 @@ import { loadJwtKeys } from "./contexts/auth/adapters/jwt-keys";
 import { newJwtPrivateKey } from "./contexts/auth/adapters/jwt-test-keys";
 import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
 import { AuthService } from "./contexts/auth/application/auth-service";
-import { InMemoryMemberRepository } from "./contexts/membership/adapters/in-memory";
-import { FindMemberByPkh } from "./contexts/membership/application/find-member";
-import { Member } from "./contexts/membership/domain/member";
-import { OwnerPkh } from "./contexts/membership/domain/owner-pkh";
+import type {
+  MemberProfile,
+  MemberProfileReader,
+} from "./contexts/membership/read-models/member-profile";
 import { errorEnvelope } from "./shared/http/error-envelope";
 
 const config: AppConfig = { serviceName: "sequoia-api", version: "0.1.0", environment: "test", port: 3000 };
 const ownerPkhValue = "a".repeat(56);
-const ownerPkh = OwnerPkh.parse(ownerPkhValue)!;
-const members = new InMemoryMemberRepository();
 const tokens = new JwtTokenService(await loadJwtKeys(await newJwtPrivateKey()));
 const auth = new AuthService(
   { verify: () => true, publicKeyHash: () => ownerPkhValue },
   new InMemoryNonceStore(),
   tokens,
 );
-const findMemberByPkh = new FindMemberByPkh(members);
+const profiles = new Map<string, MemberProfile>();
+const memberProfile: MemberProfileReader = {
+  async findByOwnerPkh(ownerPkh) {
+    return profiles.get(ownerPkh) ?? null;
+  },
+};
 const app = createApp(config, {
   auth,
   jwks: tokens,
-  findMemberByPkh,
+  memberProfile,
   checkDatabase: async () => {},
 });
 
@@ -49,7 +52,7 @@ describe("api", () => {
     const failingApp = createApp(config, {
       auth,
       jwks: tokens,
-      findMemberByPkh,
+      memberProfile,
       checkDatabase: async () => {
         throw new Error("database down");
       },
@@ -89,15 +92,15 @@ describe("api", () => {
   });
 
   test("CIP-30 auth and GET /members/me", async () => {
-    const member = Member.admit({
+    const expiresAt = Date.now() + 86_400_000;
+    profiles.set(ownerPkhValue, {
       id: "member-1",
-      ownerPkh,
-      kycCommitment: "kyc-1",
+      ownerPkh: ownerPkhValue,
       memberClass: "STANDARD",
+      status: "ACTIVE",
       joinedAt: 1_700_000_000_000,
+      kyc: { status: "ACTIVE", expiresAt },
     });
-    if (!member.ok) throw new Error(member.error.code);
-    await members.save(member.value);
 
     const address = "addr_test1-member";
     const challenge = (await (await post("/auth/nonce", { address })).json()) as { nonce: string };
@@ -113,6 +116,7 @@ describe("api", () => {
       memberClass: "STANDARD",
       status: "ACTIVE",
       joinedAt: 1_700_000_000_000,
+      kyc: { status: "ACTIVE", expiresAt },
     });
 
     const replay = await post("/auth/verify", { address, nonce: challenge.nonce, signature: "signature", key: "key" });
@@ -137,7 +141,7 @@ describe("api", () => {
     const limitedApp = createApp(config, {
       auth,
       jwks: tokens,
-      findMemberByPkh,
+      memberProfile,
       checkDatabase: async () => {},
     });
     let response: Response | undefined;

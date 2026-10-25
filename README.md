@@ -8,7 +8,7 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 13: Package-based auth rate limiting.
+Milestone 14: Manual KYC attestations.
 
 Implemented:
 
@@ -16,9 +16,10 @@ Implemented:
 - standard 70/30 and founder 20/80 contribution splits;
 - founder vesting: 50% at year 4 and 50% at year 5;
 - Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
+- identity context with manual KYC attestations: issuers, expiry, revocation, renewal, and an admission gate that requires a valid attestation;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Not built yet: Aiken contracts, KYC/bank adapters, web app.
+Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, capital and governance contexts, web app.
 
 ## Commands
 
@@ -28,7 +29,11 @@ bun run check
 bun run test:integration             # requires TEST_DATABASE_URL
 bun run dev:api
 bun run sequoia migrate
-bun run sequoia member admit --owner-pkh ... --kyc-commitment ...
+bun run sequoia kyc issue --owner-pkh ... --evidence-ref s3://bucket/member-1/
+bun run sequoia kyc revoke <attestation-id> --reason "..."
+bun run sequoia kyc list --expiring-within 30
+bun run sequoia kyc list --status REVOKED
+bun run sequoia member admit --owner-pkh ... --attestation <attestation-id>
 ```
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`

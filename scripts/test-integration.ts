@@ -15,6 +15,7 @@ const test = Bun.spawn(
     "30000",
     "apps/api/src/contexts/auth/adapters/postgres-nonce-store.integration.test.ts",
     "apps/api/src/contexts/membership/adapters/postgres/postgres-repository.integration.test.ts",
+    "apps/api/src/contexts/identity/adapters/postgres/postgres-kyc-attestation.integration.test.ts",
   ],
   {
     stdout: "inherit",

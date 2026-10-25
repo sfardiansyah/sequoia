@@ -8,7 +8,7 @@ async function setup() {
   const client = new PGlite();
   const ddl = await readFile(
     new URL(
-      "../../../infrastructure/database/migrations/0002_auth_nonces.sql",
+      "../../../infrastructure/database/migrations/0001_init.sql",
       import.meta.url,
     ),
     "utf8",

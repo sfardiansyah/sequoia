@@ -11,9 +11,13 @@ export type MemberRepositoryHarness = {
   close: () => Promise<void>;
 };
 
+export const CONTRACT_SUBJECT_PKH =
+  "18987c1612069d4080a0eb247820cb987fea81bddeaafdd41f996281";
+export const CONTRACT_ATTESTATION_ID = "kyc-contract-1";
+
 function admitted(
   id = "member-1",
-  ownerPkh = "18987c1612069d4080a0eb247820cb987fea81bddeaafdd41f996281",
+  ownerPkh = CONTRACT_SUBJECT_PKH,
 ): Member {
   const parsed = OwnerPkh.parse(ownerPkh);
   if (!parsed) throw new Error("Invalid test owner pkh");
@@ -21,7 +25,7 @@ function admitted(
   const member = Member.admit({
     id,
     ownerPkh: parsed,
-    kycCommitment: "kyc-1",
+    kycAttestationId: CONTRACT_ATTESTATION_ID,
     memberClass: "STANDARD",
     joinedAt: 1_700_000_000_000,
   });
@@ -69,12 +73,13 @@ export function describeMemberRepository(
         const found = await repository.findByOwnerPkh(member.ownerPkh);
         expect(found?.id).toBe(member.id);
         expect(found?.status).toBe(MemberStatus.Active);
+        expect(found?.kycAttestationId).toBe(CONTRACT_ATTESTATION_ID);
         expect(found?.joinedAt).toBe(member.joinedAt);
 
         const updated = Member.rehydrate({
           id: member.id,
           ownerPkh: member.ownerPkh.value,
-          kycCommitment: member.kycCommitment,
+          kycAttestationId: member.kycAttestationId,
           memberClass: member.memberClass,
           status: MemberStatus.Exited,
           joinedAt: member.joinedAt,

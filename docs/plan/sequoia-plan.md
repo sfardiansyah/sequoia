@@ -54,14 +54,14 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-10-22
+### Current implementation handoff — 2026-10-25
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken later  
 **Test command:** `bun run check`  
-**Current status:** 30 tests pass, typecheck clean
+**Current status:** 84 tests pass, typecheck clean
 
 #### Completed milestones
 
@@ -75,6 +75,10 @@ The co-op is a member-owned organization that:
 8. Sequoia rename and citty CLI.
 9. CIP-30 auth (`/auth/nonce`, `/auth/verify`) and `GET /members/me`.
 10. Auth stabilization: ports/adapters, Postgres nonce store, JWT claims, rate limiter, real CIP-30 vector test.
+11. EdDSA JWT keys: `kid`, JWKS endpoint, key rotation.
+12. Docker Compose: Postgres, Redis, one-shot migrate, API, healthchecks.
+13. Package-based auth rate limiting (`elysia-rate-limit`).
+14. Identity context: manual KYC attestations, issuers, expiry, revocation, supersede-on-renewal, admission gate, `sequoia kyc` CLI, `/members/me` KYC block (see ADR 0002).
 
 #### Current auth decisions
 
@@ -82,8 +86,8 @@ The co-op is a member-owned organization that:
 - Nonce storage: **PostgreSQL** (`auth_nonces`), atomic consume with `DELETE ... RETURNING`.
 - Access JWT: **1 hour**, stateless.
 - JWT claims: `iss=sequoia`, `aud=sequoia-api`, `sub=<pkh>`, `pkh`, `jti`, `iat`, `exp`.
-- Current algorithm: **HS256**.
-- Target algorithm: **EdDSA / Ed25519** with `kid` and public JWKS.
+- Current algorithm: **EdDSA / Ed25519** with `kid` and public JWKS.
+- `JWT_PRIVATE_KEYS` accepts comma-separated keys; the last signs, all verify.
 - Refresh token: **not implemented yet**.
 - No refresh token until users complain about re-signing every hour.
 - If refresh tokens are added: 7–30 days, hashed in PostgreSQL, rotate on refresh, revoke on logout/reuse.
@@ -148,22 +152,23 @@ This rule exists because security and architecture stabilization must not be com
 
 #### Priority order
 
-1. **EdDSA JWT key provider** with `kid`, JWKS, and key rotation.
-2. **Docker Compose** with Postgres, Redis, migrate, API, healthchecks.
-3. **Replace custom rate limiter** with `elysia-rate-limit` in-memory.
-4. **Redis-backed rate limiter** only when multi-instance/high-volume requires it.
-5. **KYC attestation context** with issuer allowlist, expiry, revocation, and Privy/Sumsub webhook adapter.
+1. **Capital context**: annual contribution split, `IDR-DEP`/`PROJ` ledger, founder vesting, book value.
+2. **Governance context**: proposals, one-member-one-vote, quorum/threshold, batched tally.
+3. **Aiken Phase 1**: config, membership, token policies, join/deposit.
+4. **KYC provider adapter** (Privy/Sumsub) with webhook signature verification, when a provider is chosen.
+5. **Redis-backed rate limiter** only when multi-instance/high-volume requires it.
 
 #### Known limitations
 
 - Rate limiter is in-memory and per-instance.
-- JWT uses a single shared secret, no key rotation yet.
 - No mainnet/testnet address network validation in auth.
-- Postgres nonce adapter is typechecked but not integration-tested against live Postgres.
-- CLI admission trusts the operator for KYC and board approval.
 - No refresh token/session revocation yet.
 - Redis is not wired into the application.
-- Aiken contracts and frontend are not built yet.
+- KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof.
+- Revoked or expired KYC does not freeze an existing member (no governance/exit gates yet).
+- Board approval is not recorded; admission is gated on KYC only.
+- New deposits are not gated on KYC validity (no capital context yet).
+- Aiken contracts, capital/governance contexts, and frontend are not built yet.
 
 #### Resume checklist
 
@@ -280,7 +285,7 @@ As of 19 October 2026:
 
 ### 3.1 Membership
 
-- Membership is open to natural persons (and possibly legal entities) who pass KYC and board admission.
+- Membership is open to natural persons (and possibly legal entities) who pass KYC and board admission. Admission currently records only the KYC attestation; board approval is not recorded until the governance context exists.
 - Each member receives one `MEMBER` NFT.
 - Membership is non-transferable. Succession only through the legal process and board approval.
 - One member, one vote.
@@ -580,7 +585,7 @@ profit_distribution_ratio:          TBD
 ### 4.9 KYC renewal and revocation
 
 - KYC attestation has an expiry.
-- Members re-verify before expiry.
+- Members re-verify before expiry, during the enrollment window (§3.1, §3.13 step 1).
 - Issuer publishes revocation status.
 - Sanctions/PEP hits can freeze voting/exit as legally required.
 - A frozen member cannot vote; refund handling follows legal advice.

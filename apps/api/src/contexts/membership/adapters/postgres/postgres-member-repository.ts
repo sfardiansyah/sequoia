@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { DrizzleMemberRepository } from "./member-repository";
+import { PostgresMemberProfileReader } from "./member-profile-reader";
 import * as schema from "./schema";
 
 export function createPostgresMemberRepository(databaseUrl: string) {
@@ -10,5 +11,6 @@ export function createPostgresMemberRepository(databaseUrl: string) {
   return {
     client,
     repository: new DrizzleMemberRepository(db),
+    profile: new PostgresMemberProfileReader(client),
   };
 }

@@ -16,7 +16,7 @@ function toRow(member: Member): MemberInsert {
   return {
     id: member.id,
     ownerPkh: member.ownerPkh.value,
-    kycCommitment: member.kycCommitment,
+    kycAttestationId: member.kycAttestationId,
     memberClass: member.memberClass,
     status: member.status,
     joinedAt: member.joinedAt,
@@ -27,7 +27,7 @@ function toDomain(row: MemberRow): Member {
   const member = Member.rehydrate({
     id: row.id,
     ownerPkh: row.ownerPkh,
-    kycCommitment: row.kycCommitment,
+    kycAttestationId: row.kycAttestationId,
     memberClass: row.memberClass as MemberClass,
     status: row.status as MemberStatus,
     joinedAt: row.joinedAt,

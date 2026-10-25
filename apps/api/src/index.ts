@@ -1,12 +1,11 @@
 import { createApp } from "./app";
+import { createMembershipContainer } from "./composition/membership";
 import { loadConfig } from "./config";
 import { CardanoWalletVerifier } from "./contexts/auth/adapters/cardano-verifier";
 import { loadJwtKeys } from "./contexts/auth/adapters/jwt-keys";
 import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
 import { PostgresNonceStore } from "./contexts/auth/adapters/postgres-nonce-store";
 import { AuthService } from "./contexts/auth/application/auth-service";
-import { createPostgresMemberRepository } from "./contexts/membership/adapters/postgres/postgres-member-repository";
-import { FindMemberByPkh } from "./contexts/membership/application/find-member";
 
 const config = loadConfig();
 const databaseUrl = process.env.DATABASE_URL;
@@ -17,20 +16,17 @@ if (!databaseUrl || !privateKeys) {
 }
 
 const tokens = new JwtTokenService(await loadJwtKeys(privateKeys));
-const { client, repository } = createPostgresMemberRepository(databaseUrl);
+const membership = createMembershipContainer(databaseUrl);
 const auth = new AuthService(
   new CardanoWalletVerifier(),
-  new PostgresNonceStore(client),
+  new PostgresNonceStore(membership.client),
   tokens,
 );
-const findMemberByPkh = new FindMemberByPkh(repository);
 const app = createApp(config, {
   auth,
   jwks: tokens,
-  findMemberByPkh,
-  checkDatabase: async () => {
-    await client`SELECT 1`;
-  },
+  memberProfile: membership.memberProfile,
+  checkDatabase: membership.checkDatabase,
 });
 
 app.listen({ port: config.port, hostname: "0.0.0.0" });
