@@ -12,15 +12,15 @@ export type ContributionSplitBps = {
   readonly projectBps: number;
 };
 
-const SPLITS = {
+export const DEFAULT_SPLITS = {
   [MemberClass.Standard]: { depositBps: 7_000, projectBps: 3_000 },
   [MemberClass.Founder]: { depositBps: 2_000, projectBps: 8_000 },
 } satisfies Record<MemberClass, ContributionSplitBps>;
 
-export function contributionSplitFor(
+export function defaultSplitFor(
   memberClass: MemberClass,
 ): ContributionSplitBps {
-  return SPLITS[memberClass];
+  return DEFAULT_SPLITS[memberClass];
 }
 
 export function isMemberClass(value: string): value is MemberClass {

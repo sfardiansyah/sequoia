@@ -1,4 +1,4 @@
-import { contributionSplitFor, type MemberClass } from "./member-class";
+import type { ContributionSplitBps } from "./member-class";
 import { BPS_DENOMINATOR, bps, type IdrAmount } from "./money";
 import { err, ok, type Result } from "./result";
 
@@ -7,12 +7,14 @@ export type ContributionSplit = {
   readonly project: IdrAmount;
 };
 
+/**
+ * The split is passed in, never looked up: a governance vote can change it, so
+ * the caller owns the parameters and snapshots the bps it used per contribution.
+ */
 export function splitContribution(
   amount: IdrAmount,
-  memberClass: MemberClass,
+  split: ContributionSplitBps,
 ): Result<ContributionSplit> {
-  const split = contributionSplitFor(memberClass);
-
   const depositBps = bps(split.depositBps);
   if (!depositBps.ok) return depositBps;
 
@@ -23,6 +25,8 @@ export function splitContribution(
     return err("Contribution split must total 10000 bps");
   }
 
+  // Floor the refundable deposit: the remainder goes to at-risk capital, so an
+  // odd amount never over-promises a refund.
   const deposit = Math.floor(
     (amount * depositBps.value) / BPS_DENOMINATOR,
   ) as IdrAmount;

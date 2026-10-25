@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   bps,
+  defaultCapitalParameters,
+  defaultSplitFor,
   founderRedeemableBps,
   founderVestedBps,
   idr,
   isMemberClass,
   splitContribution,
+  validateCapitalParameters,
   type Result,
 } from "./index";
 
@@ -39,7 +42,9 @@ describe("IDR amounts and basis points", () => {
 
 describe("contribution split", () => {
   test("splits a standard contribution 70/30", () => {
-    const split = unwrap(splitContribution(unwrap(idr(1_000_000)), "STANDARD"));
+    const split = unwrap(
+      splitContribution(unwrap(idr(1_000_000)), defaultSplitFor("STANDARD")),
+    );
     expect({ deposit: n(split.deposit), project: n(split.project) }).toEqual({
       deposit: 700_000,
       project: 300_000,
@@ -47,7 +52,9 @@ describe("contribution split", () => {
   });
 
   test("splits a founder contribution 20/80", () => {
-    const split = unwrap(splitContribution(unwrap(idr(1_000_000)), "FOUNDER"));
+    const split = unwrap(
+      splitContribution(unwrap(idr(1_000_000)), defaultSplitFor("FOUNDER")),
+    );
     expect({ deposit: n(split.deposit), project: n(split.project) }).toEqual({
       deposit: 200_000,
       project: 800_000,
@@ -55,8 +62,12 @@ describe("contribution split", () => {
   });
 
   test("assigns the rounding remainder to project capital", () => {
-    const standard = unwrap(splitContribution(unwrap(idr(101)), "STANDARD"));
-    const founder = unwrap(splitContribution(unwrap(idr(101)), "FOUNDER"));
+    const standard = unwrap(
+      splitContribution(unwrap(idr(101)), defaultSplitFor("STANDARD")),
+    );
+    const founder = unwrap(
+      splitContribution(unwrap(idr(101)), defaultSplitFor("FOUNDER")),
+    );
 
     expect({ deposit: n(standard.deposit), project: n(standard.project) }).toEqual({
       deposit: 70,
@@ -71,9 +82,60 @@ describe("contribution split", () => {
   test("never loses an IDR unit", () => {
     for (const memberClass of ["STANDARD", "FOUNDER"] as const) {
       const amount = unwrap(idr(101));
-      const split = unwrap(splitContribution(amount, memberClass));
+      const split = unwrap(splitContribution(amount, defaultSplitFor(memberClass)));
       expect(n(split.deposit) + n(split.project)).toBe(n(amount));
     }
+  });
+
+  test("rejects a split that does not total 10000 bps", () => {
+    const split = splitContribution(unwrap(idr(100)), {
+      depositBps: 7_000,
+      projectBps: 2_000,
+    });
+    expect(split.ok).toBe(false);
+  });
+});
+
+describe("capital parameters", () => {
+  const annualAmount = unwrap(idr(1_000_000));
+
+  test("accepts the defaults for the year's annual amount", () => {
+    const params = defaultCapitalParameters(annualAmount);
+    expect(n(unwrap(validateCapitalParameters(params)).annualAmount)).toBe(
+      n(annualAmount),
+    );
+  });
+
+  test("rejects a standard project share above the governance cap", () => {
+    const params = defaultCapitalParameters(annualAmount);
+    const result = validateCapitalParameters({
+      ...params,
+      splits: {
+        ...params.splits,
+        STANDARD: { depositBps: 4_000, projectBps: 6_000 },
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  test("rejects a founder split that does not total 10000 bps", () => {
+    const params = defaultCapitalParameters(annualAmount);
+    const result = validateCapitalParameters({
+      ...params,
+      splits: {
+        ...params.splits,
+        FOUNDER: { depositBps: 2_000, projectBps: 7_000 },
+      },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  test("rejects a non-integer annual amount", () => {
+    const result = validateCapitalParameters({
+      ...defaultCapitalParameters(annualAmount),
+      annualAmount: 1.5 as typeof annualAmount,
+    });
+    expect(result.ok).toBe(false);
   });
 });
 

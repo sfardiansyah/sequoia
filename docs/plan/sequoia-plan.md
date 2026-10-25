@@ -61,7 +61,7 @@ The co-op is a member-owned organization that:
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken later  
 **Test command:** `bun run check`  
-**Current status:** 84 tests pass, typecheck clean
+**Current status:** 89 tests pass, typecheck clean
 
 #### Completed milestones
 
@@ -79,6 +79,7 @@ The co-op is a member-owned organization that:
 12. Docker Compose: Postgres, Redis, one-shot migrate, API, healthchecks.
 13. Package-based auth rate limiting (`elysia-rate-limit`).
 14. Identity context: manual KYC attestations, issuers, expiry, revocation, supersede-on-renewal, admission gate, `sequoia kyc` CLI, `/members/me` KYC block (see ADR 0002).
+15. Capital primitives: `CapitalParameters` + validation, split passed into `splitContribution` and snapshotted per contribution, `GLOSSARY.md`, ADR 0003.
 
 #### Current auth decisions
 
