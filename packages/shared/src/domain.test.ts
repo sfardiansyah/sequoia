@@ -51,13 +51,13 @@ describe("contribution split", () => {
     });
   });
 
-  test("splits a founder contribution 20/80", () => {
+  test("splits a founder contribution 70/30", () => {
     const split = unwrap(
       splitContribution(unwrap(idr(1_000_000)), defaultSplitFor("FOUNDER")),
     );
     expect({ deposit: n(split.deposit), project: n(split.project) }).toEqual({
-      deposit: 200_000,
-      project: 800_000,
+      deposit: 700_000,
+      project: 300_000,
     });
   });
 
@@ -74,8 +74,8 @@ describe("contribution split", () => {
       project: 31,
     });
     expect({ deposit: n(founder.deposit), project: n(founder.project) }).toEqual({
-      deposit: 20,
-      project: 81,
+      deposit: 70,
+      project: 31,
     });
   });
 
@@ -124,7 +124,7 @@ describe("capital parameters", () => {
       ...params,
       splits: {
         ...params.splits,
-        FOUNDER: { depositBps: 2_000, projectBps: 7_000 },
+        FOUNDER: { depositBps: 7_000, projectBps: 2_000 },
       },
     });
     expect(result.ok).toBe(false);

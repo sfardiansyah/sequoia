@@ -8,20 +8,21 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 14: Manual KYC attestations.
+Milestone 15: Capital primitives.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
-- parameterized contribution split primitive; it still defaults to the old standard
-  70/30 and founder 20/80, while ADR 0003 now specifies 70/30 for every member
-  (pending the capital milestone);
+- parameterized contribution split primitive, defaulting to 70/30 for every
+  member; contribution persistence and the applied-bps snapshot arrive with the
+  capital context;
 - founder vesting: 50% at year 4 and 50% at year 5;
 - Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
 - identity context with manual KYC attestations: issuers, expiry, revocation, renewal, and an admission gate that requires a valid attestation;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, capital and governance contexts, web app.
+Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, the capital
+context beyond the shared primitives, the governance context, web app.
 
 ## Commands
 

@@ -55,6 +55,10 @@ history only needs to be readable, not recomputable.
 
 ## Consequences
 
+**Implementation status (2026-10-31):** the shared primitive accepts a split and
+both classes default to 7000/3000. The contribution row and the applied-bps
+snapshot are not built yet; they arrive with the capital context.
+
 - Changing the split is a configuration write and a vote, not a deploy. The
   off-chain defaults and `ConfigDatum` stay in agreement because both are just
   values.

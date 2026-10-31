@@ -88,7 +88,7 @@ The co-op is a member-owned organization that:
 12. Docker Compose: Postgres, Redis, one-shot migrate, API, healthchecks.
 13. Package-based auth rate limiting (`elysia-rate-limit`).
 14. Identity context: manual KYC attestations, issuers, expiry, revocation, supersede-on-renewal, admission gate, `sequoia kyc` CLI, `/members/me` KYC block (see ADR 0002).
-15. Capital primitives: `CapitalParameters` + validation, split passed into `splitContribution` and snapshotted per contribution, `GLOSSARY.md`, ADR 0003.
+15. Capital primitives: `CapitalParameters` + validation, split passed into `splitContribution`; contribution persistence and the applied-bps snapshot are pending the capital context; `GLOSSARY.md`, ADR 0003.
 
 #### Current auth decisions
 
@@ -101,7 +101,7 @@ The co-op is a member-owned organization that:
 - Refresh token: **not implemented yet**.
 - No refresh token until users complain about re-signing every hour.
 - If refresh tokens are added: 7–30 days, hashed in PostgreSQL, rotate on refresh, revoke on logout/reuse.
-- Session/revocation storage: PostgreSQL; Redis is optional cache, not required.
+- Session/revocation storage: planned PostgreSQL; not implemented yet. Redis is an optional cache, not required.
 - JWT signing keys must be separate from Cardano wallet keys.
 
 #### Nonce and session lifetimes
@@ -111,7 +111,7 @@ The co-op is a member-owned organization that:
 | Nonce | 5 minutes, single-use | PostgreSQL |
 | Access JWT | 1 hour | Stateless |
 | Refresh token | 7–30 days, later | PostgreSQL, hashed |
-| Session/revocation record | Until token expiry | PostgreSQL |
+| Session/revocation record | Until token expiry, later | PostgreSQL, planned |
 | Rate-limit counters | 1–60 minutes | Memory now; Redis later |
 
 Add periodic cleanup:
@@ -126,8 +126,8 @@ DELETE FROM auth_nonces WHERE expires_at < now();
 - For the current single-instance MVP: use **`elysia-rate-limit`** in-memory.
 - For multi-instance production: use **`rate-limiter-flexible` + Redis**.
 - Do not add Redis-backed rate limiting until there are multiple API instances, serverless deployment, or high-volume abuse protection.
-- Keep the `RateLimiter` port so the adapter can change.
-- Current custom `InMemoryRateLimiter` is a placeholder and should be replaced with the package.
+- The old custom `InMemoryRateLimiter` has been removed; rate limiting is the
+  package directly. Add a `RateLimiter` port only when a Redis adapter is needed.
 - Redis duration is not the deciding factor. Long-lived nonces/sessions belong in PostgreSQL; Redis is for shared ephemeral counters/cache.
 
 #### JWT algorithm decision
@@ -144,7 +144,7 @@ DELETE FROM auth_nonces WHERE expires_at < now();
 
 Add a local stack with:
 
-- PostgreSQL 17
+- PostgreSQL 18
 - Redis 7 (available now, optional until rate limiting/session caching needs it)
 - one-shot `migrate` service
 - `api` service
@@ -161,6 +161,9 @@ Redis must not be a hard dependency for the API until the Redis adapter exists. 
 This rule exists because security and architecture stabilization must not be compressed into arbitrary diff limits.
 
 #### Priority order
+
+> ADR 0004 supersedes the off-chain-first reading of this order: contracts come
+> first. The shared capital primitives are preparatory only.
 
 1. **Capital context**: annual contribution split, `MCAP`/`PROJ` ledger, founder vesting, book value.
 2. **Governance context**: proposals, one-member-one-vote, quorum/threshold, batched tally.

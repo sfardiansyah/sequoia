@@ -14,7 +14,7 @@ export type ContributionSplitBps = {
 
 export const DEFAULT_SPLITS = {
   [MemberClass.Standard]: { depositBps: 7_000, projectBps: 3_000 },
-  [MemberClass.Founder]: { depositBps: 2_000, projectBps: 8_000 },
+  [MemberClass.Founder]: { depositBps: 7_000, projectBps: 3_000 },
 } satisfies Record<MemberClass, ContributionSplitBps>;
 
 export function defaultSplitFor(
