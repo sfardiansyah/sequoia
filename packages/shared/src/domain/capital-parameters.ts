@@ -13,12 +13,12 @@ import {
 } from "./money";
 import { err, ok, type Result } from "./result";
 
-/** Plan §3.2: standard project share is capped at 50% by governance. */
-export const STANDARD_PROJECT_MAX_BPS = 5_000 as BasisPoints;
+/** Plan §3.2: standard Capital Participation share is capped at 50% by governance. */
+export const STANDARD_CAPITAL_PARTICIPATION_MAX_BPS = 5_000 as BasisPoints;
 
 export type CapitalParameters = {
   readonly annualAmount: IdrAmount;
-  readonly standardProjectMaxBps: BasisPoints;
+  readonly standardCapitalParticipationMaxBps: BasisPoints;
   readonly splits: Record<MemberClass, ContributionSplitBps>;
 };
 
@@ -28,7 +28,8 @@ export function defaultCapitalParameters(
 ): CapitalParameters {
   return {
     annualAmount,
-    standardProjectMaxBps: STANDARD_PROJECT_MAX_BPS,
+    standardCapitalParticipationMaxBps:
+      STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
     splits: DEFAULT_SPLITS,
   };
 }
@@ -39,27 +40,32 @@ export function validateCapitalParameters(
   const annualAmount = idr(params.annualAmount);
   if (!annualAmount.ok) return annualAmount;
 
-  const maxBps = bps(params.standardProjectMaxBps);
+  const maxBps = bps(params.standardCapitalParticipationMaxBps);
   if (!maxBps.ok) return maxBps;
 
   for (const memberClass of MEMBER_CLASSES) {
     const split = params.splits[memberClass];
 
-    const depositBps = bps(split.depositBps);
-    if (!depositBps.ok) return depositBps;
+    const memberCapitalBps = bps(split.memberCapitalBps);
+    if (!memberCapitalBps.ok) return memberCapitalBps;
 
-    const projectBps = bps(split.projectBps);
-    if (!projectBps.ok) return projectBps;
+    const capitalParticipationBps = bps(split.capitalParticipationBps);
+    if (!capitalParticipationBps.ok) return capitalParticipationBps;
 
-    if (depositBps.value + projectBps.value !== BPS_DENOMINATOR) {
+    if (
+      memberCapitalBps.value + capitalParticipationBps.value !==
+      BPS_DENOMINATOR
+    ) {
       return err(`${memberClass} split must total 10000 bps`);
     }
 
     if (
       memberClass === MemberClass.Standard &&
-      projectBps.value > maxBps.value
+      capitalParticipationBps.value > maxBps.value
     ) {
-      return err("Standard project share exceeds the configured cap");
+      return err(
+        "Standard Capital Participation share exceeds the configured cap",
+      );
     }
   }
 

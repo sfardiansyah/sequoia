@@ -3,8 +3,8 @@ import { BPS_DENOMINATOR, bps, type IdrAmount } from "./money";
 import { err, ok, type Result } from "./result";
 
 export type ContributionSplit = {
-  readonly deposit: IdrAmount;
-  readonly project: IdrAmount;
+  readonly memberCapital: bigint;
+  readonly capitalParticipation: bigint;
 };
 
 /**
@@ -15,24 +15,26 @@ export function splitContribution(
   amount: IdrAmount,
   split: ContributionSplitBps,
 ): Result<ContributionSplit> {
-  const depositBps = bps(split.depositBps);
-  if (!depositBps.ok) return depositBps;
+  const memberCapitalBps = bps(split.memberCapitalBps);
+  if (!memberCapitalBps.ok) return memberCapitalBps;
 
-  const projectBps = bps(split.projectBps);
-  if (!projectBps.ok) return projectBps;
+  const capitalParticipationBps = bps(split.capitalParticipationBps);
+  if (!capitalParticipationBps.ok) return capitalParticipationBps;
 
-  if (depositBps.value + projectBps.value !== BPS_DENOMINATOR) {
+  if (
+    memberCapitalBps.value + capitalParticipationBps.value !== BPS_DENOMINATOR
+  ) {
     return err("Contribution split must total 10000 bps");
   }
 
-  // Floor the refundable deposit: the remainder goes to at-risk capital, so an
-  // odd amount never over-promises a refund.
-  const deposit = Math.floor(
-    (amount * depositBps.value) / BPS_DENOMINATOR,
-  ) as IdrAmount;
+  // Floor Member Capital: the remainder goes to at-risk Capital Participation,
+  // so an odd amount never over-promises redemption.
+  const amountUnits = BigInt(amount);
+  const memberCapital =
+    (amountUnits * BigInt(memberCapitalBps.value)) / BigInt(BPS_DENOMINATOR);
 
   return ok({
-    deposit,
-    project: (amount - deposit) as IdrAmount,
+    memberCapital,
+    capitalParticipation: amountUnits - memberCapital,
   });
 }

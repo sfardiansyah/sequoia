@@ -8,13 +8,19 @@ export type MemberClass = (typeof MemberClass)[keyof typeof MemberClass];
 export const MEMBER_CLASSES = Object.values(MemberClass) as MemberClass[];
 
 export type ContributionSplitBps = {
-  readonly depositBps: number;
-  readonly projectBps: number;
+  readonly memberCapitalBps: number;
+  readonly capitalParticipationBps: number;
 };
 
 export const DEFAULT_SPLITS = {
-  [MemberClass.Standard]: { depositBps: 7_000, projectBps: 3_000 },
-  [MemberClass.Founder]: { depositBps: 7_000, projectBps: 3_000 },
+  [MemberClass.Standard]: {
+    memberCapitalBps: 7_000,
+    capitalParticipationBps: 3_000,
+  },
+  [MemberClass.Founder]: {
+    memberCapitalBps: 7_000,
+    capitalParticipationBps: 3_000,
+  },
 } satisfies Record<MemberClass, ContributionSplitBps>;
 
 export function defaultSplitFor(

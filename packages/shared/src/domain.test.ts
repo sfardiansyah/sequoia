@@ -45,9 +45,12 @@ describe("contribution split", () => {
     const split = unwrap(
       splitContribution(unwrap(idr(1_000_000)), defaultSplitFor("STANDARD")),
     );
-    expect({ deposit: n(split.deposit), project: n(split.project) }).toEqual({
-      deposit: 700_000,
-      project: 300_000,
+    expect({
+      memberCapital: split.memberCapital,
+      capitalParticipation: split.capitalParticipation,
+    }).toEqual({
+      memberCapital: 700_000n,
+      capitalParticipation: 300_000n,
     });
   });
 
@@ -55,13 +58,16 @@ describe("contribution split", () => {
     const split = unwrap(
       splitContribution(unwrap(idr(1_000_000)), defaultSplitFor("FOUNDER")),
     );
-    expect({ deposit: n(split.deposit), project: n(split.project) }).toEqual({
-      deposit: 700_000,
-      project: 300_000,
+    expect({
+      memberCapital: split.memberCapital,
+      capitalParticipation: split.capitalParticipation,
+    }).toEqual({
+      memberCapital: 700_000n,
+      capitalParticipation: 300_000n,
     });
   });
 
-  test("assigns the rounding remainder to project capital", () => {
+  test("assigns the rounding remainder to Capital Participation", () => {
     const standard = unwrap(
       splitContribution(unwrap(idr(101)), defaultSplitFor("STANDARD")),
     );
@@ -69,28 +75,46 @@ describe("contribution split", () => {
       splitContribution(unwrap(idr(101)), defaultSplitFor("FOUNDER")),
     );
 
-    expect({ deposit: n(standard.deposit), project: n(standard.project) }).toEqual({
-      deposit: 70,
-      project: 31,
+    expect({
+      memberCapital: standard.memberCapital,
+      capitalParticipation: standard.capitalParticipation,
+    }).toEqual({
+      memberCapital: 70n,
+      capitalParticipation: 31n,
     });
-    expect({ deposit: n(founder.deposit), project: n(founder.project) }).toEqual({
-      deposit: 70,
-      project: 31,
+    expect({
+      memberCapital: founder.memberCapital,
+      capitalParticipation: founder.capitalParticipation,
+    }).toEqual({
+      memberCapital: 70n,
+      capitalParticipation: 31n,
     });
+  });
+
+  test("keeps exact units for large IDR amounts", () => {
+    const amount = unwrap(idr(1_000_000_000_000_000));
+    const split = unwrap(
+      splitContribution(amount, defaultSplitFor("STANDARD")),
+    );
+
+    expect(split.memberCapital).toBe(700_000_000_000_000n);
+    expect(split.capitalParticipation).toBe(300_000_000_000_000n);
   });
 
   test("never loses an IDR unit", () => {
     for (const memberClass of ["STANDARD", "FOUNDER"] as const) {
       const amount = unwrap(idr(101));
       const split = unwrap(splitContribution(amount, defaultSplitFor(memberClass)));
-      expect(n(split.deposit) + n(split.project)).toBe(n(amount));
+      expect(split.memberCapital + split.capitalParticipation).toBe(
+        BigInt(amount),
+      );
     }
   });
 
   test("rejects a split that does not total 10000 bps", () => {
     const split = splitContribution(unwrap(idr(100)), {
-      depositBps: 7_000,
-      projectBps: 2_000,
+      memberCapitalBps: 7_000,
+      capitalParticipationBps: 2_000,
     });
     expect(split.ok).toBe(false);
   });
@@ -106,13 +130,13 @@ describe("capital parameters", () => {
     );
   });
 
-  test("rejects a standard project share above the governance cap", () => {
+  test("rejects a standard Capital Participation share above the governance cap", () => {
     const params = defaultCapitalParameters(annualAmount);
     const result = validateCapitalParameters({
       ...params,
       splits: {
         ...params.splits,
-        STANDARD: { depositBps: 4_000, projectBps: 6_000 },
+        STANDARD: { memberCapitalBps: 4_000, capitalParticipationBps: 6_000 },
       },
     });
     expect(result.ok).toBe(false);
@@ -124,7 +148,7 @@ describe("capital parameters", () => {
       ...params,
       splits: {
         ...params.splits,
-        FOUNDER: { depositBps: 7_000, projectBps: 2_000 },
+        FOUNDER: { memberCapitalBps: 7_000, capitalParticipationBps: 2_000 },
       },
     });
     expect(result.ok).toBe(false);
