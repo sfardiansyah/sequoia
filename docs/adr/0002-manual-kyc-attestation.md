@@ -43,14 +43,15 @@ issues them from the CLI; there is no third-party provider yet.
   CLI requires a valid attestation and nothing else.
 - **No KYC level yet.** `BASIC`/`ENHANCED` only mean something once provider
   tiers exist.
-- **Revocation does not freeze a member.** Governance and exit gates do not
-  exist yet; when they do, they must check attestation validity.
+- **Revocation does not freeze a member's record.** Contribution recording now
+  rejects an inactive member or an invalid current attestation. Governance and
+  exit gates do not exist yet; when they do, they must check attestation validity.
 - **Reverification is annual**, intended to run inside the annual
-  enrollment/contribution window (plan §3.1, §3.13 step 1). That window and the
-  contribution flow do not exist yet; until they do, `sequoia kyc issue` defaults to
-  365 days from issue. PDP Law (Law No. 27 of 2022) does not require periodic
-  reverification; the cadence comes from ongoing due-diligence practice.
-  Retention, not refresh, is the PDP exposure.
+  enrollment/contribution window (plan §3.1, §3.13 step 1). Contribution
+  recording exists now, but the enrollment window does not; until it does,
+  `sequoia kyc issue` defaults to 365 days from issue. PDP Law (Law No. 27 of
+  2022) does not require periodic reverification; the cadence comes from ongoing
+  due-diligence practice. Retention, not refresh, is the PDP exposure.
 
 ## Consequences
 

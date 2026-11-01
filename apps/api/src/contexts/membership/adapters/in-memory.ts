@@ -6,7 +6,12 @@ import type {
 } from "../domain/ports/kyc-eligibility";
 
 export class InMemoryMemberRepository implements MemberRepository {
+  private readonly byId = new Map<string, Member>();
   private readonly byOwner = new Map<string, Member>();
+
+  async findById(id: string): Promise<Member | null> {
+    return this.byId.get(id) ?? null;
+  }
 
   async findByOwnerPkh(ownerPkh: OwnerPkh): Promise<Member | null> {
     return this.byOwner.get(ownerPkh.value) ?? null;
@@ -18,6 +23,7 @@ export class InMemoryMemberRepository implements MemberRepository {
       throw new Error(`Duplicate owner pkh: ${member.ownerPkh.value}`);
     }
 
+    this.byId.set(member.id, member);
     this.byOwner.set(member.ownerPkh.value, member);
   }
 }
@@ -51,5 +57,18 @@ export class InMemoryKycEligibility implements KycEligibility {
     if (!attestation) return "NOT_FOUND";
     if (attestation.subjectPkh !== input.subjectPkh) return "MISMATCH";
     return attestation.failure;
+  }
+
+  async checkCurrent(input: {
+    readonly subjectPkh: string;
+    readonly at: number;
+  }): Promise<KycEligibilityFailure | null> {
+    for (const attestation of this.attestations.values()) {
+      if (attestation.subjectPkh === input.subjectPkh) {
+        return attestation.failure;
+      }
+    }
+
+    return "NOT_FOUND";
   }
 }

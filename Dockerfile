@@ -1,4 +1,4 @@
-FROM oven/bun:latest
+FROM oven/bun:1.4.4
 
 WORKDIR /app
 
@@ -13,5 +13,7 @@ COPY scripts ./scripts
 
 ENV NODE_ENV=production
 EXPOSE 3000
+
+USER bun
 
 CMD ["bun", "run", "start:api"]

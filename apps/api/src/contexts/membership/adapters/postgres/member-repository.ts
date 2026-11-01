@@ -40,6 +40,17 @@ function toDomain(row: MemberRow): Member {
 export class DrizzleMemberRepository implements MemberRepository {
   constructor(private readonly db: MembershipDatabase) {}
 
+  async findById(id: string): Promise<Member | null> {
+    const rows = await this.db
+      .select()
+      .from(members)
+      .where(eq(members.id, id))
+      .limit(1);
+
+    const row = rows[0];
+    return row ? toDomain(row) : null;
+  }
+
   async findByOwnerPkh(ownerPkh: OwnerPkh): Promise<Member | null> {
     const rows = await this.db
       .select()

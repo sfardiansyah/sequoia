@@ -12,16 +12,16 @@ export type ContributionSplitBps = {
   readonly capitalParticipationBps: number;
 };
 
-export const DEFAULT_SPLITS = {
-  [MemberClass.Standard]: {
+export const DEFAULT_SPLITS = Object.freeze({
+  [MemberClass.Standard]: Object.freeze({
     memberCapitalBps: 7_000,
     capitalParticipationBps: 3_000,
-  },
-  [MemberClass.Founder]: {
+  }),
+  [MemberClass.Founder]: Object.freeze({
     memberCapitalBps: 7_000,
     capitalParticipationBps: 3_000,
-  },
-} satisfies Record<MemberClass, ContributionSplitBps>;
+  }),
+}) satisfies Record<MemberClass, ContributionSplitBps>;
 
 export function defaultSplitFor(
   memberClass: MemberClass,

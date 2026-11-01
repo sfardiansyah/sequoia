@@ -91,6 +91,7 @@ export class Member {
 }
 
 export interface MemberRepository {
+  findById(id: string): Promise<Member | null>;
   findByOwnerPkh(ownerPkh: OwnerPkh): Promise<Member | null>;
   save(member: Member): Promise<void>;
 }

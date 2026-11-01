@@ -38,7 +38,7 @@ export function describeMemberRepository(
   create: () => Promise<MemberRepositoryHarness>,
 ): void {
   describe(name, () => {
-    test("returns null for an unknown owner", async () => {
+    test("returns null for an unknown owner or id", async () => {
       const { repository, close } = await create();
 
       try {
@@ -47,6 +47,7 @@ export function describeMemberRepository(
             OwnerPkh.parse("b".repeat(56))!,
           ),
         ).toBeNull();
+        expect(await repository.findById("missing-member")).toBeNull();
       } finally {
         await close();
       }
@@ -72,6 +73,7 @@ export function describeMemberRepository(
 
         const found = await repository.findByOwnerPkh(member.ownerPkh);
         expect(found?.id).toBe(member.id);
+        expect((await repository.findById(member.id))?.id).toBe(member.id);
         expect(found?.status).toBe(MemberStatus.Active);
         expect(found?.kycAttestationId).toBe(CONTRACT_ATTESTATION_ID);
         expect(found?.joinedAt).toBe(member.joinedAt);

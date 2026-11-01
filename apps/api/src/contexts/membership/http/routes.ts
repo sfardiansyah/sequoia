@@ -12,6 +12,8 @@ export function membershipRoutes(deps: {
   memberProfile: MemberProfileReader;
 }) {
   return new Elysia().get("/members/me", async ({ headers, set }) => {
+    set.headers["cache-control"] = "no-store";
+
     const authorization = headers.authorization;
     const token = authorization?.startsWith("Bearer ")
       ? authorization.slice(7)

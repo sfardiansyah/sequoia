@@ -110,6 +110,7 @@ describe("api", () => {
 
     const me = await app.handle(new Request("http://localhost/members/me", { headers: { authorization: `Bearer ${token}` } }));
     expect(me.status).toBe(200);
+    expect(me.headers.get("cache-control")).toBe("no-store");
     expect(await me.json()).toEqual({
       id: "member-1",
       ownerPkh: ownerPkhValue,

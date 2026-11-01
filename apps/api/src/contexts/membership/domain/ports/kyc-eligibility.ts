@@ -16,4 +16,10 @@ export interface KycEligibility {
     readonly attestationId: string;
     readonly at: number;
   }): Promise<KycEligibilityFailure | null>;
+
+  /** The subject's current attestation, not a specific admission record. */
+  checkCurrent(input: {
+    readonly subjectPkh: string;
+    readonly at: number;
+  }): Promise<KycEligibilityFailure | null>;
 }

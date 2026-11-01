@@ -17,6 +17,7 @@ const main = defineCommand({
     migrate: () => import("./migrate").then((module) => module.default),
     member,
     kyc: () => import("./kyc").then((module) => module.default),
+    contribution: () => import("./contribution").then((module) => module.default),
   },
 });
 

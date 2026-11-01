@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DEFAULT_SPLITS,
   bps,
   defaultCapitalParameters,
   defaultSplitFor,
@@ -160,6 +161,14 @@ describe("capital parameters", () => {
       annualAmount: 1.5 as typeof annualAmount,
     });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("default splits", () => {
+  test("are frozen so callers cannot mutate the shared defaults", () => {
+    expect(Object.isFrozen(DEFAULT_SPLITS)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_SPLITS.STANDARD)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_SPLITS.FOUNDER)).toBe(true);
   });
 });
 

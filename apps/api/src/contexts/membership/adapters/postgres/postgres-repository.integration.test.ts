@@ -19,7 +19,7 @@ async function setup() {
 
   await ensureMigrated(databaseUrl);
   const client = postgres(databaseUrl, { max: 1 });
-  await client`TRUNCATE TABLE members, kyc_attestations`;
+  await client`TRUNCATE TABLE members, kyc_attestations CASCADE`;
   await client`
     INSERT INTO kyc_attestations
       (id, subject_pkh, issuer_id, evidence_ref, issued_at, expires_at, status)

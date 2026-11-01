@@ -14,7 +14,7 @@ async function setup() {
   await ensureMigrated(databaseUrl);
   const client = postgres(databaseUrl, { max: 1 });
   // Issuers are seeded by the migration; only attestations are reset.
-  await client`TRUNCATE TABLE kyc_attestations, members`;
+  await client`TRUNCATE TABLE kyc_attestations, members CASCADE`;
 
   const db = drizzle(client, { schema });
 

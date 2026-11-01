@@ -169,6 +169,9 @@ describe("AdmitMember", () => {
         check: async () => {
           throw new Error("identity down");
         },
+        checkCurrent: async () => {
+          throw new Error("identity down");
+        },
       },
     );
 
@@ -182,6 +185,7 @@ describe("AdmitMember", () => {
         seen.push(input.at);
         return null;
       },
+      checkCurrent: async () => null,
     };
     const admitOne = new AdmitMember(
       new InMemoryMemberRepository(),

@@ -63,14 +63,14 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-10-25
+### Current implementation handoff — 2026-11-01
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken later  
 **Test command:** `bun run check`  
-**Current status:** 89 tests pass, typecheck clean
+**Current status:** 134 tests pass, typecheck clean
 
 #### Completed milestones
 
@@ -88,7 +88,8 @@ The co-op is a member-owned organization that:
 12. Docker Compose: Postgres, Redis, one-shot migrate, API, healthchecks.
 13. Package-based auth rate limiting (`elysia-rate-limit`).
 14. Identity context: manual KYC attestations, issuers, expiry, revocation, supersede-on-renewal, admission gate, `sequoia kyc` CLI, `/members/me` KYC block (see ADR 0002).
-15. Capital primitives: `CapitalParameters` + validation, split passed into `splitContribution`; contribution persistence and the applied-bps snapshot are pending the capital context; `GLOSSARY.md`, ADR 0003.
+15. Capital primitives: `CapitalParameters` + validation, split passed into `splitContribution`, `GLOSSARY.md`, ADR 0003.
+16. Contribution years and snapshots: `ContributionYear` (annual amount, split, cap), `ConfigureContributionYear`, `RecordAnnualContribution` with an active-member/current-KYC eligibility gate, `contribution_years`/`contributions` migration, Postgres/PGlite repositories, `sequoia contribution` CLI.
 
 #### Current auth decisions
 
@@ -178,10 +179,9 @@ This rule exists because security and architecture stabilization must not be com
 - No refresh token/session revocation yet.
 - Redis is not wired into the application.
 - KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof.
-- Revoked or expired KYC does not freeze an existing member (no governance/exit gates yet).
+- Revoked or expired KYC blocks new contribution snapshots but does not freeze an existing member; voting/exit gates do not exist yet.
 - Board approval is not recorded; admission is gated on KYC only.
-- New contributions are not gated on KYC validity (no capital context yet).
-- Aiken contracts, capital/governance contexts, and frontend are not built yet.
+- Aiken contracts, the full capital/governance contexts, and frontend are not built yet.
 
 #### Resume checklist
 

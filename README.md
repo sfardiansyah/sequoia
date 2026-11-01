@@ -8,21 +8,25 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 15: Capital primitives.
+Milestone 16: Contribution years and snapshots.
 
 Implemented:
 
 - IDR amount and basis-point value objects;
 - parameterized contribution split primitive, defaulting to 70/30 for every
-  member; contribution persistence and the applied-bps snapshot arrive with the
-  capital context;
+  member;
+- contribution years and snapshots: fixed annual amount and split per year,
+  active-member/current-KYC eligibility, applied split bps, resulting bigint
+  unit amounts, Postgres/PGlite repositories, and `sequoia contribution` CLI
+  commands;
 - founder vesting: 50% at year 4 and 50% at year 5;
 - Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
 - identity context with manual KYC attestations: issuers, expiry, revocation, renewal, and an admission gate that requires a valid attestation;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, the capital
-context beyond the shared primitives, the governance context, web app.
+Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, the full
+capital context beyond contribution years and snapshots, the governance context,
+web app.
 
 ## Commands
 
@@ -37,6 +41,8 @@ bun run sequoia kyc revoke <attestation-id> --reason "..."
 bun run sequoia kyc list --expiring-within 30
 bun run sequoia kyc list --status REVOKED
 bun run sequoia member admit --owner-pkh ... --attestation <attestation-id>
+bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000
+bun run sequoia contribution record --member-id <member-id> --contribution-year 2026
 ```
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`

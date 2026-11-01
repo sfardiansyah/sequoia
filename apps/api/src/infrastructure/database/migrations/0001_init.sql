@@ -32,10 +32,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS kyc_attestations_one_active
 CREATE INDEX IF NOT EXISTS kyc_attestations_by_subject
   ON kyc_attestations (subject_pkh, issued_at DESC);
 
--- Pre-deployment squash: a DB migrated from the deleted 0001_members.sql would
--- keep kyc_commitment otherwise, because CREATE TABLE IF NOT EXISTS is a no-op.
-DROP TABLE IF EXISTS members;
-
 CREATE TABLE IF NOT EXISTS members (
   id text PRIMARY KEY,
   owner_pkh text NOT NULL UNIQUE,
@@ -55,3 +51,41 @@ CREATE TABLE IF NOT EXISTS auth_nonces (
 
 CREATE INDEX IF NOT EXISTS auth_nonces_expires_at_idx
   ON auth_nonces (expires_at);
+
+CREATE TABLE IF NOT EXISTS contribution_years (
+  year integer PRIMARY KEY,
+  annual_amount bigint NOT NULL,
+  member_capital_bps integer NOT NULL,
+  capital_participation_bps integer NOT NULL,
+  standard_capital_participation_max_bps integer NOT NULL,
+  created_at bigint NOT NULL,
+  CHECK (year > 0),
+  CHECK (annual_amount > 0),
+  CHECK (member_capital_bps BETWEEN 0 AND 10000),
+  CHECK (capital_participation_bps BETWEEN 0 AND 10000),
+  CHECK (standard_capital_participation_max_bps BETWEEN 0 AND 10000),
+  CHECK (member_capital_bps + capital_participation_bps = 10000),
+  CHECK (capital_participation_bps <= standard_capital_participation_max_bps),
+  CHECK (created_at >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS contributions (
+  id text PRIMARY KEY,
+  member_id text NOT NULL REFERENCES members (id),
+  contribution_year integer NOT NULL REFERENCES contribution_years (year),
+  annual_amount bigint NOT NULL,
+  member_capital_bps integer NOT NULL,
+  capital_participation_bps integer NOT NULL,
+  member_capital bigint NOT NULL,
+  capital_participation bigint NOT NULL,
+  recorded_at bigint NOT NULL,
+  UNIQUE (member_id, contribution_year),
+  CHECK (annual_amount > 0),
+  CHECK (member_capital_bps BETWEEN 0 AND 10000),
+  CHECK (capital_participation_bps BETWEEN 0 AND 10000),
+  CHECK (member_capital_bps + capital_participation_bps = 10000),
+  CHECK (member_capital >= 0),
+  CHECK (capital_participation >= 0),
+  CHECK (member_capital + capital_participation = annual_amount),
+  CHECK (recorded_at >= 0)
+);
