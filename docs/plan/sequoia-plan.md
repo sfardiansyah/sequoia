@@ -72,7 +72,7 @@ The co-op is a member-owned organization that:
 **Test command:** `bun run check`  
 **Current status:** 148 tests pass, typecheck clean, Postgres integration suite green
 
-**Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec + tickets)
+**Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
 **Pilot boundary:** the harness in that directory is preprod and synthetic. Its
 PostgreSQL rows are provisional, not the co-op ledger (ADR 0004's pilot
