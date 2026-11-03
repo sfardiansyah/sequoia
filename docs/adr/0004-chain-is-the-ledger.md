@@ -63,6 +63,33 @@ mainnet until on-chain governance exists.
   `number` for IDR amounts; `MCAP` and `PROJ` quantities do not.
   `packages/shared` changes before any capital code is written.
 
+## Pilot exception: the synthetic harness
+
+Milestone 17 starts a preprod pilot harness
+(`docs/plan/sequoia-pilot-mvp/`) that records members, KYC attestations, and
+contributions in PostgreSQL only. It is a bounded exception, not a reversal of
+this ADR:
+
+- **Preprod and synthetic.** Test wallets, synthetic KYC evidence, mock bank
+  reference numbers, no real IDR, no real personal data.
+- **Provisional records.** The harness marks its rows `PILOT`. They are a
+  projection of nothing yet; the co-op ledger is the chain, and a row here can be
+  discarded without loss.
+- **No invariant moves off-chain.** §6.6's rules — reserve never spent on
+  projects, one vote per member, no double redemption, spending within budget —
+  are still contract-enforced guarantees, and none of them exists in the
+  harness. If the harness and a contract disagree, the contract wins.
+- **Privacy is unchanged.** ADR 0007 governs the pilot too: no real personal
+  data, and no on-chain identity when the contracts arrive.
+- **It expires.** When the pilot is over, the frontier returns to `config` and
+  `membership` (M1), then governance, treasury, distribution, and exit. Nothing
+  in the harness is promoted into the real product without being rebuilt behind
+  a contract.
+
+The temptation this exception must not create is "the harness works, ship it".
+Its value is proving the member and contribution workflow with real operators,
+not becoming the authoritative ledger of a co-op.
+
 ## Consequences
 
 - The first workable co-op arrives later than an off-chain build would, and the

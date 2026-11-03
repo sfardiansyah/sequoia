@@ -123,3 +123,14 @@ For the statutory terms behind these English names, see
 
 Rounding rule: floor Member Capital, give the remainder to Capital Participation.
 An odd amount never over-promises redemption.
+
+## Operations
+
+| Term | Meaning |
+|---|---|
+| **Operator** | The named person running an admin command, from `SEQUOIA_OPERATOR`. A lower-case slug (`ray`, `board-ops`), never the member, never the wallet. |
+| **Audit Event** | One append-only `audit_events` row: operator, action, entity type and id, time, and an optional non-PII detail. It never carries an evidence ref, a free-text revocation reason, or identity data. |
+
+An Operator is who did the action; the member is who the action was about. Audit
+events are not the chain ledger (§6.2) — they record what the board did off-chain
+while the chain holds what members own.

@@ -63,14 +63,20 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-11-01
+### Current implementation handoff — 2026-11-03
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken later  
 **Test command:** `bun run check`  
-**Current status:** 134 tests pass, typecheck clean
+**Current status:** 148 tests pass, typecheck clean, Postgres integration suite green
+
+**Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec + tickets)
+
+**Pilot boundary:** the harness in that directory is preprod and synthetic. Its
+PostgreSQL rows are provisional, not the co-op ledger (ADR 0004's pilot
+exception).
 
 #### Completed milestones
 
@@ -90,6 +96,7 @@ The co-op is a member-owned organization that:
 14. Identity context: manual KYC attestations, issuers, expiry, revocation, supersede-on-renewal, admission gate, `sequoia kyc` CLI, `/members/me` KYC block (see ADR 0002).
 15. Capital primitives: `CapitalParameters` + validation, split passed into `splitContribution`, `GLOSSARY.md`, ADR 0003.
 16. Contribution years and snapshots: `ContributionYear` (annual amount, split, cap), `ConfigureContributionYear`, `RecordAnnualContribution` with an active-member/current-KYC eligibility gate, `contribution_years`/`contributions` migration, Postgres/PGlite repositories, `sequoia contribution` CLI.
+17. Pilot boundary and audit foundation: ADR 0007 (no PII on chain, keyed commitments, secret ballot, aggregate dashboard), ADR 0004 pilot exception, append-only `audit_events` with an UPDATE/DELETE trigger, `AuditLog` port with in-memory and Postgres adapters, `SEQUOIA_OPERATOR` actor validation, audit rows on KYC issue and revoke, `sequoia audit list`.
 
 #### Current auth decisions
 
@@ -181,6 +188,13 @@ This rule exists because security and architecture stabilization must not be com
 - KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof.
 - Revoked or expired KYC blocks new contribution snapshots but does not freeze an existing member; voting/exit gates do not exist yet.
 - Board approval is not recorded; admission is gated on KYC only.
+- Audit rows are written after the mutation, not in the same transaction; a
+  failed audit write is reported on stderr and does not fail the command
+  (pilot ticket 11).
+- Audit covers KYC issue and revoke only. Admission, contribution year setup,
+  bank attestation, and contribution recording are not audited yet.
+- The operator is a self-declared lowercase slug from `SEQUOIA_OPERATOR`; there
+  is no operator registry, login, or per-action approval.
 - Aiken contracts, the full capital/governance contexts, and frontend are not built yet.
 
 #### Resume checklist
@@ -191,6 +205,14 @@ bun run check
 bun run db:migrate                  # requires DATABASE_URL
 bun run sequoia --help
 bun run dev:api                     # requires DATABASE_URL and JWT_SECRET
+```
+
+Admin write commands also require the operator:
+
+```sh
+export SEQUOIA_OPERATOR=ray         # lower-case slug
+bun run sequoia kyc list
+bun run sequoia audit list
 ```
 
 Read this handoff section first, then continue with priority 1.
@@ -443,7 +465,9 @@ At month 60:
 - Structural changes, split changes, board changes, and bylaws: two-thirds of votes cast with 50% quorum.
 - 7-day timelock for structural and parameter changes.
 - Proposal bond: returnable if quorum is reached; forfeited to the treasury if spam.
-- Votes are public by default; commit-reveal is a later privacy option.
+- Votes are public in the pilot harness only. On-chain votes are secret per ADR
+  0007: a member commits to a choice and reveals it at tally, or is tallied
+  without revealing it. Quorum and counts stay public; individual ballots do not.
 - Delegation is out of scope for v1.
 
 ### 3.10 Board and operations
