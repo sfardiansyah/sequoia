@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test";
 import postgres from "postgres";
 import { ensureMigrated } from "../../../infrastructure/database/testing";
 import { describeNonceStore } from "./nonce-store-contract";
@@ -21,4 +22,34 @@ async function setup() {
 
 if (runIntegration && databaseUrl) {
   describeNonceStore("PostgresNonceStore (Postgres)", setup);
+
+  describe("PostgresNonceStore purge", () => {
+    test("removes expired nonces when a new one is created", async () => {
+      await ensureMigrated(databaseUrl);
+      const client = postgres(databaseUrl, { max: 1 });
+
+      try {
+        await client`TRUNCATE TABLE auth_nonces`;
+        await client`
+          INSERT INTO auth_nonces (nonce, address, expires_at)
+          VALUES ('expired', 'addr_test1-member', 500)
+        `;
+
+        const store = new PostgresNonceStore(client);
+        await store.create({
+          nonce: "fresh",
+          address: "addr_test1-member",
+          expiresAt: 2_000,
+          now: 1_000,
+        });
+
+        const rows = await client<{ nonce: string }[]>`
+          SELECT nonce FROM auth_nonces ORDER BY nonce
+        `;
+        expect(rows.map((row) => row.nonce)).toEqual(["fresh"]);
+      } finally {
+        await client.end();
+      }
+    });
+  });
 }

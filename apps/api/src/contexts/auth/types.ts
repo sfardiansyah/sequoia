@@ -29,6 +29,8 @@ export interface NonceStore {
     nonce: string;
     address: string;
     expiresAt: number;
+    /** Current time on the same clock the caller uses; lets the store purge expired rows. */
+    now: number;
   }): Promise<void>;
   consume(input: {
     nonce: string;

@@ -22,10 +22,11 @@ export class AuthService {
     address: string,
   ): Promise<Result<AuthChallenge, AuthError>> {
     const nonce = `sequoia:${randomBytes(24).toString("hex")}`;
-    const expiresAt = this.now() + 5 * 60_000;
+    const now = this.now();
+    const expiresAt = now + 5 * 60_000;
 
     try {
-      await this.nonces.create({ nonce, address, expiresAt });
+      await this.nonces.create({ nonce, address, expiresAt, now });
     } catch (cause) {
       return err(unexpected(cause));
     }

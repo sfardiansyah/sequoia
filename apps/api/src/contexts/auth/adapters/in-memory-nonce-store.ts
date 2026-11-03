@@ -10,7 +10,12 @@ export class InMemoryNonceStore implements NonceStore {
     nonce: string;
     address: string;
     expiresAt: number;
+    now: number;
   }): Promise<void> {
+    for (const [nonce, entry] of this.entries) {
+      if (entry.expiresAt < input.now) this.entries.delete(nonce);
+    }
+
     this.entries.set(input.nonce, {
       address: input.address,
       expiresAt: input.expiresAt,

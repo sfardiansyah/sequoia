@@ -19,6 +19,7 @@ export function describeNonceStore(
           nonce: "nonce-1",
           address: "addr_test1-member",
           expiresAt: 1_000,
+          now: 0,
         });
 
         expect(
@@ -48,6 +49,7 @@ export function describeNonceStore(
           nonce: "nonce-2",
           address: "addr_test1-member",
           expiresAt: 1_000,
+          now: 0,
         });
 
         expect(
@@ -77,6 +79,7 @@ export function describeNonceStore(
           nonce: "nonce-3",
           address: "addr_test1-member",
           expiresAt: 1_000,
+          now: 0,
         });
 
         expect(
