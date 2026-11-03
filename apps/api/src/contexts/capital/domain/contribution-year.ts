@@ -1,5 +1,6 @@
 import {
   BPS_DENOMINATOR,
+  STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
   bps,
   err,
   idr,
@@ -62,6 +63,12 @@ export class ContributionYear {
 
     const maxBps = bps(input.standardCapitalParticipationMaxBps);
     if (!maxBps.ok) return err({ code: "INVALID_CAP" });
+
+    // Plan §3.2: the share is capped at 50% by governance. The cap travels with
+    // the year but it cannot raise the ceiling.
+    if (maxBps.value > STANDARD_CAPITAL_PARTICIPATION_MAX_BPS) {
+      return err({ code: "INVALID_CAP" });
+    }
 
     if (
       memberCapitalBps.value + capitalParticipationBps.value !==

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { execMigrations } from "../../../../infrastructure/database/testing";
 import {
   CONTRACT_MEMBER_ID,
   describeContributionRepository,
@@ -18,14 +18,7 @@ const attestationId = "kyc-contribution-contract";
 
 async function setup() {
   const client = new PGlite();
-  const ddl = await readFile(
-    new URL(
-      "../../../../infrastructure/database/migrations/0001_init.sql",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  await client.exec(ddl);
+  await execMigrations(client);
 
   await client.exec(`
     INSERT INTO kyc_attestations

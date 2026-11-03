@@ -95,6 +95,35 @@ describe("ContributionYear", () => {
     });
   });
 
+  test("rejects a cap above the governance ceiling", () => {
+    expectError(
+      ContributionYear.configure({
+        ...yearCommand,
+        standardCapitalParticipationMaxBps: 5_001,
+      }),
+      "INVALID_CAP",
+    );
+    expectError(
+      ContributionYear.configure({
+        ...yearCommand,
+        memberCapitalBps: 4_000,
+        capitalParticipationBps: 6_000,
+        standardCapitalParticipationMaxBps: 6_000,
+      }),
+      "INVALID_CAP",
+    );
+
+    const atCeiling = unwrap(
+      ContributionYear.configure({
+        ...yearCommand,
+        memberCapitalBps: 5_000,
+        capitalParticipationBps: 5_000,
+        standardCapitalParticipationMaxBps: 5_000,
+      }),
+    );
+    expect(Number(atCeiling.capitalParticipationBps)).toBe(5_000);
+  });
+
   test("rejects invalid year parameters", () => {
     expectError(
       ContributionYear.configure({ ...yearCommand, year: 0 }),

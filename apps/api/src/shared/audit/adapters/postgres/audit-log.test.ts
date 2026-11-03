@@ -1,21 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { execMigrations } from "../../../../infrastructure/database/testing";
 import { describeAuditLog } from "../audit-log-contract";
 import { DrizzleAuditLog } from "./audit-log";
 import * as schema from "./schema";
 
 async function setup() {
   const client = new PGlite();
-  const ddl = await readFile(
-    new URL(
-      "../../../../infrastructure/database/migrations/0002_audit_events.sql",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  await client.exec(ddl);
+  await execMigrations(client);
   const db = drizzle(client, { schema });
 
   return {
@@ -29,14 +22,7 @@ describeAuditLog("DrizzleAuditLog", setup);
 describe("audit_events append-only trigger", () => {
   async function seeded() {
     const client = new PGlite();
-    const ddl = await readFile(
-      new URL(
-        "../../../../infrastructure/database/migrations/0002_audit_events.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    );
-    await client.exec(ddl);
+    await execMigrations(client);
     await client.exec(`
       INSERT INTO audit_events
         (id, actor, action, entity_type, entity_id, occurred_at)

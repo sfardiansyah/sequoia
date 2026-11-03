@@ -1,20 +1,21 @@
 import { defineCommand } from "citty";
+import {
+  DEFAULT_SPLITS,
+  MemberClass,
+  STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
+} from "@sequoia/shared";
 import { createCapitalContainer } from "../composition/capital";
+
+const standardSplit = DEFAULT_SPLITS[MemberClass.Standard];
 
 const setYear = defineCommand({
   meta: {
     name: "set",
-    description: "Configure the annual amount and split for a contribution year",
+    description: "Configure the annual amount for a contribution year",
   },
   args: {
     "contribution-year": { type: "string", required: true },
     "annual-amount": { type: "string", required: true },
-    "member-capital-bps": { type: "string", default: "7000" },
-    "capital-participation-bps": { type: "string", default: "3000" },
-    "standard-capital-participation-max-bps": {
-      type: "string",
-      default: "5000",
-    },
     "created-at": { type: "string" },
     json: { type: "boolean", default: false },
   },
@@ -30,11 +31,10 @@ const setYear = defineCommand({
       const result = await container.configureContributionYear.execute({
         year: Number(args.contributionYear),
         annualAmount: Number(args.annualAmount),
-        memberCapitalBps: Number(args.memberCapitalBps),
-        capitalParticipationBps: Number(args.capitalParticipationBps),
-        standardCapitalParticipationMaxBps: Number(
-          args.standardCapitalParticipationMaxBps,
-        ),
+        memberCapitalBps: standardSplit.memberCapitalBps,
+        capitalParticipationBps: standardSplit.capitalParticipationBps,
+        standardCapitalParticipationMaxBps:
+          STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
         createdAt,
       });
 
