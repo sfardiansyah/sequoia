@@ -12,6 +12,7 @@ export function createPostgresIdentityRepository(databaseUrl: string) {
 
   return {
     client,
+    db,
     attestations: new DrizzleKycAttestationRepository(db),
     issuers: new DrizzleIssuerDirectory(db),
   };

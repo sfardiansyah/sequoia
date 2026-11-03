@@ -6,6 +6,7 @@ import {
 } from "../contexts/identity/domain/kyc-attestation";
 import { KycStatus } from "../contexts/identity/domain/kyc-status";
 import { SubjectPkh } from "../contexts/identity/domain/subject-pkh";
+import { resolveOperator } from "./operator";
 
 const DAY_MS = 86_400_000;
 const KYC_STATUSES: readonly string[] = Object.values(KycStatus);
@@ -36,6 +37,7 @@ const issue = defineCommand({
     json: { type: "boolean", default: false },
   },
   async run({ args }) {
+    const actor = resolveOperator();
     const issuedAt = Date.now();
     const expiresAt =
       args.expiresAt === undefined
@@ -55,6 +57,7 @@ const issue = defineCommand({
         evidenceRef: args.evidenceRef as string,
         issuedAt,
         expiresAt,
+        actor,
       });
 
       if (!result.ok) return reportFailure("Issue", result.error);
@@ -84,6 +87,7 @@ const revoke = defineCommand({
     reason: { type: "string", required: true },
   },
   async run({ args }) {
+    const actor = resolveOperator();
     const container = createIdentityContainer(databaseUrl());
 
     try {
@@ -91,6 +95,7 @@ const revoke = defineCommand({
         attestationId: args.id as string,
         reason: args.reason as string,
         revokedAt: Date.now(),
+        actor,
       });
 
       if (!result.ok) return reportFailure("Revocation", result.error);

@@ -1,4 +1,10 @@
-import { err, ok, type Result } from "@sequoia/shared";
+import { err, type Result } from "@sequoia/shared";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITY_TYPES,
+  parseActor,
+} from "../../../shared/audit/audit-event";
+import type { AuditLog } from "../../../shared/audit/port";
 import { unexpected } from "../../../shared/errors";
 import type { IdGenerator } from "../../../shared/id-generator";
 import type { IssuerDirectory } from "../domain/issuer";
@@ -15,6 +21,8 @@ export type IssueKycAttestationCommand = {
   readonly evidenceRef: string;
   readonly issuedAt: number;
   readonly expiresAt: number;
+  /** Operator running the command; recorded in the audit trail. */
+  readonly actor: string;
 };
 
 export class IssueKycAttestation {
@@ -22,11 +30,15 @@ export class IssueKycAttestation {
     private readonly attestations: KycAttestationRepository,
     private readonly issuers: IssuerDirectory,
     private readonly ids: IdGenerator,
+    private readonly audit: AuditLog,
   ) {}
 
   async execute(
     command: IssueKycAttestationCommand,
   ): Promise<Result<KycAttestation, IdentityError>> {
+    const actor = parseActor(command.actor);
+    if (!actor) return err({ code: "INVALID_ACTOR" });
+
     const issuerId = command.issuerId.trim().toUpperCase();
 
     let issuer;
@@ -54,6 +66,15 @@ export class IssueKycAttestation {
     } catch (cause) {
       return err(unexpected(cause));
     }
+
+    await this.audit.record({
+      actor,
+      action: AUDIT_ACTIONS.kycIssued,
+      entityType: AUDIT_ENTITY_TYPES.kycAttestation,
+      entityId: attestation.value.id,
+      detail: null,
+      occurredAt: command.issuedAt,
+    });
 
     return attestation;
   }

@@ -8,10 +8,13 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 16: Contribution years and snapshots.
+Milestone 17: Pilot boundary and audit foundation.
 
 Implemented:
 
+- append-only audit trail: `audit_events` with an UPDATE/DELETE trigger, an
+  `AuditLog` port with in-memory and Postgres adapters, `SEQUOIA_OPERATOR`
+  recorded on every KYC write, and `sequoia audit list`;
 - IDR amount and basis-point value objects;
 - parameterized contribution split primitive, defaulting to 70/30 for every
   member;
@@ -36,14 +39,18 @@ bun run check
 bun run test:integration             # requires TEST_DATABASE_URL
 bun run dev:api
 bun run sequoia migrate
-bun run sequoia kyc issue --owner-pkh ... --evidence-ref s3://bucket/member-1/
-bun run sequoia kyc revoke <attestation-id> --reason "..."
+SEQUOIA_OPERATOR=ray bun run sequoia kyc issue --owner-pkh ... --evidence-ref s3://bucket/member-1/
+SEQUOIA_OPERATOR=ray bun run sequoia kyc revoke <attestation-id> --reason "..."
 bun run sequoia kyc list --expiring-within 30
 bun run sequoia kyc list --status REVOKED
+bun run sequoia audit list --actor ray --limit 20
 bun run sequoia member admit --owner-pkh ... --attestation <attestation-id>
 bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000
 bun run sequoia contribution record --member-id <member-id> --contribution-year 2026
 ```
+
+Admin write commands refuse to run without `SEQUOIA_OPERATOR`, a lower-case slug
+naming the operator (`ray`, `board-ops`).
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`
 publishes the JWT verification keys.

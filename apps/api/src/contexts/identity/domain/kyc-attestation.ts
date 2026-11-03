@@ -14,6 +14,7 @@ export type IdentityError =
   | { readonly code: "ATTESTATION_NOT_FOUND" }
   | { readonly code: "ATTESTATION_NOT_ACTIVE" }
   | { readonly code: "REVOKE_REASON_REQUIRED" }
+  | { readonly code: "INVALID_ACTOR" }
   | UnexpectedError;
 
 function isValidTime(value: number): boolean {

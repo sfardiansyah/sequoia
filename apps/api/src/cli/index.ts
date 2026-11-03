@@ -18,6 +18,7 @@ const main = defineCommand({
     member,
     kyc: () => import("./kyc").then((module) => module.default),
     contribution: () => import("./contribution").then((module) => module.default),
+    audit: () => import("./audit").then((module) => module.default),
   },
 });
 

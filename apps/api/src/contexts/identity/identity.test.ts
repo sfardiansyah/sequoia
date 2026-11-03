@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Result } from "@sequoia/shared";
 import { SequentialIdGenerator } from "../../shared/id-generator";
+import { InMemoryAuditLog } from "../../shared/audit/adapters/in-memory";
 import {
   InMemoryIssuerDirectory,
   InMemoryKycAttestationRepository,
@@ -37,15 +38,19 @@ function setup() {
   const attestations = new InMemoryKycAttestationRepository();
   const issuers = new InMemoryIssuerDirectory();
   const ids = new SequentialIdGenerator("kyc");
+  const audit = new InMemoryAuditLog();
   return {
     attestations,
     issuers,
-    issue: new IssueKycAttestation(attestations, issuers, ids),
-    revoke: new RevokeKycAttestation(attestations),
+    audit,
+    issue: new IssueKycAttestation(attestations, issuers, ids, audit),
+    revoke: new RevokeKycAttestation(attestations, audit),
     get: new GetKycAttestation(attestations),
     list: new ListKycAttestations(attestations),
   };
 }
+
+const actor = "ray";
 
 const issueCommand = {
   subjectPkh: subject,
@@ -53,6 +58,7 @@ const issueCommand = {
   evidenceRef: "s3://bucket/member-1/",
   issuedAt,
   expiresAt,
+  actor,
 };
 
 describe("kycStatusAt", () => {
@@ -170,6 +176,7 @@ describe("IssueKycAttestation", () => {
       attestations,
       issuers,
       new SequentialIdGenerator("kyc"),
+      new InMemoryAuditLog(),
     );
 
     expectError(
@@ -202,6 +209,7 @@ describe("RevokeKycAttestation", () => {
         attestationId: attestation.id,
         reason: "sanctions hit",
         revokedAt: issuedAt + 1,
+        actor,
       }),
     );
 
@@ -218,6 +226,7 @@ describe("RevokeKycAttestation", () => {
         attestationId: "missing",
         reason: "x",
         revokedAt: issuedAt,
+        actor,
       }),
       "ATTESTATION_NOT_FOUND",
     );
@@ -227,6 +236,7 @@ describe("RevokeKycAttestation", () => {
         attestationId: attestation.id,
         reason: "x",
         revokedAt: issuedAt,
+        actor,
       }),
     );
 
@@ -235,9 +245,74 @@ describe("RevokeKycAttestation", () => {
         attestationId: attestation.id,
         reason: "x",
         revokedAt: issuedAt,
+        actor,
       }),
       "ATTESTATION_NOT_ACTIVE",
     );
+  });
+});
+
+describe("audit trail", () => {
+  test("records one KYC_ISSUED row with the operator and no evidence ref", async () => {
+    const { issue, audit } = setup();
+    const attestation = unwrap(await issue.execute(issueCommand));
+
+    const rows = await audit.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actor: "ray",
+      action: "KYC_ISSUED",
+      entityType: "KYC_ATTESTATION",
+      entityId: attestation.id,
+      detail: null,
+      occurredAt: issuedAt,
+    });
+    expect(JSON.stringify(rows)).not.toContain("s3://bucket");
+  });
+
+  test("records one KYC_REVOKED row without the free-text reason", async () => {
+    const { issue, revoke, audit } = setup();
+    const attestation = unwrap(await issue.execute(issueCommand));
+    unwrap(
+      await revoke.execute({
+        attestationId: attestation.id,
+        reason: "sanctions hit",
+        revokedAt: issuedAt + 5,
+        actor: "board-ops",
+      }),
+    );
+
+    const rows = await audit.list({ entityId: attestation.id });
+    expect(rows.map((row) => row.action)).toEqual([
+      "KYC_REVOKED",
+      "KYC_ISSUED",
+    ]);
+    expect(rows[0]).toMatchObject({ actor: "board-ops", detail: null });
+    expect(JSON.stringify(rows)).not.toContain("sanctions hit");
+  });
+
+  test("rejects an invalid operator before changing data", async () => {
+    const { issue, revoke, attestations, audit } = setup();
+
+    expectError(
+      await issue.execute({ ...issueCommand, actor: "Ray Nord" }),
+      "INVALID_ACTOR",
+    );
+    expect(await attestations.list()).toEqual([]);
+    expect(await audit.list()).toEqual([]);
+
+    const attestation = unwrap(await issue.execute(issueCommand));
+    expectError(
+      await revoke.execute({
+        attestationId: attestation.id,
+        reason: "x",
+        revokedAt: issuedAt,
+        actor: "",
+      }),
+      "INVALID_ACTOR",
+    );
+    expect((await attestations.findById(attestation.id))?.status).toBe("ACTIVE");
+    expect(await audit.list()).toHaveLength(1);
   });
 });
 
@@ -300,6 +375,7 @@ describe("ListKycAttestations", () => {
         attestationId: second.id,
         reason: "sanctions hit",
         revokedAt: issuedAt,
+        actor,
       }),
     );
 
