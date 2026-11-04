@@ -4,13 +4,14 @@ import {
   AUDIT_ENTITY_TYPES,
   parseActor,
 } from "../../../shared/audit/audit-event";
-import type { AuditLog } from "../../../shared/audit/port";
+import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
 import { unexpected } from "../../../shared/errors";
 import {
   KycAttestation,
   type IdentityError,
   type KycAttestationRepository,
 } from "../domain/kyc-attestation";
+import type { IdentityWriteScope } from "./write-scope";
 
 export type RevokeKycAttestationCommand = {
   readonly attestationId: string;
@@ -23,7 +24,7 @@ export type RevokeKycAttestationCommand = {
 export class RevokeKycAttestation {
   constructor(
     private readonly attestations: KycAttestationRepository,
-    private readonly audit: AuditLog,
+    private readonly unitOfWork: UnitOfWork<IdentityWriteScope>,
   ) {}
 
   async execute(
@@ -47,19 +48,20 @@ export class RevokeKycAttestation {
     if (!revoked.ok) return revoked;
 
     try {
-      await this.attestations.save(revoked.value);
+      await this.unitOfWork.run(async (write) => {
+        await write.attestations.save(revoked.value);
+        await write.audit.record({
+          actor,
+          action: AUDIT_ACTIONS.kycRevoked,
+          entityType: AUDIT_ENTITY_TYPES.kycAttestation,
+          entityId: revoked.value.id,
+          detail: null,
+          occurredAt: command.revokedAt,
+        });
+      });
     } catch (cause) {
       return err(unexpected(cause));
     }
-
-    await this.audit.record({
-      actor,
-      action: AUDIT_ACTIONS.kycRevoked,
-      entityType: AUDIT_ENTITY_TYPES.kycAttestation,
-      entityId: revoked.value.id,
-      detail: null,
-      occurredAt: command.revokedAt,
-    });
 
     return revoked;
   }

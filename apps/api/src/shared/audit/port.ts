@@ -10,8 +10,10 @@ export type AuditFilter = {
 };
 
 /**
- * Implementations must not reject: a failed audit write is reported by the
- * adapter and must not turn an applied change into a reported failure.
+ * Audited writes commit the audit row in the same transaction as the change, so
+ * a rejected write is not an applied change. Callers must let the rejection
+ * propagate: catching it inside the transaction would commit a half-applied
+ * change.
  */
 export interface AuditLog {
   record(event: NewAuditEvent): Promise<void>;

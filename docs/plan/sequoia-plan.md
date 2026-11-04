@@ -97,6 +97,7 @@ exception).
 15. Capital primitives: `CapitalParameters` + validation, split passed into `splitContribution`, `GLOSSARY.md`, ADR 0003.
 16. Contribution years and snapshots: `ContributionYear` (annual amount, split, cap), `ConfigureContributionYear`, `RecordAnnualContribution` with an active-member/current-KYC eligibility gate, `contribution_years`/`contributions` migration, Postgres/PGlite repositories, `sequoia contribution` CLI.
 17. Pilot boundary and audit foundation: ADR 0007 (no PII on chain, keyed commitments, secret ballot, aggregate dashboard), ADR 0004 pilot exception, append-only `audit_events` with an UPDATE/DELETE trigger, `AuditLog` port with in-memory and Postgres adapters, `SEQUOIA_OPERATOR` actor validation, audit rows on KYC issue and revoke, `sequoia audit list`.
+18. Audit transaction scope: a `UnitOfWork` port gives a write command transaction-bound repositories and audit log, so the domain write and its audit row commit together and an audit failure fails the command; identity is wired, membership and capital adopt it with their audit rows.
 
 #### Current auth decisions
 
@@ -188,9 +189,6 @@ This rule exists because security and architecture stabilization must not be com
 - KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof.
 - Revoked or expired KYC blocks new contribution snapshots but does not freeze an existing member; voting/exit gates do not exist yet.
 - Board approval is not recorded; admission is gated on KYC only.
-- Audit rows are written after the mutation, not in the same transaction; a
-  failed audit write is reported on stderr and does not fail the command
-  (pilot ticket 11).
 - Audit covers KYC issue and revoke only. Admission, contribution year setup,
   bank attestation, and contribution recording are not audited yet.
 - The operator is a self-declared lowercase slug from `SEQUOIA_OPERATOR`; there

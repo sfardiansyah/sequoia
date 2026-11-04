@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Result } from "@sequoia/shared";
 import { SequentialIdGenerator } from "../../shared/id-generator";
 import { InMemoryAuditLog } from "../../shared/audit/adapters/in-memory";
+import { createInMemoryUnitOfWork } from "../../shared/persistence/adapters/in-memory";
 import {
   InMemoryIssuerDirectory,
   InMemoryKycAttestationRepository,
@@ -39,12 +40,13 @@ function setup() {
   const issuers = new InMemoryIssuerDirectory();
   const ids = new SequentialIdGenerator("kyc");
   const audit = new InMemoryAuditLog();
+  const unitOfWork = createInMemoryUnitOfWork(() => ({ attestations, audit }));
   return {
     attestations,
     issuers,
     audit,
-    issue: new IssueKycAttestation(attestations, issuers, ids, audit),
-    revoke: new RevokeKycAttestation(attestations, audit),
+    issue: new IssueKycAttestation(issuers, ids, unitOfWork),
+    revoke: new RevokeKycAttestation(attestations, unitOfWork),
     get: new GetKycAttestation(attestations),
     list: new ListKycAttestations(attestations),
   };
@@ -173,10 +175,12 @@ describe("IssueKycAttestation", () => {
       { id: "PRIVY", name: "Privy", active: false },
     ]);
     const issue = new IssueKycAttestation(
-      attestations,
       issuers,
       new SequentialIdGenerator("kyc"),
-      new InMemoryAuditLog(),
+      createInMemoryUnitOfWork(() => ({
+        attestations,
+        audit: new InMemoryAuditLog(),
+      })),
     );
 
     expectError(

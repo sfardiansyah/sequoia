@@ -4,15 +4,12 @@ import {
   AUDIT_ENTITY_TYPES,
   parseActor,
 } from "../../../shared/audit/audit-event";
-import type { AuditLog } from "../../../shared/audit/port";
 import { unexpected } from "../../../shared/errors";
 import type { IdGenerator } from "../../../shared/id-generator";
+import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
 import type { IssuerDirectory } from "../domain/issuer";
-import {
-  KycAttestation,
-  type IdentityError,
-  type KycAttestationRepository,
-} from "../domain/kyc-attestation";
+import { KycAttestation, type IdentityError } from "../domain/kyc-attestation";
+import type { IdentityWriteScope } from "./write-scope";
 
 export type IssueKycAttestationCommand = {
   readonly subjectPkh: string;
@@ -27,10 +24,9 @@ export type IssueKycAttestationCommand = {
 
 export class IssueKycAttestation {
   constructor(
-    private readonly attestations: KycAttestationRepository,
     private readonly issuers: IssuerDirectory,
     private readonly ids: IdGenerator,
-    private readonly audit: AuditLog,
+    private readonly unitOfWork: UnitOfWork<IdentityWriteScope>,
   ) {}
 
   async execute(
@@ -62,19 +58,20 @@ export class IssueKycAttestation {
     if (!attestation.ok) return attestation;
 
     try {
-      await this.attestations.saveIssued(attestation.value);
+      await this.unitOfWork.run(async (write) => {
+        await write.attestations.saveIssued(attestation.value);
+        await write.audit.record({
+          actor,
+          action: AUDIT_ACTIONS.kycIssued,
+          entityType: AUDIT_ENTITY_TYPES.kycAttestation,
+          entityId: attestation.value.id,
+          detail: null,
+          occurredAt: command.issuedAt,
+        });
+      });
     } catch (cause) {
       return err(unexpected(cause));
     }
-
-    await this.audit.record({
-      actor,
-      action: AUDIT_ACTIONS.kycIssued,
-      entityType: AUDIT_ENTITY_TYPES.kycAttestation,
-      entityId: attestation.value.id,
-      detail: null,
-      occurredAt: command.issuedAt,
-    });
 
     return attestation;
   }
