@@ -13,10 +13,10 @@
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["bun"],
-    "baseUrl": ".",
+    "incremental": true,
     "paths": {
-      "@sequoia/shared": ["packages/shared/src/index.ts"],
-      "@sequoia/shared/*": ["packages/shared/src/*"]
+      "@sequoia/shared": ["./packages/shared/src/index.ts"],
+      "@sequoia/shared/*": ["./packages/shared/src/*"]
     }
   },
   "include": ["packages/**/*.ts", "apps/**/*.ts", "scripts/**/*.ts"]
