@@ -1,23 +1,39 @@
 import { describe, expect, test } from "bun:test";
 import { SequentialIdGenerator } from "../../shared/id-generator";
+import { InMemoryAuditLog } from "../../shared/audit/adapters/in-memory";
+import { createInMemoryUnitOfWork } from "../../shared/persistence/adapters/in-memory";
 import type { Result } from "@sequoia/shared";
 import { InMemoryMemberRepository, InMemoryKycEligibility } from "./adapters/in-memory";
 import { AdmitMember } from "./application/admit-member";
-import { Member, MemberStatus, type MembershipError } from "./domain/member";
+import {
+  Member,
+  MemberStatus,
+  type MemberRepository,
+  type MembershipError,
+} from "./domain/member";
 import { OwnerPkh } from "./domain/owner-pkh";
 import type { KycEligibility } from "./domain/ports/kyc-eligibility";
 
 const ownerPkhValue = "18987c1612069d4080a0eb247820cb987fea81bddeaafdd41f996281";
 const ownerPkh = OwnerPkh.parse(ownerPkhValue)!;
 const attestationId = "kyc-1";
+const boardApprovalRef = "board-2026-04";
+const actor = "ray";
 const base = {
   ownerPkh: ownerPkhValue,
   kycAttestationId: attestationId,
   memberClass: "STANDARD" as const,
+  boardApprovalRef,
+  actor,
   joinedAt: 1_700_000_000_000,
   now: 1_700_000_000_000,
 };
-const memberInput = { ...base, id: "member-1", ownerPkh };
+const memberInput = {
+  ...base,
+  id: "member-1",
+  ownerPkh,
+  approvedAt: base.now,
+};
 
 function unwrap<T>(result: Result<T, MembershipError>): T {
   if (!result.ok) throw new Error(result.error.code);
@@ -35,13 +51,17 @@ function expectError<T>(
 function setup() {
   const members = new InMemoryMemberRepository();
   const kyc = new InMemoryKycEligibility().eligible(ownerPkhValue, attestationId);
+  const audit = new InMemoryAuditLog();
+  const unitOfWork = createInMemoryUnitOfWork(() => ({ members, audit }));
   return {
     members,
     kyc,
+    audit,
     admit: new AdmitMember(
       members,
       new SequentialIdGenerator("member"),
       kyc,
+      unitOfWork,
     ),
   };
 }
@@ -52,6 +72,15 @@ describe("Member", () => {
     expect(String(member.id)).toBe("member-1");
     expect(member.status).toBe(MemberStatus.Active);
     expect(member.kycAttestationId).toBe(attestationId);
+    expect(member.boardApprovalRef).toBe(boardApprovalRef);
+    expect(member.approvedAt).toBe(memberInput.approvedAt);
+  });
+
+  test("trims the board approval reference", () => {
+    const member = unwrap(
+      Member.admit({ ...memberInput, boardApprovalRef: "  board-2026-04  " }),
+    );
+    expect(member.boardApprovalRef).toBe(boardApprovalRef);
   });
 
   test("rejects invalid admission input", () => {
@@ -61,6 +90,24 @@ describe("Member", () => {
     );
     expectError(Member.admit({ ...memberInput, joinedAt: -1 }), "INVALID_JOIN_TIME");
     expectError(Member.admit({ ...memberInput, joinedAt: 1.5 }), "INVALID_JOIN_TIME");
+  });
+
+  test("rejects admission without a board approval reference", () => {
+    expectError(
+      Member.admit({ ...memberInput, boardApprovalRef: " " }),
+      "INVALID_BOARD_APPROVAL_REF",
+    );
+  });
+
+  test("rejects admission with an invalid approval time", () => {
+    expectError(
+      Member.admit({ ...memberInput, approvedAt: -1 }),
+      "INVALID_APPROVAL_TIME",
+    );
+    expectError(
+      Member.admit({ ...memberInput, approvedAt: 1.5 }),
+      "INVALID_APPROVAL_TIME",
+    );
   });
 });
 
@@ -74,12 +121,74 @@ describe("OwnerPkh", () => {
   });
 });
 
+function admitWith(members: MemberRepository, kyc: KycEligibility) {
+  return new AdmitMember(
+    members,
+    new SequentialIdGenerator("member"),
+    kyc,
+    createInMemoryUnitOfWork(() => ({
+      members,
+      audit: new InMemoryAuditLog(),
+    })),
+  );
+}
+
 describe("AdmitMember", () => {
   test("creates and saves a member", async () => {
     const { members, admit } = setup();
     const member = unwrap(await admit.execute(base));
     expect(String(member.id)).toBe("member-1");
     expect(await members.findByOwnerPkh(member.ownerPkh)).toBe(member);
+  });
+
+  test("records the board decision and its audit row", async () => {
+    const { admit, audit } = setup();
+    const member = unwrap(
+      await admit.execute({ ...base, joinedAt: 1_600_000_000_000 }),
+    );
+
+    expect(member.approvedAt).toBe(base.now);
+    expect(await audit.list()).toMatchObject([
+      {
+        actor,
+        action: "MEMBER_ADMITTED",
+        entityType: "MEMBER",
+        entityId: member.id,
+        detail: boardApprovalRef,
+        occurredAt: base.now,
+      },
+    ]);
+  });
+
+  test("rejects admission without a board approval reference", async () => {
+    const { members, admit } = setup();
+
+    expectError(
+      await admit.execute({ ...base, boardApprovalRef: " " }),
+      "INVALID_BOARD_APPROVAL_REF",
+    );
+    expect(await members.findByOwnerPkh(ownerPkh)).toBeNull();
+  });
+
+  test("rejects a founder in the pilot", async () => {
+    const { members, admit } = setup();
+
+    expectError(
+      await admit.execute({ ...base, memberClass: "FOUNDER" }),
+      "MEMBER_CLASS_NOT_ALLOWED",
+    );
+    expect(await members.findByOwnerPkh(ownerPkh)).toBeNull();
+  });
+
+  test("rejects an invalid operator before writing", async () => {
+    const { members, audit, admit } = setup();
+
+    expectError(
+      await admit.execute({ ...base, actor: "Ray!" }),
+      "INVALID_ACTOR",
+    );
+    expect(await members.findByOwnerPkh(ownerPkh)).toBeNull();
+    expect(await audit.list()).toEqual([]);
   });
 
   test("normalizes the owner pkh before storing and looking up", async () => {
@@ -123,11 +232,7 @@ describe("AdmitMember", () => {
         failure,
         ownerPkhValue,
       );
-      const admit = new AdmitMember(
-        members,
-        new SequentialIdGenerator("member"),
-        kyc,
-      );
+      const admit = admitWith(members, kyc);
 
       expectError(await admit.execute(base), code);
     }
@@ -139,11 +244,7 @@ describe("AdmitMember", () => {
       "b".repeat(56),
       attestationId,
     );
-    const admit = new AdmitMember(
-      members,
-      new SequentialIdGenerator("member"),
-      kyc,
-    );
+    const admit = admitWith(members, kyc);
 
     expectError(await admit.execute(base), "KYC_SUBJECT_MISMATCH");
   });
@@ -162,18 +263,14 @@ describe("AdmitMember", () => {
   });
 
   test("returns UNEXPECTED when the KYC lookup fails", async () => {
-    const admit = new AdmitMember(
-      new InMemoryMemberRepository(),
-      new SequentialIdGenerator("member"),
-      {
-        check: async () => {
-          throw new Error("identity down");
-        },
-        checkCurrent: async () => {
-          throw new Error("identity down");
-        },
+    const admit = admitWith(new InMemoryMemberRepository(), {
+      check: async () => {
+        throw new Error("identity down");
       },
-    );
+      checkCurrent: async () => {
+        throw new Error("identity down");
+      },
+    });
 
     expectError(await admit.execute(base), "UNEXPECTED");
   });
@@ -187,16 +284,8 @@ describe("AdmitMember", () => {
       },
       checkCurrent: async () => null,
     };
-    const admitOne = new AdmitMember(
-      new InMemoryMemberRepository(),
-      new SequentialIdGenerator("member"),
-      kyc,
-    );
-    const admitTwo = new AdmitMember(
-      new InMemoryMemberRepository(),
-      new SequentialIdGenerator("member"),
-      kyc,
-    );
+    const admitOne = admitWith(new InMemoryMemberRepository(), kyc);
+    const admitTwo = admitWith(new InMemoryMemberRepository(), kyc);
 
     unwrap(await admitOne.execute({ ...base, joinedAt: 1_000, now: 5_000 }));
     unwrap(await admitTwo.execute({ ...base, joinedAt: 9_000, now: 5_000 }));
