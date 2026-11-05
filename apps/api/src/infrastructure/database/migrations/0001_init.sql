@@ -105,6 +105,19 @@ CREATE TABLE IF NOT EXISTS contributions (
   CHECK (recorded_at >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS bank_attestations (
+  id text PRIMARY KEY,
+  member_id text NOT NULL REFERENCES members (id),
+  contribution_year integer NOT NULL REFERENCES contribution_years (year),
+  amount bigint NOT NULL,
+  bank_reference text NOT NULL UNIQUE CHECK (length(trim(bank_reference)) > 0),
+  actor text NOT NULL,
+  created_at bigint NOT NULL,
+  CHECK (amount > 0),
+  CHECK (actor ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
+  CHECK (created_at >= 0)
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id text PRIMARY KEY,
   actor text NOT NULL,

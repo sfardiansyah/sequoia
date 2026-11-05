@@ -26,7 +26,19 @@ export const contributions = pgTable("contributions", {
   recordedAt: bigint("recorded_at", { mode: "number" }).notNull(),
 });
 
+export const bankAttestations = pgTable("bank_attestations", {
+  id: text("id").primaryKey(),
+  memberId: text("member_id").notNull(),
+  contributionYear: integer("contribution_year").notNull(),
+  amount: bigint("amount", { mode: "number" }).notNull(),
+  bankReference: text("bank_reference").notNull(),
+  actor: text("actor").notNull(),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+});
+
 export type ContributionYearRow = typeof contributionYears.$inferSelect;
 export type ContributionYearInsert = typeof contributionYears.$inferInsert;
 export type ContributionRow = typeof contributions.$inferSelect;
 export type ContributionInsert = typeof contributions.$inferInsert;
+export type BankAttestationRow = typeof bankAttestations.$inferSelect;
+export type BankAttestationInsert = typeof bankAttestations.$inferInsert;

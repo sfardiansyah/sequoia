@@ -1,11 +1,13 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { ensureMigrated } from "../../../../infrastructure/database/testing";
+import { describeBankAttestationRepository } from "../bank-attestation-repository-contract";
 import {
   CONTRACT_MEMBER_ID,
   describeContributionRepository,
 } from "../contribution-repository-contract";
 import { describeContributionYearRepository } from "../contribution-year-repository-contract";
+import { DrizzleBankAttestationRepository } from "./bank-attestation-repository";
 import { DrizzleContributionRepository } from "./contribution-repository";
 import { DrizzleContributionYearRepository } from "./contribution-year-repository";
 import * as schema from "./schema";
@@ -22,7 +24,7 @@ async function setup() {
   await ensureMigrated(databaseUrl);
   const client = postgres(databaseUrl, { max: 1 });
   await client`
-    TRUNCATE TABLE contributions, contribution_years, members, kyc_attestations
+    TRUNCATE TABLE bank_attestations, contributions, contribution_years, members, kyc_attestations
   `;
   await client`
     INSERT INTO kyc_attestations
@@ -57,6 +59,7 @@ async function setup() {
   return {
     contributions: new DrizzleContributionRepository(db),
     years: new DrizzleContributionYearRepository(db),
+    attestations: new DrizzleBankAttestationRepository(db),
     close: () => client.end(),
   };
 }
@@ -75,6 +78,14 @@ if (runIntegration && databaseUrl) {
     async () => {
       const { years, close } = await setup();
       return { repository: years, close };
+    },
+  );
+
+  describeBankAttestationRepository(
+    "DrizzleBankAttestationRepository (Postgres)",
+    async () => {
+      const { attestations, close } = await setup();
+      return { repository: attestations, close };
     },
   );
 }

@@ -3,12 +3,21 @@ import type { Result } from "@sequoia/shared";
 import { InMemoryAuditLog } from "../../shared/audit/adapters/in-memory";
 import { createInMemoryUnitOfWork } from "../../shared/persistence/adapters/in-memory";
 import { SequentialIdGenerator } from "../../shared/id-generator";
+import { InMemoryMemberRepository } from "../membership/adapters/in-memory";
+import { Member, type MemberRepository } from "../membership/domain/member";
+import { OwnerPkh } from "../membership/domain/owner-pkh";
 import {
+  InMemoryBankAttestationRepository,
   InMemoryContributionRepository,
   InMemoryContributionYearRepository,
 } from "./adapters/in-memory";
 import { ConfigureContributionYear } from "./application/configure-contribution-year";
+import { CreateBankAttestation } from "./application/create-bank-attestation";
 import { RecordAnnualContribution } from "./application/record-annual-contribution";
+import {
+  BankAttestation,
+  DuplicateBankReferenceError,
+} from "./domain/bank-attestation";
 import {
   Contribution,
   DuplicateContributionError,
@@ -66,7 +75,11 @@ function setup() {
   const years = new InMemoryContributionYearRepository();
   const contributions = new InMemoryContributionRepository();
   const audit = new InMemoryAuditLog();
-  const unitOfWork = createInMemoryUnitOfWork(() => ({ years, audit }));
+  const unitOfWork = createInMemoryUnitOfWork(() => ({
+    years,
+    attestations: new InMemoryBankAttestationRepository(),
+    audit,
+  }));
   return {
     years,
     contributions,
@@ -462,7 +475,291 @@ describe("RecordAnnualContribution", () => {
 async function configuredYears() {
   const years = new InMemoryContributionYearRepository();
   const audit = new InMemoryAuditLog();
-  const unitOfWork = createInMemoryUnitOfWork(() => ({ years, audit }));
+  const unitOfWork = createInMemoryUnitOfWork(() => ({
+    years,
+    attestations: new InMemoryBankAttestationRepository(),
+    audit,
+  }));
   unwrap(await new ConfigureContributionYear(unitOfWork).execute(yearCommand));
   return years;
 }
+
+const bankAttestationBase = {
+  id: "attestation-1",
+  memberId: "member-1",
+  contributionYear: 2026,
+  amount: 1_000_000,
+  bankReference: "BANK-REF-001",
+  actor: "ray",
+  createdAt: 1_700_000_000_000,
+};
+
+const bankCommand = {
+  memberId: "member-1",
+  contributionYear: 2026,
+  amount: 1_000_000,
+  bankReference: "BANK-REF-001",
+  createdAt: 1_700_000_000_000,
+  actor: "ray",
+};
+
+function bankMember() {
+  return unwrap(
+    Member.admit({
+      id: "member-1",
+      ownerPkh: OwnerPkh.parse("1".repeat(56))!,
+      kycAttestationId: "kyc-1",
+      boardApprovalRef: "BOARD-2026-004",
+      approvedAt: 1_700_000_000_000,
+      memberClass: "STANDARD",
+      joinedAt: 1_700_000_000_000,
+    }),
+  );
+}
+
+function memberById(member: Member): MemberRepository {
+  return {
+    findById: async (id) => (id === member.id ? member : null),
+    findByOwnerPkh: async () => null,
+    save: async () => {},
+  };
+}
+
+function bankSetup() {
+  const years = new InMemoryContributionYearRepository();
+  const attestations = new InMemoryBankAttestationRepository();
+  const members = new InMemoryMemberRepository();
+  const audit = new InMemoryAuditLog();
+  const unitOfWork = createInMemoryUnitOfWork(() => ({
+    years,
+    attestations,
+    audit,
+  }));
+
+  return {
+    years,
+    attestations,
+    members,
+    audit,
+    configureYear: new ConfigureContributionYear(unitOfWork),
+    createAttestation: new CreateBankAttestation(
+      members,
+      new SequentialIdGenerator("attestation"),
+      unitOfWork,
+    ),
+  };
+}
+
+async function bankConfigured() {
+  const container = bankSetup();
+  await container.members.save(bankMember());
+  unwrap(await container.configureYear.execute(yearCommand));
+  return container;
+}
+
+describe("BankAttestation", () => {
+  test("records the bank evidence and trims the reference", () => {
+    const attestation = unwrap(
+      BankAttestation.create({
+        ...bankAttestationBase,
+        memberId: "  member-1  ",
+        bankReference: "  BANK-REF-001  ",
+      }),
+    );
+
+    expect(attestation.memberId).toBe("member-1");
+    expect(attestation.contributionYear).toBe(2026);
+    expect(Number(attestation.amount)).toBe(1_000_000);
+    expect(attestation.bankReference).toBe("BANK-REF-001");
+    expect(attestation.actor).toBe("ray");
+    expect(attestation.createdAt).toBe(1_700_000_000_000);
+  });
+
+  test("rejects invalid bank attestation input", () => {
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, memberId: "   " }),
+      "INVALID_MEMBER",
+    );
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, contributionYear: 0 }),
+      "INVALID_YEAR",
+    );
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, amount: 0 }),
+      "INVALID_AMOUNT",
+    );
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, amount: -1 }),
+      "INVALID_AMOUNT",
+    );
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, amount: 1.5 }),
+      "INVALID_AMOUNT",
+    );
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, bankReference: "   " }),
+      "INVALID_BANK_REFERENCE",
+    );
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, actor: "Ray" }),
+      "INVALID_ACTOR",
+    );
+    expectError(
+      BankAttestation.create({ ...bankAttestationBase, createdAt: -1 }),
+      "INVALID_TIME",
+    );
+  });
+
+  test("rehydrate revalidates the stored row", () => {
+    expect(
+      unwrap(BankAttestation.rehydrate(bankAttestationBase)).bankReference,
+    ).toBe("BANK-REF-001");
+    expectError(
+      BankAttestation.rehydrate({ ...bankAttestationBase, actor: "Ray" }),
+      "INVALID_ACTOR",
+    );
+  });
+});
+
+describe("CreateBankAttestation", () => {
+  test("saves the attestation and writes the audit event", async () => {
+    const { attestations, audit, createAttestation } = await bankConfigured();
+    const attestation = unwrap(await createAttestation.execute(bankCommand));
+
+    expect(String(attestation.id)).toBe("attestation-1");
+    expect(Number(attestation.amount)).toBe(1_000_000);
+    expect(await attestations.findById("attestation-1")).toBe(attestation);
+
+    const events = await audit.list({ entityType: "BANK_ATTESTATION" });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actor: "ray",
+      action: "BANK_ATTESTATION_CREATED",
+      entityType: "BANK_ATTESTATION",
+      entityId: "attestation-1",
+      detail: null,
+      occurredAt: 1_700_000_000_000,
+    });
+    expect(JSON.stringify(events[0])).not.toContain("BANK-REF-001");
+  });
+
+  test("rejects an invalid operator before writing anything", async () => {
+    const { attestations, audit, createAttestation } = await bankConfigured();
+
+    expectError(
+      await createAttestation.execute({ ...bankCommand, actor: "Ray Nord" }),
+      "INVALID_ACTOR",
+    );
+    expect(await attestations.findById("attestation-1")).toBeNull();
+    expect(await audit.list({ entityType: "BANK_ATTESTATION" })).toEqual([]);
+  });
+
+  test("rejects a year that is not configured", async () => {
+    const container = bankSetup();
+    await container.members.save(bankMember());
+
+    expectError(
+      await container.createAttestation.execute(bankCommand),
+      "YEAR_NOT_CONFIGURED",
+    );
+    expect(await container.attestations.findById("attestation-1")).toBeNull();
+    expect(
+      await container.audit.list({ entityType: "BANK_ATTESTATION" }),
+    ).toEqual([]);
+  });
+
+  test("rejects an unknown member", async () => {
+    const container = bankSetup();
+    unwrap(await container.configureYear.execute(yearCommand));
+
+    expectError(
+      await container.createAttestation.execute(bankCommand),
+      "MEMBER_NOT_FOUND",
+    );
+    expect(await container.attestations.findById("attestation-1")).toBeNull();
+    expect(
+      await container.audit.list({ entityType: "BANK_ATTESTATION" }),
+    ).toEqual([]);
+  });
+
+  test("rejects an amount that differs from the configured annual amount", async () => {
+    const { attestations, audit, createAttestation } = await bankConfigured();
+
+    expectError(
+      await createAttestation.execute({ ...bankCommand, amount: 900_000 }),
+      "AMOUNT_MISMATCH",
+    );
+    expect(await attestations.findById("attestation-1")).toBeNull();
+    expect(await audit.list({ entityType: "BANK_ATTESTATION" })).toEqual([]);
+  });
+
+  test("rejects a duplicate bank reference", async () => {
+    const { audit, createAttestation } = await bankConfigured();
+    unwrap(await createAttestation.execute(bankCommand));
+
+    expectError(
+      await createAttestation.execute(bankCommand),
+      "BANK_REFERENCE_ALREADY_USED",
+    );
+    expect(await audit.list({ entityType: "BANK_ATTESTATION" })).toHaveLength(1);
+  });
+
+  test("trims the member id and bank reference", async () => {
+    const { attestations, createAttestation } = await bankConfigured();
+
+    const attestation = unwrap(
+      await createAttestation.execute({
+        ...bankCommand,
+        memberId: "  member-1  ",
+        bankReference: "  BANK-REF-001  ",
+      }),
+    );
+
+    expect(attestation.memberId).toBe("member-1");
+    expect(attestation.bankReference).toBe("BANK-REF-001");
+    expect(await attestations.findById("attestation-1")).toBe(attestation);
+  });
+
+  test("maps a duplicate save to BANK_REFERENCE_ALREADY_USED", async () => {
+    const { years } = await bankConfigured();
+    const duplicate = new CreateBankAttestation(
+      memberById(bankMember()),
+      new SequentialIdGenerator("attestation"),
+      createInMemoryUnitOfWork(() => ({
+        years,
+        attestations: {
+          findById: async () => null,
+          save: async () => {
+            throw new DuplicateBankReferenceError();
+          },
+        },
+        audit: new InMemoryAuditLog(),
+      })),
+    );
+
+    expectError(
+      await duplicate.execute(bankCommand),
+      "BANK_REFERENCE_ALREADY_USED",
+    );
+  });
+
+  test("returns UNEXPECTED when the repository fails", async () => {
+    const { years } = await bankConfigured();
+    const failing = new CreateBankAttestation(
+      memberById(bankMember()),
+      new SequentialIdGenerator("attestation"),
+      createInMemoryUnitOfWork(() => ({
+        years,
+        attestations: {
+          findById: async () => null,
+          save: async () => {
+            throw new Error("commit failed");
+          },
+        },
+        audit: new InMemoryAuditLog(),
+      })),
+    );
+
+    expectError(await failing.execute(bankCommand), "UNEXPECTED");
+  });
+});

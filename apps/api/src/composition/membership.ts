@@ -31,6 +31,7 @@ export function createMembershipContainer(databaseUrl: string) {
   return {
     admitMember,
     memberProfile: profile,
+    memberRepository: repository,
     contributionEligibility: new MembershipContributionEligibility(
       repository,
       kycEligibility,

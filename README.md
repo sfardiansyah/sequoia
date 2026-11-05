@@ -22,6 +22,10 @@ Implemented:
   active-member/current-KYC eligibility, applied split bps, resulting bigint
   unit amounts, Postgres/PGlite repositories, and `sequoia contribution` CLI
   commands;
+- mock bank attestations: one row per unique bank reference for a member and
+  configured year, amount matched to the year's fixed annual amount, actor and
+  timestamp recorded, and a `BANK_ATTESTATION_CREATED` audit row written in the
+  same transaction;
 - founder vesting: 50% at year 4 and 50% at year 5;
 - Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
 - identity context with manual KYC attestations: issuers, expiry, revocation,
@@ -30,8 +34,8 @@ Implemented:
 - Docker Compose stack and integration tests against real PostgreSQL.
 
 Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, the full
-capital context beyond contribution years and snapshots, the governance context,
-web app.
+capital context beyond contribution years, snapshots, and bank attestations, the
+governance context, web app.
 
 ## Commands
 
@@ -49,12 +53,13 @@ bun run sequoia audit list --actor ray --limit 20
 SEQUOIA_OPERATOR=ray bun run sequoia member admit --owner-pkh ... --attestation <attestation-id> --approval-ref BOARD-2026-004
 SEQUOIA_OPERATOR=ray bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000 --approval-ref BOARD-2026-001
 bun run sequoia contribution record --member-id <member-id> --contribution-year 2026
+SEQUOIA_OPERATOR=ray bun run sequoia contribution attest --member-id <member-id> --contribution-year 2026 --amount 1000000 --bank-ref BANK-REF-001
 ```
 
-KYC, admission, and `contribution year set` refuse to run without
-`SEQUOIA_OPERATOR`, a lower-case slug naming the operator (`ray`, `board-ops`).
-Admission and `contribution year set` also require a board approval reference.
-Contribution recording still needs the operator requirement.
+KYC, admission, `contribution year set`, and `contribution attest` refuse to run
+without `SEQUOIA_OPERATOR`, a lower-case slug naming the operator (`ray`,
+`board-ops`). Admission and `contribution year set` also require a board approval
+reference. Contribution recording still needs the operator requirement.
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`
 publishes the JWT verification keys.

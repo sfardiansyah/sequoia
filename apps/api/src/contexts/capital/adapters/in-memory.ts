@@ -1,4 +1,9 @@
 import {
+  DuplicateBankReferenceError,
+  type BankAttestation,
+  type BankAttestationRepository,
+} from "../domain/bank-attestation";
+import {
   DuplicateContributionError,
   type Contribution,
   type ContributionRepository,
@@ -49,5 +54,28 @@ export class InMemoryContributionRepository implements ContributionRepository {
 
     this.byId.set(contribution.id, contribution);
     this.byMemberYear.set(key, contribution);
+  }
+}
+
+export class InMemoryBankAttestationRepository
+  implements BankAttestationRepository
+{
+  private readonly byId = new Map<string, BankAttestation>();
+  private readonly byReference = new Map<string, BankAttestation>();
+
+  async findById(id: string): Promise<BankAttestation | null> {
+    return this.byId.get(id) ?? null;
+  }
+
+  async save(attestation: BankAttestation): Promise<void> {
+    if (
+      this.byId.has(attestation.id) ||
+      this.byReference.has(attestation.bankReference)
+    ) {
+      throw new DuplicateBankReferenceError();
+    }
+
+    this.byId.set(attestation.id, attestation);
+    this.byReference.set(attestation.bankReference, attestation);
   }
 }
