@@ -2,6 +2,7 @@ import { bigint, integer, pgTable, text } from "drizzle-orm/pg-core";
 
 export const contributionYears = pgTable("contribution_years", {
   year: integer("year").primaryKey(),
+  approvalRef: text("approval_ref").notNull(),
   annualAmount: bigint("annual_amount", { mode: "number" }).notNull(),
   memberCapitalBps: integer("member_capital_bps").notNull(),
   capitalParticipationBps: integer("capital_participation_bps").notNull(),

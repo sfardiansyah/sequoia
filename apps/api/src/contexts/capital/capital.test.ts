@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Result } from "@sequoia/shared";
+import { InMemoryAuditLog } from "../../shared/audit/adapters/in-memory";
+import { createInMemoryUnitOfWork } from "../../shared/persistence/adapters/in-memory";
 import { SequentialIdGenerator } from "../../shared/id-generator";
 import {
   InMemoryContributionRepository,
@@ -36,7 +38,9 @@ const yearCommand = {
   memberCapitalBps: 7_000,
   capitalParticipationBps: 3_000,
   standardCapitalParticipationMaxBps: 5_000,
+  approvalRef: "BOARD-2026-001",
   createdAt: 1_700_000_000_000,
+  actor: "ray",
 };
 
 function unwrap<T, E extends { readonly code: string }>(
@@ -61,10 +65,13 @@ const allowAll: ContributionEligibility = {
 function setup() {
   const years = new InMemoryContributionYearRepository();
   const contributions = new InMemoryContributionRepository();
+  const audit = new InMemoryAuditLog();
+  const unitOfWork = createInMemoryUnitOfWork(() => ({ years, audit }));
   return {
     years,
     contributions,
-    configureYear: new ConfigureContributionYear(years),
+    audit,
+    configureYear: new ConfigureContributionYear(unitOfWork),
     record: new RecordAnnualContribution(
       contributions,
       years,
@@ -81,10 +88,11 @@ async function configured() {
 }
 
 describe("ContributionYear", () => {
-  test("configures the annual amount and cap", () => {
+  test("configures the annual amount, approval reference and cap", () => {
     const year = unwrap(ContributionYear.configure(yearCommand));
 
     expect(year.year).toBe(2026);
+    expect(year.approvalRef).toBe("BOARD-2026-001");
     expect(Number(year.annualAmount)).toBe(1_000_000);
     expect(Number(year.memberCapitalBps)).toBe(7_000);
     expect(Number(year.capitalParticipationBps)).toBe(3_000);
@@ -93,6 +101,26 @@ describe("ContributionYear", () => {
       memberCapitalBps: 7_000,
       capitalParticipationBps: 3_000,
     });
+  });
+
+  test("trims the approval reference", () => {
+    const year = unwrap(
+      ContributionYear.configure({
+        ...yearCommand,
+        approvalRef: "  BOARD-2026-001  ",
+      }),
+    );
+
+    expect(year.approvalRef).toBe("BOARD-2026-001");
+  });
+
+  test("rejects a blank approval reference", () => {
+    for (const approvalRef of ["", "   "]) {
+      expectError(
+        ContributionYear.configure({ ...yearCommand, approvalRef }),
+        "INVALID_APPROVAL_REF",
+      );
+    }
   });
 
   test("rejects a cap above the governance ceiling", () => {
@@ -112,16 +140,26 @@ describe("ContributionYear", () => {
       }),
       "INVALID_CAP",
     );
+  });
 
-    const atCeiling = unwrap(
+  test("rejects any split other than the standard 7000/3000", () => {
+    expectError(
       ContributionYear.configure({
         ...yearCommand,
         memberCapitalBps: 5_000,
         capitalParticipationBps: 5_000,
         standardCapitalParticipationMaxBps: 5_000,
       }),
+      "INVALID_SPLIT",
     );
-    expect(Number(atCeiling.capitalParticipationBps)).toBe(5_000);
+    expectError(
+      ContributionYear.configure({
+        ...yearCommand,
+        memberCapitalBps: 8_000,
+        capitalParticipationBps: 2_000,
+      }),
+      "INVALID_SPLIT",
+    );
   });
 
   test("rejects invalid year parameters", () => {
@@ -166,11 +204,45 @@ describe("ContributionYear", () => {
 });
 
 describe("ConfigureContributionYear", () => {
-  test("saves the year parameters", async () => {
-    const { years, configureYear } = setup();
+  test("saves the year parameters and writes the audit event", async () => {
+    const { years, audit, configureYear } = setup();
     const year = unwrap(await configureYear.execute(yearCommand));
 
     expect(await years.findByYear(2026)).toBe(year);
+    expect(year.approvalRef).toBe("BOARD-2026-001");
+
+    const events = await audit.list();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actor: "ray",
+      action: "CONTRIBUTION_YEAR_CONFIGURED",
+      entityType: "CONTRIBUTION_YEAR",
+      entityId: "2026",
+      detail: "BOARD-2026-001",
+      occurredAt: 1_700_000_000_000,
+    });
+  });
+
+  test("rejects an invalid operator before writing anything", async () => {
+    const { years, audit, configureYear } = setup();
+
+    expectError(
+      await configureYear.execute({ ...yearCommand, actor: "Ray Nord" }),
+      "INVALID_ACTOR",
+    );
+    expect(await years.findByYear(2026)).toBeNull();
+    expect(await audit.list()).toEqual([]);
+  });
+
+  test("rejects a missing approval reference before writing anything", async () => {
+    const { years, audit, configureYear } = setup();
+
+    expectError(
+      await configureYear.execute({ ...yearCommand, approvalRef: "   " }),
+      "INVALID_APPROVAL_REF",
+    );
+    expect(await years.findByYear(2026)).toBeNull();
+    expect(await audit.list()).toEqual([]);
   });
 
   test("rejects a second configuration for the same year", async () => {
@@ -389,6 +461,8 @@ describe("RecordAnnualContribution", () => {
 
 async function configuredYears() {
   const years = new InMemoryContributionYearRepository();
-  unwrap(await new ConfigureContributionYear(years).execute(yearCommand));
+  const audit = new InMemoryAuditLog();
+  const unitOfWork = createInMemoryUnitOfWork(() => ({ years, audit }));
+  unwrap(await new ConfigureContributionYear(unitOfWork).execute(yearCommand));
   return years;
 }

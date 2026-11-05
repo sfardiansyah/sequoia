@@ -16,6 +16,7 @@ type CapitalDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
 function toRow(year: ContributionYear): ContributionYearInsert {
   return {
     year: year.year,
+    approvalRef: year.approvalRef,
     annualAmount: year.annualAmount,
     memberCapitalBps: year.memberCapitalBps,
     capitalParticipationBps: year.capitalParticipationBps,
@@ -28,6 +29,7 @@ function toRow(year: ContributionYear): ContributionYearInsert {
 function toDomain(row: ContributionYearRow): ContributionYear {
   const year = ContributionYear.rehydrate({
     year: row.year,
+    approvalRef: row.approvalRef,
     annualAmount: row.annualAmount,
     memberCapitalBps: row.memberCapitalBps,
     capitalParticipationBps: row.capitalParticipationBps,

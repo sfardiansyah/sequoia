@@ -10,6 +10,7 @@ export function createPostgresContributionRepository(databaseUrl: string) {
 
   return {
     client,
+    db,
     repository: new DrizzleContributionRepository(db),
     years: new DrizzleContributionYearRepository(db),
   };

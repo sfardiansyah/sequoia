@@ -45,13 +45,13 @@ bun run sequoia kyc list --expiring-within 30
 bun run sequoia kyc list --status REVOKED
 bun run sequoia audit list --actor ray --limit 20
 bun run sequoia member admit --owner-pkh ... --attestation <attestation-id>
-bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000
+SEQUOIA_OPERATOR=ray bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000 --approval-ref BOARD-2026-001
 bun run sequoia contribution record --member-id <member-id> --contribution-year 2026
 ```
 
-KYC write commands refuse to run without `SEQUOIA_OPERATOR`, a lower-case slug
-naming the operator (`ray`, `board-ops`). Admission and contribution writes get
-the same requirement in #8 and #9.
+KYC write commands and `contribution year set` refuse to run without
+`SEQUOIA_OPERATOR`, a lower-case slug naming the operator (`ray`, `board-ops`).
+Admission and contribution recording still need the same requirement.
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`
 publishes the JWT verification keys.

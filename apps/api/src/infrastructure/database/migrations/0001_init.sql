@@ -59,12 +59,14 @@ CREATE INDEX IF NOT EXISTS auth_nonces_expires_at_idx
 
 CREATE TABLE IF NOT EXISTS contribution_years (
   year integer PRIMARY KEY,
+  approval_ref text NOT NULL,
   annual_amount bigint NOT NULL,
   member_capital_bps integer NOT NULL,
   capital_participation_bps integer NOT NULL,
   standard_capital_participation_max_bps integer NOT NULL,
   created_at bigint NOT NULL,
   CHECK (year > 0),
+  CHECK (length(trim(approval_ref)) > 0),
   CHECK (annual_amount > 0),
   CHECK (member_capital_bps BETWEEN 0 AND 10000),
   CHECK (capital_participation_bps BETWEEN 0 AND 10000),
