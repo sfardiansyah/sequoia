@@ -32,7 +32,7 @@ of them. Do not add a dependency only to the body.
 - Preprod synthetic pilot, not a real-money pilot.
 - Real KYC provider, real bank, chain, distributions, exits, founder extra
   capital, and governance votes are out of scope.
-- The pilot admits only full standard members.
+- The pilot admits only standard members.
 - The plan defaults are fixed: 70/30 split and 5000 bps Capital Participation cap.
 - Off-chain records are provisional; they are not the co-op ledger.
 

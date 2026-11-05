@@ -26,8 +26,8 @@ Three things are easy to confuse:
 
 - **Contribution** is the money in.
 - **Member Capital** is the redeemable equity tranche, and stays a balance.
-- A **bank contribution attestation** is evidence that a contribution reached the
-  bank account. It is neither of the above; say "bank attestation."
+- A **bank attestation** is evidence that a contribution reached the bank
+  account. It is neither of the above.
 
 ## Redemption
 
@@ -112,6 +112,18 @@ For the statutory terms behind these English names, see
 | **Active Member** | Status `ACTIVE`. The quorum denominator and the set allowed to vote. |
 | **Pending Exit** | Status while a redemption is deferred because the reserve is short. The member waits in request order; the articles define voting rights during the wait. |
 | **Exit Window** | The 30 days after the annual surplus distribution when redemptions and settlements happen. The only time exit is allowed. |
+
+## Pilot
+
+The synthetic preprod pilot harness writes provisional records. These names
+exist only for that harness; they do not describe the co-op ledger.
+
+| Term | Meaning | Avoid |
+|---|---|---|
+| **Bank Attestation** | Evidence that a contribution reached the bank account: member, contribution year, amount, unique bank reference, actor, and time. The pilot uses synthetic attestations. | "deposit receipt", "payment proof", "bank contribution attestation" |
+| **Board Approval Reference** | The recorded reference to the board decision behind an admission or a contribution year. | "approval note", "board flag" |
+| **Pilot Record** | A provisional, off-chain row written by the pilot harness; not the co-op ledger and not the chain. | "ledger", "authoritative record" |
+| **Revocation Reason Code** | The structured reason a KYC attestation was revoked: `SANCTIONS`, `PEP`, `DOCUMENT_MISMATCH`, or `OTHER`. | "revocation reason" for free text |
 
 ## Money
 

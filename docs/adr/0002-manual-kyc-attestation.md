@@ -62,6 +62,10 @@ issues them from the CLI; there is no third-party provider yet.
 - `evidence_ref` is currently an auditable pointer, not a verified proof. The
   upgrade trigger is the first real verifier: a provider webhook with signature
   verification, or internal signature checking.
+- `evidence_ref` is not returned by the admin CLI or by any API path; it is a
+  database-only pointer in the pilot. The redaction is deliberate: list output
+  is not a place for evidence locators. If the board needs the pointer, add a
+  separate audited read path instead of putting it back in list output.
 - A provider integration costs a migration, an adapter, and an issuer row — no
   schema change and no membership change.
 - Expired or revoked KYC is invisible until someone reads the dashboard or runs

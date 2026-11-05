@@ -35,7 +35,7 @@ Sources are primary unless marked. Source keys `[S#]` resolve in §9; plan/ADR c
 | Fourth amendment | RUU Perubahan Keempat | DPR committee stage 17 June 2026; reported as still a draft. No enactment located as of 25 Oct 2026. [S23] | Do not draft the AD to the RUU. Re-check before mainnet. |
 | Open membership | Pasal 5(1)(a) and Penjelasan | "keanggotaan bersifat sukarela dan terbuka"; the explanation says "tidak dilakukan pembatasan atau diskriminasi dalam bentuk apapun". [S1] | KYC and board admission are lawful if the AD states objective criteria. A closed founder class must be justified and time-limited. |
 | Member is owner and user | Pasal 17(1) | "Anggota Koperasi adalah pemilik dan sekaligus pengguna jasa Koperasi." [S1] | A co-op of passive investors is weak. The patronage key needs real member transactions, not a notional figure. |
-| Who may be a member | Pasal 18(1)–(2) | Full members: Indonesian citizens able to perform legal acts, **or a Koperasi**, meeting AD requirements. "Anggota luar biasa" (associate members) may have AD-defined rights. [S1] | §3.1's "possibly legal entities" is too broad: a PT cannot be a full member; a non-citizen cannot. They can only be associate members under 18(2). §7.9's "foreign members" needs the same fix. |
+| Who may be a member | Pasal 18(1)–(2) | Full members: Indonesian citizens able to perform legal acts, **or a Koperasi**, meeting AD requirements. "Anggota luar biasa" (associate members) may have AD-defined rights. [S1] | §3.1 and §7.9 are full members only: Indonesian citizens or a Koperasi. Associate membership under 18(2) is not offered, so a PT or a foreign individual cannot be admitted. No cross-border membership review is needed while this holds. |
 | Common interest / admission conditions | Pasal 19(1)–(2) | Membership is based on common economic interest in the co-op's business; it is acquired or ended when AD requirements are met. [S1] | The AD must define the common interest and objective conditions; the board applies them. |
 | Equal rights / non-transferability | Pasal 19(3)–(4) | Membership cannot be transferred; members have equal duties and rights "sebagaimana diatur dalam Anggaran Dasar". [S1] | The `MEMBER` NFT's non-transferability aligns. A founder class with different economic rights needs an AD basis and objective justification. |
 | Members' meeting is supreme | Pasal 22(1), 23 | The Rapat Anggota decides the AD, general policy, elections, work plan and budget, accounts, SHU, merger and dissolution. [S1] | On-chain votes can govern internal spending, but cannot replace a valid Rapat Anggota for statutory matters. The plan says this in §3.16; the process must actually do it. |
@@ -78,7 +78,7 @@ The class-differentiated `simpanan wajib` is gone: every member uses 70/30, and 
 
 **Bankruptcy remoteness (material).** As a matter of ordinary insolvency law (counsel to confirm), accounts in the co-op's name are assets of the co-op. “Segregated” is an accounting label; it does not create a trust or remove the reserve from the insolvency estate. `simpanan wajib` is own capital, so members are residual claimants. It is not a protected bank deposit, and LPS insurance is generally understood not to cover member claims against a co-op; confirm with counsel. [S1: Pasal 41; S3: Pasal 6] The plan's “hard rule” that `simpanan wajib` is 100% covered by the redemption reserve [Plan §3.2, §6.6] is an internal liquidity invariant, not a legal guarantee. This needs a trust/insolvency and PSAK 50/71 opinion before any real IDR.
 
-### 2.3 Founder class, open membership, associate members
+### 2.3 Founder class and member eligibility
 
 | Question | Finding | Effect |
 |---|---|---|
@@ -87,7 +87,7 @@ The class-differentiated `simpanan wajib` is gone: every member uses 70/30, and 
 | Five-year lock-up? | No statutory maximum. It can be drafted as a lock on **redemption** of `modal penyertaan`; a ban on **resignation** is not. Whether the redemption lock is enforceable is a counsel question. The plan already frames it as a `modal penyertaan` redemption lock in §10. [S1: 19(2), 41] | Draft the AD/bylaws as a redemption schedule, not a resignation prohibition. |
 | Resigned founder's non-voting claim? | A former member can hold a contractual claim. It has no vote and no future surplus; subordination and payment order must be in the AD/bylaws. [S1: 19(2)] | Document the claim, beneficiary, and payment waterfall. |
 | Open membership vs founder exclusivity | A closed founder class at genesis can be reconciled with Pasal 5(1)(a) if it is time-limited, objective, and in the AD. A permanent, inherited advantage is harder. [S1: 5(1)(a) and Penjelasan] | Sunset at month 60; no transfer of founder status. |
-| Legal entities and foreigners | Full membership: Indonesian citizens or a Koperasi. Others: associate members under 18(2). [S1: 18] | Correct §3.1 and §7.9. If foreign members are admitted, assess GDPR and UU PDP cross-border issues. |
+| Legal entities and foreigners | Full membership: Indonesian citizens or a Koperasi. Others: associate members under 18(2). [S1: 18] | §3.1 and §7.9 now say full members only. Associate membership is not offered; PTs and foreign individuals cannot be admitted. Revisit the cross-border assessment if that changes. |
 
 ### 2.4 Surplus: the 25% capital key
 
@@ -194,7 +194,7 @@ The statute says:
 | Art 3(2)(b): monitoring behaviour in the Union | **Not on the current facts; can change.** | No analytics/profiling described. If EU visitors are tracked, profiled, or behaviourally advertised to, this can apply. Ordinary security logs are not automatically "monitoring". [S15: Art 3(2)(b); S17] |
 | EU processor only | **No, not by itself.** | Using an EU processor does not make the controller established or targeting the EU. The processor has its own GDPR obligations, and the contract may impose GDPR terms. |
 
-**Conclusion.** A closed Indonesian co-op with Indonesian members is **likely outside GDPR**. It becomes in scope if it (i) opens an EU establishment, (ii) admits or targets EU-resident members as a service, or (iii) monitors EU users' behaviour. The plan is internally inconsistent: §1.2 says no global membership, while §7.9 mentions "foreign members" and §3.1 mentions legal entities. Resolve that first; it is the trigger.
+**Conclusion.** A closed Indonesian co-op with Indonesian members is **likely outside GDPR**. It becomes in scope if it (i) opens an EU establishment, (ii) admits or targets EU-resident members as a service, or (iii) monitors EU users' behaviour. The plan is consistent as of 2026-11-05: §3.1 and §7.9 admit Indonesian natural persons only (a Koperasi is legally eligible but unsupported), and associate membership is not offered. That closes the §1.2 inconsistency.
 
 If GDPR applies, Art 27 requires an EU representative (unless the narrow exemption applies), and Art 37 may require a DPO. If it does not apply, a voluntary "GDPR-aligned" programme is fine, but do not claim "GDPR compliant" in the privacy notice; that is a factual/contractual claim the co-op may not be able to support.
 
@@ -411,19 +411,18 @@ The notice must state, per purpose: basis, data categories, recipients, transfer
 3. **SHU:** Is a 25% capital share (32.3% of member distributions) “terbatas” under Pasal 5(1)(d)? Is total equity (`simpanan wajib` + `modal penyertaan`) the right capital weight? What happens in a zero-patronage year?
 4. **Statutory allocations:** We designate the 20% endowment as `dana cadangan` and 2.5% as a retained `dana pendidikan`. Confirm the AD wording, that the RA sets or confirms the amounts annually, and that the endowment does not settle exits.
 5. **Founder class:** Is a time-limited founder class with the same 70/30 split, an additional initial `modal penyertaan`, and vesting consistent with Pasal 19(4) and open membership? Is a 5-year `modal penyertaan` redemption lock enforceable? Can a resigned founder hold a non-voting claim?
-6. **Membership eligibility:** Can a PT or a foreign individual be a full member, or only an associate member under Pasal 18(2)? What rights can associate members have without violating one-member-one-vote?
-7. **Tokens:** Are `MEMBER`, `SW`, `PROJ`, `VOTE`, `CLAIM` "aset kripto"/"aset keuangan digital" under Law 4/2026 and POJK 27/2024 as amended? Does Pasal 221A(8) require exchange reporting for a non-transferable membership token? Is an issuer licence needed under the final offering POJK?
-8. **Securities/ITSK:** Is the project pool a collective investment or `efek`? Is the co-op an ITSK provider under Law 4/2026 Pasal 215? Does member-only, non-transferable status avoid a public offering?
-9. **Crypto holding:** May the co-op hold digital assets on its balance sheet, or only use the chain as a records layer? What custody/valuation/tax rules apply?
-10. **AML:** If the co-op is a PJK, what is the CDD/EDD standard for fixed annual member contributions, and who files STRs — the co-op, the bank, or the payment provider? What is the BO definition for a co-op?
-11. **Retention:** How should the 5-year AML retention interact with UU PDP erasure for KYC evidence, the member register, and on-chain commitments? What retention applies to co-op minutes and member registers?
-12. **Controller/processor:** Is Sumsub a processor or an independent controller for sanctions screening? Is the bank a controller? What DPA/joint-controller terms are required?
-13. **Public votes:** Is a member's vote "specific personal data" or a political opinion? Can public-by-default voting be based on consent, or does it require a different basis/design?
-14. **On-chain revocation:** Can sanctions/PEP revocation status be published on-chain? What disclosure is permitted under AML tipping-off rules and UU PDP?
-15. **Cross-border/localisation:** If the co-op becomes a KSP, do OJK rules require local data centres or specific transfer approvals? What is the UU PDP "equal or higher" test for the UK/EU/Singapore/US?
-16. **Tax:** How are the annual contribution, member loan, `PROJ` distribution, endowment, and token issuance taxed?
-17. **Endowment:** Is a fund that absorbs members' project losses before their own capital permissible as a co-op instrument, and how is it presented in the AD and the annual financial statements? (ADR 0006 already flags this.)
-18. **Pengawas:** Who appoints the supervisory board, what records may it access, and how do its statutory powers interact with the on-chain audit trail?
+6. **Tokens:** Are `MEMBER`, `SW`, `PROJ`, `VOTE`, `CLAIM` "aset kripto"/"aset keuangan digital" under Law 4/2026 and POJK 27/2024 as amended? Does Pasal 221A(8) require exchange reporting for a non-transferable membership token? Is an issuer licence needed under the final offering POJK?
+7. **Securities/ITSK:** Is the project pool a collective investment or `efek`? Is the co-op an ITSK provider under Law 4/2026 Pasal 215? Does member-only, non-transferable status avoid a public offering?
+8. **Crypto holding:** May the co-op hold digital assets on its balance sheet, or only use the chain as a records layer? What custody/valuation/tax rules apply?
+9. **AML:** If the co-op is a PJK, what is the CDD/EDD standard for fixed annual member contributions, and who files STRs — the co-op, the bank, or the payment provider? What is the BO definition for a co-op?
+10. **Retention:** How should the 5-year AML retention interact with UU PDP erasure for KYC evidence, the member register, and on-chain commitments? What retention applies to co-op minutes and member registers?
+11. **Controller/processor:** Is Sumsub a processor or an independent controller for sanctions screening? Is the bank a controller? What DPA/joint-controller terms are required?
+12. **Public votes:** Is a member's vote "specific personal data" or a political opinion? Can public-by-default voting be based on consent, or does it require a different basis/design?
+13. **On-chain revocation:** Can sanctions/PEP revocation status be published on-chain? What disclosure is permitted under AML tipping-off rules and UU PDP?
+14. **Cross-border/localisation:** If the co-op becomes a KSP, do OJK rules require local data centres or specific transfer approvals? What is the UU PDP "equal or higher" test for the UK/EU/Singapore/US?
+15. **Tax:** How are the annual contribution, member loan, `PROJ` distribution, endowment, and token issuance taxed?
+16. **Endowment:** Is a fund that absorbs members' project losses before their own capital permissible as a co-op instrument, and how is it presented in the AD and the annual financial statements? (ADR 0006 already flags this.)
+17. **Pengawas:** Who appoints the supervisory board, what records may it access, and how do its statutory powers interact with the on-chain audit trail?
 
 ---
 

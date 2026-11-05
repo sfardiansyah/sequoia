@@ -317,7 +317,7 @@ As of 19 October 2026:
 
 ### 3.1 Membership
 
-- Membership is open to natural persons (and possibly legal entities) who pass KYC and board admission. Admission currently records only the KYC attestation; board approval is not recorded until the governance context exists.
+- Membership is open to Indonesian natural persons who pass KYC and board admission. A Koperasi is legally eligible as a full member under Pasal 18(1) but is not supported yet. Associate membership under Pasal 18(2) is not offered. Admission currently records only the KYC attestation; board approval is not recorded until the governance context exists.
 - Each member receives one `MEMBER` NFT.
 - Membership is non-transferable. Succession only through the legal process and board approval.
 - One member, one vote.
@@ -1232,7 +1232,7 @@ Use same-origin reverse proxy to avoid CORS/cookie issues.
 ### 7.9 KYC integration
 
 - Privy for Indonesian e-KYC (civil registry, OJK-registered).
-- Sumsub for AML/sanctions/transaction monitoring and foreign members.
+- Sumsub for AML/sanctions/transaction monitoring. Membership is Indonesian natural persons only; there are no foreign members.
 - Manual board KYC fallback for the pilot.
 - No PII on-chain.
 
