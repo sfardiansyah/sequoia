@@ -15,7 +15,8 @@ export const kycAttestations = pgTable("kyc_attestations", {
   expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
   status: text("status").notNull(),
   revokedAt: bigint("revoked_at", { mode: "number" }),
-  revokeReason: text("revoke_reason"),
+  revokeReasonCode: text("revoke_reason_code"),
+  retainUntil: bigint("retain_until", { mode: "number" }),
 });
 
 export type KycAttestationRow = typeof kycAttestations.$inferSelect;

@@ -13,6 +13,7 @@ import { ListKycAttestations } from "./application/list-kyc-attestations";
 import { RevokeKycAttestation } from "./application/revoke-kyc-attestation";
 import {
   KycAttestation,
+  parseKycRevokeReason,
   type IdentityError,
 } from "./domain/kyc-attestation";
 import { kycStatusAt } from "./domain/kyc-status";
@@ -127,7 +128,35 @@ describe("KycAttestation", () => {
     );
   });
 
-  test("revokes once and requires a reason", () => {
+  test("issues an attestation with an optional retain-until", () => {
+    const valid = {
+      id: "kyc-1",
+      subjectPkh: subject,
+      issuerId,
+      evidenceRef: "ref",
+      issuedAt,
+      expiresAt,
+    };
+
+    expect(
+      unwrap(KycAttestation.issue(valid)).retainUntil,
+    ).toBeNull();
+    expect(
+      unwrap(
+        KycAttestation.issue({ ...valid, retainUntil: expiresAt + 1 }),
+      ).retainUntil,
+    ).toBe(expiresAt + 1);
+    expectError(
+      KycAttestation.issue({ ...valid, retainUntil: issuedAt }),
+      "INVALID_RETAIN_UNTIL",
+    );
+    expectError(
+      KycAttestation.issue({ ...valid, retainUntil: issuedAt - 1 }),
+      "INVALID_RETAIN_UNTIL",
+    );
+  });
+
+  test("revokes once with a structured reason code", () => {
     const attestation = unwrap(
       KycAttestation.issue({
         id: "kyc-1",
@@ -140,21 +169,34 @@ describe("KycAttestation", () => {
     );
 
     expectError(
-      attestation.revoke({ reason: " ", revokedAt: issuedAt }),
-      "REVOKE_REASON_REQUIRED",
+      attestation.revoke({ reasonCode: "sanctions hit", revokedAt: issuedAt }),
+      "INVALID_REVOKE_REASON",
     );
 
     const revoked = unwrap(
-      attestation.revoke({ reason: "sanctions hit", revokedAt: issuedAt }),
+      attestation.revoke({ reasonCode: "SANCTIONS", revokedAt: issuedAt }),
     );
     expect(revoked.status).toBe("REVOKED");
-    expect(revoked.revokeReason).toBe("sanctions hit");
+    expect(revoked.revokeReason).toBe("SANCTIONS");
     expect(revoked.statusAt(issuedAt)).toBe("REVOKED");
 
     expectError(
-      revoked.revoke({ reason: "again", revokedAt: issuedAt }),
+      revoked.revoke({ reasonCode: "OTHER", revokedAt: issuedAt }),
       "ATTESTATION_NOT_ACTIVE",
     );
+  });
+});
+
+describe("parseKycRevokeReason", () => {
+  test("accepts only the four reason codes", () => {
+    expect(parseKycRevokeReason("SANCTIONS")).toBe("SANCTIONS");
+    expect(parseKycRevokeReason(" PEP ")).toBe("PEP");
+    expect(parseKycRevokeReason("DOCUMENT_MISMATCH")).toBe("DOCUMENT_MISMATCH");
+    expect(parseKycRevokeReason("OTHER")).toBe("OTHER");
+
+    expect(parseKycRevokeReason("sanctions")).toBeNull();
+    expect(parseKycRevokeReason("")).toBeNull();
+    expect(parseKycRevokeReason("SANCTIONS: bad actor")).toBeNull();
   });
 });
 
@@ -201,6 +243,17 @@ describe("IssueKycAttestation", () => {
     expect((await attestations.findById(first.id))?.status).toBe("SUPERSEDED");
     expect((await attestations.findById(second.id))?.status).toBe("ACTIVE");
   });
+
+  test("stores the optional retain-until", async () => {
+    const { attestations, issue } = setup();
+    const attestation = unwrap(
+      await issue.execute({ ...issueCommand, retainUntil: expiresAt + 1 }),
+    );
+
+    expect(
+      (await attestations.findById(attestation.id))?.retainUntil,
+    ).toBe(expiresAt + 1);
+  });
 });
 
 describe("RevokeKycAttestation", () => {
@@ -211,7 +264,7 @@ describe("RevokeKycAttestation", () => {
     const revoked = unwrap(
       await revoke.execute({
         attestationId: attestation.id,
-        reason: "sanctions hit",
+        reasonCode: "SANCTIONS",
         revokedAt: issuedAt + 1,
         actor,
       }),
@@ -221,6 +274,23 @@ describe("RevokeKycAttestation", () => {
     expect((unwrap(await get.execute({ id: attestation.id, at: issuedAt + 2 })) as { status: string }).status).toBe("REVOKED");
   });
 
+  test("rejects an unknown reason code before writing", async () => {
+    const { issue, revoke, attestations, audit } = setup();
+    const attestation = unwrap(await issue.execute(issueCommand));
+
+    expectError(
+      await revoke.execute({
+        attestationId: attestation.id,
+        reasonCode: "sanctions hit",
+        revokedAt: issuedAt + 1,
+        actor,
+      }),
+      "INVALID_REVOKE_REASON",
+    );
+    expect((await attestations.findById(attestation.id))?.status).toBe("ACTIVE");
+    expect(await audit.list()).toHaveLength(1);
+  });
+
   test("rejects an unknown or already revoked attestation", async () => {
     const { issue, revoke } = setup();
     const attestation = unwrap(await issue.execute(issueCommand));
@@ -228,7 +298,7 @@ describe("RevokeKycAttestation", () => {
     expectError(
       await revoke.execute({
         attestationId: "missing",
-        reason: "x",
+        reasonCode: "OTHER",
         revokedAt: issuedAt,
         actor,
       }),
@@ -238,7 +308,7 @@ describe("RevokeKycAttestation", () => {
     unwrap(
       await revoke.execute({
         attestationId: attestation.id,
-        reason: "x",
+        reasonCode: "OTHER",
         revokedAt: issuedAt,
         actor,
       }),
@@ -247,7 +317,7 @@ describe("RevokeKycAttestation", () => {
     expectError(
       await revoke.execute({
         attestationId: attestation.id,
-        reason: "x",
+        reasonCode: "OTHER",
         revokedAt: issuedAt,
         actor,
       }),
@@ -274,13 +344,13 @@ describe("audit trail", () => {
     expect(JSON.stringify(rows)).not.toContain("s3://bucket");
   });
 
-  test("records one KYC_REVOKED row without the free-text reason", async () => {
+  test("records one KYC_REVOKED row with the reason code as detail", async () => {
     const { issue, revoke, audit } = setup();
     const attestation = unwrap(await issue.execute(issueCommand));
     unwrap(
       await revoke.execute({
         attestationId: attestation.id,
-        reason: "sanctions hit",
+        reasonCode: "SANCTIONS",
         revokedAt: issuedAt + 5,
         actor: "board-ops",
       }),
@@ -291,7 +361,7 @@ describe("audit trail", () => {
       "KYC_REVOKED",
       "KYC_ISSUED",
     ]);
-    expect(rows[0]).toMatchObject({ actor: "board-ops", detail: null });
+    expect(rows[0]).toMatchObject({ actor: "board-ops", detail: "SANCTIONS" });
     expect(JSON.stringify(rows)).not.toContain("sanctions hit");
   });
 
@@ -309,7 +379,7 @@ describe("audit trail", () => {
     expectError(
       await revoke.execute({
         attestationId: attestation.id,
-        reason: "x",
+        reasonCode: "OTHER",
         revokedAt: issuedAt,
         actor: "",
       }),
@@ -321,16 +391,18 @@ describe("audit trail", () => {
 });
 
 describe("GetKycAttestation", () => {
-  test("derives status at read time and exposes the audit trail", async () => {
+  test("derives status at read time without exposing the evidence ref", async () => {
     const { issue, get } = setup();
     const attestation = unwrap(await issue.execute(issueCommand));
 
     const view = unwrap(await get.execute({ id: attestation.id, at: issuedAt }));
     expect(view).toMatchObject({
       issuerId: "MANUAL",
-      evidenceRef: "s3://bucket/member-1/",
       issuedAt,
+      retainUntil: null,
     });
+    expect(view).not.toHaveProperty("evidenceRef");
+    expect(JSON.stringify(view)).not.toContain("s3://bucket");
 
     expect(
       unwrap(await get.execute({ id: attestation.id, at: issuedAt }))?.status,
@@ -377,7 +449,7 @@ describe("ListKycAttestations", () => {
     unwrap(
       await revoke.execute({
         attestationId: second.id,
-        reason: "sanctions hit",
+        reasonCode: "SANCTIONS",
         revokedAt: issuedAt,
         actor,
       }),

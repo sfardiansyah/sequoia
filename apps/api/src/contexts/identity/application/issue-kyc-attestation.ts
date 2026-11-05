@@ -18,6 +18,8 @@ export type IssueKycAttestationCommand = {
   readonly evidenceRef: string;
   readonly issuedAt: number;
   readonly expiresAt: number;
+  /** Optional retention deadline; does not affect eligibility. */
+  readonly retainUntil?: number | null | undefined;
   /** Operator running the command; recorded in the audit trail. */
   readonly actor: string;
 };
@@ -54,6 +56,7 @@ export class IssueKycAttestation {
       evidenceRef: command.evidenceRef,
       issuedAt: command.issuedAt,
       expiresAt: command.expiresAt,
+      retainUntil: command.retainUntil,
     });
     if (!attestation.ok) return attestation;
 

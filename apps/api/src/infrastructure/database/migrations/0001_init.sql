@@ -22,9 +22,12 @@ CREATE TABLE IF NOT EXISTS kyc_attestations (
   expires_at bigint NOT NULL,
   status text NOT NULL CHECK (status IN ('ACTIVE', 'SUPERSEDED', 'REVOKED')),
   revoked_at bigint,
-  revoke_reason text,
+  revoke_reason_code text
+    CHECK (revoke_reason_code IN ('SANCTIONS', 'PEP', 'DOCUMENT_MISMATCH', 'OTHER')),
+  retain_until bigint,
   CHECK (expires_at > issued_at),
-  CHECK ((status = 'REVOKED') = (revoked_at IS NOT NULL AND revoke_reason IS NOT NULL)),
+  CHECK (retain_until IS NULL OR retain_until > issued_at),
+  CHECK ((status = 'REVOKED') = (revoked_at IS NOT NULL AND revoke_reason_code IS NOT NULL)),
   UNIQUE (id, subject_pkh)
 );
 

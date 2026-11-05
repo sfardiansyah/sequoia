@@ -40,7 +40,7 @@ bun run test:integration             # requires TEST_DATABASE_URL
 bun run dev:api
 bun run sequoia migrate
 SEQUOIA_OPERATOR=ray bun run sequoia kyc issue --owner-pkh ... --evidence-ref s3://bucket/member-1/
-SEQUOIA_OPERATOR=ray bun run sequoia kyc revoke <attestation-id> --reason "..."
+SEQUOIA_OPERATOR=ray bun run sequoia kyc revoke <attestation-id> --reason-code SANCTIONS
 bun run sequoia kyc list --expiring-within 30
 bun run sequoia kyc list --status REVOKED
 bun run sequoia audit list --actor ray --limit 20

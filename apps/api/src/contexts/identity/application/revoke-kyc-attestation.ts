@@ -15,7 +15,7 @@ import type { IdentityWriteScope } from "./write-scope";
 
 export type RevokeKycAttestationCommand = {
   readonly attestationId: string;
-  readonly reason: string;
+  readonly reasonCode: string;
   readonly revokedAt: number;
   /** Operator running the command; recorded in the audit trail. */
   readonly actor: string;
@@ -42,7 +42,7 @@ export class RevokeKycAttestation {
     if (!attestation) return err({ code: "ATTESTATION_NOT_FOUND" });
 
     const revoked = attestation.revoke({
-      reason: command.reason,
+      reasonCode: command.reasonCode,
       revokedAt: command.revokedAt,
     });
     if (!revoked.ok) return revoked;
@@ -55,7 +55,7 @@ export class RevokeKycAttestation {
           action: AUDIT_ACTIONS.kycRevoked,
           entityType: AUDIT_ENTITY_TYPES.kycAttestation,
           entityId: revoked.value.id,
-          detail: null,
+          detail: revoked.value.revokeReason,
           occurredAt: command.revokedAt,
         });
       });

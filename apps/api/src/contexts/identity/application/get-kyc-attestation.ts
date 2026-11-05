@@ -11,10 +11,10 @@ export type KycAttestationView = {
   readonly id: string;
   readonly subjectPkh: string;
   readonly issuerId: string;
-  readonly evidenceRef: string;
   readonly issuedAt: number;
   readonly status: KycStatus;
   readonly expiresAt: number;
+  readonly retainUntil: number | null;
 };
 
 export function toKycAttestationView(
@@ -25,10 +25,10 @@ export function toKycAttestationView(
     id: attestation.id,
     subjectPkh: attestation.subjectPkh.value,
     issuerId: attestation.issuerId,
-    evidenceRef: attestation.evidenceRef,
     issuedAt: attestation.issuedAt,
     status: attestation.statusAt(at),
     expiresAt: attestation.expiresAt,
+    retainUntil: attestation.retainUntil,
   };
 }
 
