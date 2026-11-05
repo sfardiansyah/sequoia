@@ -180,7 +180,7 @@ describe("KYC writes and the audit trail", () => {
       auditState.failing = true;
       const result = await revoke.execute({
         attestationId: attestation.id,
-        reason: "sanctions hit",
+        reasonCode: "SANCTIONS",
         revokedAt: issuedAt + 1,
         actor: "board-ops",
       });

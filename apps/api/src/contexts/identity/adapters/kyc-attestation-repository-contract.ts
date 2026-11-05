@@ -17,6 +17,7 @@ function attestation(input: {
   subjectPkh?: string;
   issuedAt?: number;
   expiresAt?: number;
+  retainUntil?: number;
 }): KycAttestation {
   const issued = KycAttestation.issue({
     id: input.id,
@@ -25,6 +26,7 @@ function attestation(input: {
     evidenceRef: "contract-fixture",
     issuedAt: input.issuedAt ?? 1_700_000_000_000,
     expiresAt: input.expiresAt ?? 1_750_000_000_000,
+    retainUntil: input.retainUntil,
   });
   if (!issued.ok) throw new Error(issued.error.code);
   return issued.value;
@@ -89,6 +91,28 @@ export function describeKycAttestationRepository(
       }
     });
 
+    test("round-trips retain-until", async () => {
+      const { repository, close } = await create();
+
+      try {
+        await repository.save(attestation({ id: "kyc-1" }));
+        await repository.save(
+          attestation({
+            id: "kyc-retained",
+            subjectPkh: "b".repeat(56),
+            retainUntil: 1_800_000_000_000,
+          }),
+        );
+
+        expect((await repository.findById("kyc-retained"))?.retainUntil).toBe(
+          1_800_000_000_000,
+        );
+        expect((await repository.findById("kyc-1"))?.retainUntil).toBeNull();
+      } finally {
+        await close();
+      }
+    });
+
     test("revoking an active attestation keeps one row per id", async () => {
       const { repository, close } = await create();
 
@@ -97,7 +121,7 @@ export function describeKycAttestationRepository(
         await repository.save(issued);
 
         const revoked = issued.revoke({
-          reason: "sanctions hit",
+          reasonCode: "SANCTIONS",
           revokedAt: 1_701_000_000_000,
         });
         if (!revoked.ok) throw new Error(revoked.error.code);
@@ -105,7 +129,7 @@ export function describeKycAttestationRepository(
 
         const found = await repository.findById("kyc-1");
         expect(found?.status).toBe("REVOKED");
-        expect(found?.revokeReason).toBe("sanctions hit");
+        expect(found?.revokeReason).toBe("SANCTIONS");
       } finally {
         await close();
       }
