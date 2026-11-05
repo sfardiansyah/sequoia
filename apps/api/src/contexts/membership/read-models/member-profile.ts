@@ -1,6 +1,16 @@
 import type { MemberClass } from "@sequoia/shared";
+import type { ContributionSource } from "../../capital/domain/contribution";
 import type { KycStatus } from "../../identity/domain/kyc-status";
 import type { MemberStatus } from "../domain/member";
+
+export type ContributionSummary = {
+  readonly year: number;
+  /** Unit amounts are bigint, so they cross the read model as strings. */
+  readonly annualAmount: string;
+  readonly memberCapital: string;
+  readonly capitalParticipation: string;
+  readonly source: ContributionSource;
+};
 
 export type MemberProfile = {
   readonly id: string;
@@ -12,6 +22,7 @@ export type MemberProfile = {
     readonly status: KycStatus;
     readonly expiresAt: number;
   };
+  readonly contributions: readonly ContributionSummary[];
 };
 
 /**

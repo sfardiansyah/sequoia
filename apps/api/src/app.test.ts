@@ -100,6 +100,7 @@ describe("api", () => {
       status: "ACTIVE",
       joinedAt: 1_700_000_000_000,
       kyc: { status: "ACTIVE", expiresAt },
+      contributions: [],
     });
 
     const address = "addr_test1-member";
@@ -118,10 +119,51 @@ describe("api", () => {
       status: "ACTIVE",
       joinedAt: 1_700_000_000_000,
       kyc: { status: "ACTIVE", expiresAt },
+      contributions: [],
     });
 
     const replay = await post("/auth/verify", { address, nonce: challenge.nonce, signature: "signature", key: "key" });
     expect(replay.status).toBe(401);
+  });
+
+  test("GET /members/me returns the contribution summary with string amounts", async () => {
+    const expiresAt = Date.now() + 86_400_000;
+    const address = "addr_test1-contribution";
+    profiles.set(ownerPkhValue, {
+      id: "member-1",
+      ownerPkh: ownerPkhValue,
+      memberClass: "STANDARD",
+      status: "ACTIVE",
+      joinedAt: 1_700_000_000_000,
+      kyc: { status: "ACTIVE", expiresAt },
+      contributions: [
+        {
+          year: 2026,
+          annualAmount: "9007199254740993",
+          memberCapital: "6305039478318695",
+          capitalParticipation: "2702159776422298",
+          source: "PILOT",
+        },
+      ],
+    });
+
+    const challenge = (await (await post("/auth/nonce", { address })).json()) as { nonce: string };
+    const verify = await post("/auth/verify", { address, nonce: challenge.nonce, signature: "signature", key: "key" });
+    const { token } = (await verify.json()) as { token: string };
+
+    const me = await app.handle(new Request("http://localhost/members/me", { headers: { authorization: `Bearer ${token}` } }));
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({
+      contributions: [
+        {
+          year: 2026,
+          annualAmount: "9007199254740993",
+          memberCapital: "6305039478318695",
+          capitalParticipation: "2702159776422298",
+          source: "PILOT",
+        },
+      ],
+    });
   });
 
   test("GET /members/me rejects a token without a member", async () => {

@@ -28,7 +28,7 @@ Implemented:
   timestamp recorded, and a `BANK_ATTESTATION_CREATED` audit row written in the
   same transaction;
 - founder vesting: 50% at year 4 and 50% at year 5;
-- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
+- Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me` with the member's KYC block and contribution summary;
 - identity context with manual KYC attestations: issuers, expiry, revocation,
   renewal, and an admission gate that requires a valid attestation and a board
   approval reference (standard members only);

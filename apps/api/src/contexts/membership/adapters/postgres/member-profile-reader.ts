@@ -1,5 +1,6 @@
 import type { MemberClass } from "@sequoia/shared";
 import type { Sql } from "postgres";
+import type { ContributionSource } from "../../../capital/domain/contribution";
 import {
   kycStatusAt,
   type AttestationState,
@@ -7,6 +8,7 @@ import {
 import type { MemberStatus } from "../../domain/member";
 import { OwnerPkh } from "../../domain/owner-pkh";
 import type {
+  ContributionSummary,
   MemberProfile,
   MemberProfileReader,
 } from "../../read-models/member-profile";
@@ -19,6 +21,14 @@ type ProfileRow = {
   readonly joined_at: string;
   readonly kyc_status: string;
   readonly kyc_expires_at: string;
+};
+
+type ContributionRow = {
+  readonly contribution_year: number;
+  readonly annual_amount: string;
+  readonly member_capital: string;
+  readonly capital_participation: string;
+  readonly source: string;
 };
 
 export class PostgresMemberProfileReader implements MemberProfileReader {
@@ -54,6 +64,17 @@ export class PostgresMemberProfileReader implements MemberProfileReader {
     const row = rows[0];
     if (!row) return null;
 
+    const contributionRows = await this.sql<ContributionRow[]>`
+      SELECT contribution_year,
+             annual_amount::text AS annual_amount,
+             member_capital::text AS member_capital,
+             capital_participation::text AS capital_participation,
+             source
+        FROM contributions
+       WHERE member_id = ${row.id}
+       ORDER BY contribution_year DESC
+    `;
+
     return {
       id: row.id,
       ownerPkh: row.owner_pkh,
@@ -70,6 +91,15 @@ export class PostgresMemberProfileReader implements MemberProfileReader {
         ),
         expiresAt: Number(row.kyc_expires_at),
       },
+      contributions: contributionRows.map(
+        (contribution): ContributionSummary => ({
+          year: contribution.contribution_year,
+          annualAmount: contribution.annual_amount,
+          memberCapital: contribution.member_capital,
+          capitalParticipation: contribution.capital_participation,
+          source: contribution.source as ContributionSource,
+        }),
+      ),
     };
   }
 }
