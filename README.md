@@ -24,7 +24,9 @@ Implemented:
   commands;
 - founder vesting: 50% at year 4 and 50% at year 5;
 - Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me`;
-- identity context with manual KYC attestations: issuers, expiry, revocation, renewal, and an admission gate that requires a valid attestation;
+- identity context with manual KYC attestations: issuers, expiry, revocation,
+  renewal, and an admission gate that requires a valid attestation and a board
+  approval reference (standard members only);
 - Docker Compose stack and integration tests against real PostgreSQL.
 
 Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, the full
@@ -44,14 +46,14 @@ SEQUOIA_OPERATOR=ray bun run sequoia kyc revoke <attestation-id> --reason-code S
 bun run sequoia kyc list --expiring-within 30
 bun run sequoia kyc list --status REVOKED
 bun run sequoia audit list --actor ray --limit 20
-bun run sequoia member admit --owner-pkh ... --attestation <attestation-id> --approval-ref board-2026-04
+SEQUOIA_OPERATOR=ray bun run sequoia member admit --owner-pkh ... --attestation <attestation-id> --approval-ref board-2026-04
 bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000
 bun run sequoia contribution record --member-id <member-id> --contribution-year 2026
 ```
 
-KYC write commands refuse to run without `SEQUOIA_OPERATOR`, a lower-case slug
-naming the operator (`ray`, `board-ops`). Admission and contribution writes get
-the same requirement in #8 and #9.
+KYC and admission write commands refuse to run without `SEQUOIA_OPERATOR`, a
+lower-case slug naming the operator (`ray`, `board-ops`). Contribution writes
+get the same requirement in #9.
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`
 publishes the JWT verification keys.
