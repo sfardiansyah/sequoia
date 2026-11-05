@@ -1,8 +1,17 @@
 import { err, type Result } from "@sequoia/shared";
+import {
+  AUDIT_ACTIONS,
+  AUDIT_ENTITY_TYPES,
+  parseActor,
+} from "../../../shared/audit/audit-event";
 import { unexpected } from "../../../shared/errors";
 import type { IdGenerator } from "../../../shared/id-generator";
+import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
+import type { BankAttestationRepository } from "../domain/bank-attestation";
 import {
   Contribution,
+  ContributionSource,
+  DuplicateBankAttestationError,
   DuplicateContributionError,
   UnknownContributionMemberError,
   type ContributionError,
@@ -10,19 +19,25 @@ import {
 } from "../domain/contribution";
 import type { ContributionYearRepository } from "../domain/contribution-year";
 import type { ContributionEligibility } from "../domain/ports/contribution-eligibility";
+import type { CapitalWriteScope } from "./write-scope";
 
 export type RecordAnnualContributionCommand = {
   readonly memberId: string;
   readonly contributionYear: number;
+  readonly bankAttestationId: string;
   readonly recordedAt: number;
+  /** Operator running the command; recorded in the audit trail. */
+  readonly actor: string;
 };
 
 export class RecordAnnualContribution {
   constructor(
     private readonly contributions: ContributionRepository,
     private readonly years: ContributionYearRepository,
+    private readonly attestations: BankAttestationRepository,
     private readonly eligibility: ContributionEligibility,
     private readonly ids: IdGenerator,
+    private readonly unitOfWork: UnitOfWork<CapitalWriteScope>,
   ) {}
 
   async execute(
@@ -37,6 +52,13 @@ export class RecordAnnualContribution {
 
     const memberId = command.memberId.trim();
     if (!memberId) return err({ code: "INVALID_MEMBER" });
+
+    const bankAttestationId = command.bankAttestationId.trim();
+    if (!bankAttestationId) return err({ code: "INVALID_ATTESTATION" });
+
+    const actor = parseActor(command.actor);
+    if (!actor) return err({ code: "INVALID_ACTOR" });
+
     if (!Number.isInteger(command.recordedAt) || command.recordedAt < 0) {
       return err({ code: "INVALID_TIME" });
     }
@@ -61,32 +83,74 @@ export class RecordAnnualContribution {
     }
     if (failure) return err({ code: failure });
 
-    const contribution = Contribution.record({
-      id: this.ids.next(),
-      memberId,
-      contributionYear: year.year,
-      annualAmount: year.annualAmount,
-      split: year.split,
-      recordedAt: command.recordedAt,
-    });
-    if (!contribution.ok) return contribution;
+    let attestation;
+    try {
+      attestation = await this.attestations.findById(bankAttestationId);
+    } catch (cause) {
+      return err(unexpected(cause));
+    }
+    if (!attestation) return err({ code: "ATTESTATION_NOT_FOUND" });
+
+    if (
+      attestation.memberId !== memberId ||
+      attestation.contributionYear !== year.year ||
+      attestation.amount !== year.annualAmount
+    ) {
+      return err({ code: "ATTESTATION_MISMATCH" });
+    }
 
     let existing: Contribution | null;
     try {
       existing = await this.contributions.findByMemberAndYear(
-        contribution.value.memberId,
-        contribution.value.contributionYear,
+        memberId,
+        year.year,
       );
     } catch (cause) {
       return err(unexpected(cause));
     }
     if (existing) return err({ code: "ALREADY_RECORDED" });
 
+    let used: Contribution | null;
     try {
-      await this.contributions.save(contribution.value);
+      used = await this.contributions.findByBankAttestationId(
+        bankAttestationId,
+      );
+    } catch (cause) {
+      return err(unexpected(cause));
+    }
+    if (used) return err({ code: "ATTESTATION_ALREADY_USED" });
+
+    const contribution = Contribution.record({
+      id: this.ids.next(),
+      memberId,
+      contributionYear: year.year,
+      bankAttestationId,
+      source: ContributionSource.Pilot,
+      chainTx: null,
+      annualAmount: year.annualAmount,
+      split: year.split,
+      recordedAt: command.recordedAt,
+    });
+    if (!contribution.ok) return contribution;
+
+    try {
+      await this.unitOfWork.run(async (write) => {
+        await write.contributions.save(contribution.value);
+        await write.audit.record({
+          actor,
+          action: AUDIT_ACTIONS.contributionRecorded,
+          entityType: AUDIT_ENTITY_TYPES.contribution,
+          entityId: contribution.value.id,
+          detail: null,
+          occurredAt: contribution.value.recordedAt,
+        });
+      });
     } catch (cause) {
       if (cause instanceof DuplicateContributionError) {
         return err({ code: "ALREADY_RECORDED" });
+      }
+      if (cause instanceof DuplicateBankAttestationError) {
+        return err({ code: "ATTESTATION_ALREADY_USED" });
       }
       if (cause instanceof UnknownContributionMemberError) {
         return err({ code: "MEMBER_NOT_FOUND" });

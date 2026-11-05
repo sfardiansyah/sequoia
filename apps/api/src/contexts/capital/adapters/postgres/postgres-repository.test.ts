@@ -42,6 +42,13 @@ async function setup() {
     VALUES
       (2026, 'BOARD-2026-001', 1000000, 7000, 3000, 5000, 1700000000000),
       (2027, 'BOARD-2027-001', 1000000, 7000, 3000, 5000, 1700000000000);
+    INSERT INTO bank_attestations
+      (id, member_id, contribution_year, amount, bank_reference, actor, created_at)
+    VALUES
+      ('attestation-contribution-1', '${CONTRACT_MEMBER_ID}', 2026, 1000000,
+       'BANK-REF-1', 'ray', 1700000000000),
+      ('attestation-contribution-2', '${CONTRACT_MEMBER_ID}', 2027, 1000000,
+       'BANK-REF-2', 'ray', 1700000000000);
   `);
 
   const db = drizzle(client, { schema });
@@ -63,6 +70,9 @@ describe("DrizzleContributionRepository errors", () => {
         id: "contribution-missing",
         memberId: "missing-member",
         contributionYear: 2026,
+        bankAttestationId: "attestation-missing",
+        source: "PILOT",
+        chainTx: null,
         annualAmount: 1_000_000,
         split: { memberCapitalBps: 7_000, capitalParticipationBps: 3_000 },
         recordedAt: 1_700_000_000_000,

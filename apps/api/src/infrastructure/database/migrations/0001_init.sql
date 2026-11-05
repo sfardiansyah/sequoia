@@ -84,10 +84,26 @@ CREATE TABLE IF NOT EXISTS contribution_years (
   CHECK (created_at >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS bank_attestations (
+  id text PRIMARY KEY,
+  member_id text NOT NULL REFERENCES members (id),
+  contribution_year integer NOT NULL REFERENCES contribution_years (year),
+  amount bigint NOT NULL,
+  bank_reference text NOT NULL UNIQUE CHECK (length(trim(bank_reference)) > 0),
+  actor text NOT NULL,
+  created_at bigint NOT NULL,
+  CHECK (amount > 0),
+  CHECK (actor ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
+  CHECK (created_at >= 0)
+);
+
 CREATE TABLE IF NOT EXISTS contributions (
   id text PRIMARY KEY,
   member_id text NOT NULL REFERENCES members (id),
   contribution_year integer NOT NULL REFERENCES contribution_years (year),
+  bank_attestation_id text NOT NULL UNIQUE REFERENCES bank_attestations (id),
+  source text NOT NULL DEFAULT 'PILOT' CHECK (source IN ('PILOT', 'CHAIN')),
+  chain_tx text,
   annual_amount bigint NOT NULL,
   member_capital_bps integer NOT NULL,
   capital_participation_bps integer NOT NULL,
@@ -102,20 +118,11 @@ CREATE TABLE IF NOT EXISTS contributions (
   CHECK (member_capital >= 0),
   CHECK (capital_participation >= 0),
   CHECK (member_capital + capital_participation = annual_amount),
-  CHECK (recorded_at >= 0)
-);
-
-CREATE TABLE IF NOT EXISTS bank_attestations (
-  id text PRIMARY KEY,
-  member_id text NOT NULL REFERENCES members (id),
-  contribution_year integer NOT NULL REFERENCES contribution_years (year),
-  amount bigint NOT NULL,
-  bank_reference text NOT NULL UNIQUE CHECK (length(trim(bank_reference)) > 0),
-  actor text NOT NULL,
-  created_at bigint NOT NULL,
-  CHECK (amount > 0),
-  CHECK (actor ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
-  CHECK (created_at >= 0)
+  CHECK (recorded_at >= 0),
+  -- The pilot writes PILOT with no chain reference; CHAIN is reserved for the
+  -- future indexer and must carry the transaction that proves the record.
+  CHECK (source <> 'PILOT' OR chain_tx IS NULL),
+  CHECK (chain_tx IS NULL OR length(trim(chain_tx)) > 0)
 );
 
 CREATE TABLE IF NOT EXISTS audit_events (

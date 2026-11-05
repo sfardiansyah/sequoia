@@ -3,6 +3,7 @@ export const AUDIT_ACTIONS = {
   kycRevoked: "KYC_REVOKED",
   contributionYearConfigured: "CONTRIBUTION_YEAR_CONFIGURED",
   memberAdmitted: "MEMBER_ADMITTED",
+  contributionRecorded: "CONTRIBUTION_RECORDED",
   bankAttestationCreated: "BANK_ATTESTATION_CREATED",
 } as const;
 
@@ -12,6 +13,7 @@ export const AUDIT_ENTITY_TYPES = {
   kycAttestation: "KYC_ATTESTATION",
   contributionYear: "CONTRIBUTION_YEAR",
   member: "MEMBER",
+  contribution: "CONTRIBUTION",
   bankAttestation: "BANK_ATTESTATION",
 } as const;
 

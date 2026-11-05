@@ -88,6 +88,7 @@ const record = defineCommand({
   args: {
     "member-id": { type: "string", required: true },
     "contribution-year": { type: "string", required: true },
+    "bank-attestation": { type: "string", required: true },
     "recorded-at": { type: "string" },
     json: { type: "boolean", default: false },
   },
@@ -97,13 +98,16 @@ const record = defineCommand({
 
     const recordedAt =
       args.recordedAt === undefined ? Date.now() : Number(args.recordedAt);
+    const actor = resolveOperator();
     const container = createCapitalContainer(databaseUrl);
 
     try {
       const result = await container.recordContribution.execute({
         memberId: args.memberId as string,
         contributionYear: Number(args.contributionYear),
+        bankAttestationId: args.bankAttestation as string,
         recordedAt,
+        actor,
       });
 
       if (!result.ok) {
@@ -117,6 +121,8 @@ const record = defineCommand({
         id: result.value.id,
         memberId: result.value.memberId,
         contributionYear: result.value.contributionYear,
+        bankAttestationId: result.value.bankAttestationId,
+        source: result.value.source,
         annualAmount: result.value.annualAmount,
         memberCapitalBps: result.value.memberCapitalBps,
         capitalParticipationBps: result.value.capitalParticipationBps,

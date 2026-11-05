@@ -13,6 +13,14 @@ import type { UnexpectedError } from "../../../shared/errors";
 
 export type ContributionId = string & { readonly __brand: "ContributionId" };
 
+export const ContributionSource = {
+  Pilot: "PILOT",
+  Chain: "CHAIN",
+} as const;
+
+export type ContributionSource =
+  (typeof ContributionSource)[keyof typeof ContributionSource];
+
 export type ContributionError =
   | { readonly code: "INVALID_MEMBER" }
   | { readonly code: "INVALID_YEAR" }
@@ -20,9 +28,16 @@ export type ContributionError =
   | { readonly code: "INVALID_TIME" }
   | { readonly code: "INVALID_SPLIT" }
   | { readonly code: "INVALID_SNAPSHOT" }
+  | { readonly code: "INVALID_ATTESTATION" }
+  | { readonly code: "INVALID_PROVENANCE" }
+  | { readonly code: "INVALID_ACTOR" }
   | { readonly code: "ALREADY_RECORDED" }
+  | { readonly code: "ATTESTATION_NOT_FOUND" }
+  | { readonly code: "ATTESTATION_MISMATCH" }
+  | { readonly code: "ATTESTATION_ALREADY_USED" }
   | { readonly code: "MEMBER_NOT_FOUND" }
   | { readonly code: "MEMBER_INACTIVE" }
+  | { readonly code: "MEMBER_NOT_APPROVED" }
   | { readonly code: "KYC_NOT_VERIFIED" }
   | { readonly code: "KYC_EXPIRED" }
   | { readonly code: "KYC_REVOKED" }
@@ -33,6 +48,13 @@ export class DuplicateContributionError extends Error {
   constructor() {
     super("Contribution already recorded");
     this.name = "DuplicateContributionError";
+  }
+}
+
+export class DuplicateBankAttestationError extends Error {
+  constructor() {
+    super("Bank attestation already funds a contribution");
+    this.name = "DuplicateBankAttestationError";
   }
 }
 
@@ -48,6 +70,9 @@ export class Contribution {
     readonly id: ContributionId,
     readonly memberId: string,
     readonly contributionYear: number,
+    readonly bankAttestationId: string,
+    readonly source: ContributionSource,
+    readonly chainTx: string | null,
     readonly annualAmount: IdrAmount,
     readonly memberCapitalBps: BasisPoints,
     readonly capitalParticipationBps: BasisPoints,
@@ -60,6 +85,9 @@ export class Contribution {
     id: string;
     memberId: string;
     contributionYear: number;
+    bankAttestationId: string;
+    source: ContributionSource;
+    chainTx: string | null;
     annualAmount: number;
     split: ContributionSplitBps;
     recordedAt: number;
@@ -69,6 +97,24 @@ export class Contribution {
 
     if (!Number.isInteger(input.contributionYear) || input.contributionYear <= 0) {
       return err({ code: "INVALID_YEAR" });
+    }
+
+    const bankAttestationId = input.bankAttestationId.trim();
+    if (!bankAttestationId) return err({ code: "INVALID_ATTESTATION" });
+
+    if (
+      input.source !== ContributionSource.Pilot &&
+      input.source !== ContributionSource.Chain
+    ) {
+      return err({ code: "INVALID_PROVENANCE" });
+    }
+
+    const chainTx = input.chainTx?.trim() ?? null;
+    if (
+      (input.source === ContributionSource.Pilot && chainTx !== null) ||
+      (input.source === ContributionSource.Chain && !chainTx)
+    ) {
+      return err({ code: "INVALID_PROVENANCE" });
     }
 
     const annualAmount = idr(input.annualAmount);
@@ -92,6 +138,9 @@ export class Contribution {
         input.id as ContributionId,
         memberId,
         input.contributionYear,
+        bankAttestationId,
+        input.source,
+        chainTx,
         annualAmount.value,
         memberCapitalBps.value,
         capitalParticipationBps.value,
@@ -106,6 +155,9 @@ export class Contribution {
     id: string;
     memberId: string;
     contributionYear: number;
+    bankAttestationId: string;
+    source: ContributionSource;
+    chainTx: string | null;
     annualAmount: number;
     memberCapitalBps: number;
     capitalParticipationBps: number;
@@ -117,6 +169,9 @@ export class Contribution {
       id: input.id,
       memberId: input.memberId,
       contributionYear: input.contributionYear,
+      bankAttestationId: input.bankAttestationId,
+      source: input.source,
+      chainTx: input.chainTx,
       annualAmount: input.annualAmount,
       split: {
         memberCapitalBps: input.memberCapitalBps,
@@ -142,5 +197,6 @@ export interface ContributionRepository {
     memberId: string,
     contributionYear: number,
   ): Promise<Contribution | null>;
+  findByBankAttestationId(id: string): Promise<Contribution | null>;
   save(contribution: Contribution): Promise<void>;
 }

@@ -20,8 +20,9 @@ Implemented:
   member;
 - contribution years and snapshots: fixed annual amount and split per year,
   active-member/current-KYC eligibility, applied split bps, resulting bigint
-  unit amounts, Postgres/PGlite repositories, and `sequoia contribution` CLI
-  commands;
+  unit amounts, a required unused bank attestation, a `PILOT` source marker,
+  and a `CONTRIBUTION_RECORDED` audit row committed with the snapshot,
+  Postgres/PGlite repositories, and `sequoia contribution` CLI commands;
 - mock bank attestations: one row per unique bank reference for a member and
   configured year, amount matched to the year's fixed annual amount, actor and
   timestamp recorded, and a `BANK_ATTESTATION_CREATED` audit row written in the
@@ -52,14 +53,14 @@ bun run sequoia kyc list --status REVOKED
 bun run sequoia audit list --actor ray --limit 20
 SEQUOIA_OPERATOR=ray bun run sequoia member admit --owner-pkh ... --attestation <attestation-id> --approval-ref BOARD-2026-004
 SEQUOIA_OPERATOR=ray bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000 --approval-ref BOARD-2026-001
-bun run sequoia contribution record --member-id <member-id> --contribution-year 2026
+SEQUOIA_OPERATOR=ray bun run sequoia contribution record --member-id <member-id> --contribution-year 2026 --bank-attestation <attestation-id>
 SEQUOIA_OPERATOR=ray bun run sequoia contribution attest --member-id <member-id> --contribution-year 2026 --amount 1000000 --bank-ref BANK-REF-001
 ```
 
-KYC, admission, `contribution year set`, and `contribution attest` refuse to run
-without `SEQUOIA_OPERATOR`, a lower-case slug naming the operator (`ray`,
-`board-ops`). Admission and `contribution year set` also require a board approval
-reference. Contribution recording still needs the operator requirement.
+KYC, admission, `contribution year set`, `contribution attest`, and
+`contribution record` refuse to run without `SEQUOIA_OPERATOR`, a lower-case slug
+naming the operator (`ray`, `board-ops`). Admission and `contribution year set`
+also require a board approval reference.
 
 `GET /health` returns the service name and version. `GET /.well-known/jwks.json`
 publishes the JWT verification keys.

@@ -20,6 +20,9 @@ function toRow(contribution: Contribution): ContributionInsert {
     id: contribution.id,
     memberId: contribution.memberId,
     contributionYear: contribution.contributionYear,
+    bankAttestationId: contribution.bankAttestationId,
+    source: contribution.source,
+    chainTx: contribution.chainTx,
     annualAmount: contribution.annualAmount,
     memberCapitalBps: contribution.memberCapitalBps,
     capitalParticipationBps: contribution.capitalParticipationBps,
@@ -34,6 +37,9 @@ function toDomain(row: ContributionRow): Contribution {
     id: row.id,
     memberId: row.memberId,
     contributionYear: row.contributionYear,
+    bankAttestationId: row.bankAttestationId,
+    source: row.source as Contribution["source"],
+    chainTx: row.chainTx ?? null,
     annualAmount: row.annualAmount,
     memberCapitalBps: row.memberCapitalBps,
     capitalParticipationBps: row.capitalParticipationBps,
@@ -76,6 +82,17 @@ export class DrizzleContributionRepository
           eq(contributions.contributionYear, contributionYear),
         ),
       )
+      .limit(1);
+
+    const row = rows[0];
+    return row ? toDomain(row) : null;
+  }
+
+  async findByBankAttestationId(id: string): Promise<Contribution | null> {
+    const rows = await this.db
+      .select()
+      .from(contributions)
+      .where(eq(contributions.bankAttestationId, id))
       .limit(1);
 
     const row = rows[0];

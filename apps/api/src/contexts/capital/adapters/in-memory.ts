@@ -4,6 +4,7 @@ import {
   type BankAttestationRepository,
 } from "../domain/bank-attestation";
 import {
+  DuplicateBankAttestationError,
   DuplicateContributionError,
   type Contribution,
   type ContributionRepository,
@@ -34,12 +35,17 @@ export class InMemoryContributionYearRepository
 export class InMemoryContributionRepository implements ContributionRepository {
   private readonly byId = new Map<string, Contribution>();
   private readonly byMemberYear = new Map<string, Contribution>();
+  private readonly byAttestation = new Map<string, Contribution>();
 
   async findByMemberAndYear(
     memberId: string,
     contributionYear: number,
   ): Promise<Contribution | null> {
     return this.byMemberYear.get(`${memberId}:${contributionYear}`) ?? null;
+  }
+
+  async findByBankAttestationId(id: string): Promise<Contribution | null> {
+    return this.byAttestation.get(id) ?? null;
   }
 
   async save(contribution: Contribution): Promise<void> {
@@ -51,9 +57,13 @@ export class InMemoryContributionRepository implements ContributionRepository {
     if (this.byMemberYear.has(key)) {
       throw new DuplicateContributionError();
     }
+    if (this.byAttestation.has(contribution.bankAttestationId)) {
+      throw new DuplicateBankAttestationError();
+    }
 
     this.byId.set(contribution.id, contribution);
     this.byMemberYear.set(key, contribution);
+    this.byAttestation.set(contribution.bankAttestationId, contribution);
   }
 }
 

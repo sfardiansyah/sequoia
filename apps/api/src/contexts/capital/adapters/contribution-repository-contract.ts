@@ -17,11 +17,16 @@ function contribution(input: {
   memberId?: string;
   contributionYear?: number;
   annualAmount?: number;
+  bankAttestationId?: string;
 }): Contribution {
+  const id = input.id ?? "contribution-1";
   const recorded = Contribution.record({
-    id: input.id ?? "contribution-1",
+    id,
     memberId: input.memberId ?? CONTRACT_MEMBER_ID,
     contributionYear: input.contributionYear ?? 2026,
+    bankAttestationId: input.bankAttestationId ?? `attestation-${id}`,
+    source: "PILOT",
+    chainTx: null,
     annualAmount: input.annualAmount ?? 1_000_000,
     split: { memberCapitalBps: 7_000, capitalParticipationBps: 3_000 },
     recordedAt: 1_700_000_000_000,
@@ -63,6 +68,49 @@ export function describeContributionRepository(
         expect(Number(found?.capitalParticipationBps)).toBe(3_000);
         expect(found?.memberCapital).toBe(700_000n);
         expect(found?.capitalParticipation).toBe(300_000n);
+        expect(found?.bankAttestationId).toBe("attestation-contribution-1");
+        expect(found?.source).toBe("PILOT");
+        expect(found?.chainTx).toBeNull();
+      } finally {
+        await close();
+      }
+    });
+
+    test("finds a contribution by bank attestation", async () => {
+      const { repository, close } = await create();
+
+      try {
+        await repository.save(contribution({ id: "contribution-1" }));
+
+        expect(
+          String(
+            (await repository.findByBankAttestationId(
+              "attestation-contribution-1",
+            ))?.id,
+          ),
+        ).toBe("contribution-1");
+        expect(
+          await repository.findByBankAttestationId("attestation-unknown"),
+        ).toBeNull();
+      } finally {
+        await close();
+      }
+    });
+
+    test("rejects the same bank attestation twice", async () => {
+      const { repository, close } = await create();
+
+      try {
+        await repository.save(contribution({ id: "contribution-1" }));
+        await expect(
+          repository.save(
+            contribution({
+              id: "contribution-2",
+              contributionYear: 2027,
+              bankAttestationId: "attestation-contribution-1",
+            }),
+          ),
+        ).rejects.toThrow();
       } finally {
         await close();
       }

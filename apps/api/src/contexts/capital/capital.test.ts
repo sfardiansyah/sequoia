@@ -20,16 +20,24 @@ import {
 } from "./domain/bank-attestation";
 import {
   Contribution,
+  DuplicateBankAttestationError,
   DuplicateContributionError,
   UnknownContributionMemberError,
   type ContributionRepository,
 } from "./domain/contribution";
-import { ContributionYear } from "./domain/contribution-year";
+import {
+  ContributionYear,
+  type ContributionYearRepository,
+} from "./domain/contribution-year";
+import type { BankAttestationRepository } from "./domain/bank-attestation";
 import type { ContributionEligibility } from "./domain/ports/contribution-eligibility";
 
 const contributionBase = {
   memberId: "member-1",
   contributionYear: 2026,
+  bankAttestationId: "attestation-1",
+  source: "PILOT" as const,
+  chainTx: null,
   annualAmount: 1_000_000,
   split: { memberCapitalBps: 7_000, capitalParticipationBps: 3_000 },
   recordedAt: 1_700_000_000_000,
@@ -38,7 +46,9 @@ const contributionBase = {
 const recordBase = {
   memberId: "member-1",
   contributionYear: 2026,
+  bankAttestationId: "attestation-1",
   recordedAt: 1_700_000_000_000,
+  actor: "ray",
 };
 
 const yearCommand = {
@@ -71,25 +81,52 @@ const allowAll: ContributionEligibility = {
   check: async () => null,
 };
 
+function attestationFixture(overrides: Partial<{
+  id: string;
+  memberId: string;
+  contributionYear: number;
+  amount: number;
+  bankReference: string;
+}> = {}) {
+  return unwrap(
+    BankAttestation.create({
+      id: overrides.id ?? "attestation-1",
+      memberId: overrides.memberId ?? "member-1",
+      contributionYear: overrides.contributionYear ?? 2026,
+      amount: overrides.amount ?? 1_000_000,
+      bankReference:
+        overrides.bankReference ??
+        `BANK-REF-${overrides.id ?? "attestation-1"}`,
+      actor: "ray",
+      createdAt: 1_700_000_000_000,
+    }),
+  );
+}
+
 function setup() {
   const years = new InMemoryContributionYearRepository();
   const contributions = new InMemoryContributionRepository();
+  const attestations = new InMemoryBankAttestationRepository();
   const audit = new InMemoryAuditLog();
   const unitOfWork = createInMemoryUnitOfWork(() => ({
     years,
-    attestations: new InMemoryBankAttestationRepository(),
+    attestations,
+    contributions,
     audit,
   }));
   return {
     years,
     contributions,
+    attestations,
     audit,
     configureYear: new ConfigureContributionYear(unitOfWork),
     record: new RecordAnnualContribution(
       contributions,
       years,
+      attestations,
       allowAll,
       new SequentialIdGenerator("contribution"),
+      unitOfWork,
     ),
   };
 }
@@ -97,6 +134,7 @@ function setup() {
 async function configured() {
   const container = setup();
   unwrap(await container.configureYear.execute(yearCommand));
+  await container.attestations.save(attestationFixture());
   return container;
 }
 
@@ -361,9 +399,67 @@ describe("Contribution", () => {
   });
 });
 
+function contributionRepo(
+  overrides: Partial<ContributionRepository> = {},
+): ContributionRepository {
+  return {
+    findByMemberAndYear: async () => null,
+    findByBankAttestationId: async () => null,
+    save: async () => {},
+    ...overrides,
+  };
+}
+
+function recordWith(input: {
+  contributions?: ContributionRepository;
+  years?: ContributionYearRepository;
+  attestations?: BankAttestationRepository;
+  eligibility?: ContributionEligibility;
+} = {}) {
+  const contributions = input.contributions ?? new InMemoryContributionRepository();
+  const years = input.years ?? new InMemoryContributionYearRepository();
+  const attestations =
+    input.attestations ?? new InMemoryBankAttestationRepository();
+  const audit = new InMemoryAuditLog();
+  const unitOfWork = createInMemoryUnitOfWork(() => ({
+    years,
+    attestations,
+    contributions,
+    audit,
+  }));
+
+  return {
+    audit,
+    record: new RecordAnnualContribution(
+      contributions,
+      years,
+      attestations,
+      input.eligibility ?? allowAll,
+      new SequentialIdGenerator("contribution"),
+      unitOfWork,
+    ),
+  };
+}
+
+async function configuredYears() {
+  const years = new InMemoryContributionYearRepository();
+  const attestations = new InMemoryBankAttestationRepository();
+  const contributions = new InMemoryContributionRepository();
+  const audit = new InMemoryAuditLog();
+  const unitOfWork = createInMemoryUnitOfWork(() => ({
+    years,
+    attestations,
+    contributions,
+    audit,
+  }));
+  unwrap(await new ConfigureContributionYear(unitOfWork).execute(yearCommand));
+  await attestations.save(attestationFixture());
+  return { years, attestations, contributions, audit, unitOfWork };
+}
+
 describe("RecordAnnualContribution", () => {
-  test("records the configured year parameters", async () => {
-    const { contributions, record } = await configured();
+  test("records the attestation, split, source, and audit row", async () => {
+    const { contributions, audit, record } = await configured();
     const contribution = unwrap(await record.execute(recordBase));
 
     expect(String(contribution.id)).toBe("contribution-1");
@@ -371,9 +467,25 @@ describe("RecordAnnualContribution", () => {
     expect(Number(contribution.memberCapitalBps)).toBe(7_000);
     expect(contribution.memberCapital).toBe(700_000n);
     expect(contribution.capitalParticipation).toBe(300_000n);
+    expect(contribution.bankAttestationId).toBe("attestation-1");
+    expect(contribution.source).toBe("PILOT");
+    expect(contribution.chainTx).toBeNull();
     expect(
       await contributions.findByMemberAndYear("member-1", 2026),
     ).toBe(contribution);
+    expect(
+      await contributions.findByBankAttestationId("attestation-1"),
+    ).toBe(contribution);
+
+    const events = await audit.list({ entityType: "CONTRIBUTION" });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actor: "ray",
+      action: "CONTRIBUTION_RECORDED",
+      entityType: "CONTRIBUTION",
+      entityId: "contribution-1",
+      detail: null,
+    });
   });
 
   test("rejects a year that is not configured", async () => {
@@ -389,6 +501,87 @@ describe("RecordAnnualContribution", () => {
     );
   });
 
+  test("rejects a missing bank attestation id", async () => {
+    const { record } = setup();
+    expectError(
+      await record.execute({ ...recordBase, bankAttestationId: "  " }),
+      "INVALID_ATTESTATION",
+    );
+  });
+
+  test("rejects an unknown bank attestation", async () => {
+    const container = setup();
+    unwrap(await container.configureYear.execute(yearCommand));
+
+    expectError(
+      await container.record.execute(recordBase),
+      "ATTESTATION_NOT_FOUND",
+    );
+  });
+
+  test("rejects an attestation for another member", async () => {
+    const container = await configured();
+    await container.attestations.save(
+      attestationFixture({ id: "attestation-2", memberId: "member-2" }),
+    );
+
+    expectError(
+      await container.record.execute({
+        ...recordBase,
+        bankAttestationId: "attestation-2",
+      }),
+      "ATTESTATION_MISMATCH",
+    );
+  });
+
+  test("rejects an attestation for another year", async () => {
+    const container = await configured();
+    await container.attestations.save(
+      attestationFixture({ id: "attestation-2", contributionYear: 2025 }),
+    );
+
+    expectError(
+      await container.record.execute({
+        ...recordBase,
+        bankAttestationId: "attestation-2",
+      }),
+      "ATTESTATION_MISMATCH",
+    );
+  });
+
+  test("rejects an attestation for another amount", async () => {
+    const container = await configured();
+    await container.attestations.save(
+      attestationFixture({ id: "attestation-2", amount: 900_000 }),
+    );
+
+    expectError(
+      await container.record.execute({
+        ...recordBase,
+        bankAttestationId: "attestation-2",
+      }),
+      "ATTESTATION_MISMATCH",
+    );
+  });
+
+  test("rejects an attestation already used by another contribution", async () => {
+    const container = await configured();
+    await container.contributions.save(
+      unwrap(
+        Contribution.record({
+          ...contributionBase,
+          id: "contribution-seed",
+          contributionYear: 2027,
+        }),
+      ),
+    );
+
+    expectError(
+      await container.record.execute(recordBase),
+      "ATTESTATION_ALREADY_USED",
+    );
+  });
+
   test("rejects a second contribution for the same member and year", async () => {
     const { record } = await configured();
     unwrap(await record.execute(recordBase));
@@ -396,54 +589,73 @@ describe("RecordAnnualContribution", () => {
     expectError(await record.execute(recordBase), "ALREADY_RECORDED");
   });
 
+  test("rejects an invalid operator before writing anything", async () => {
+    const { contributions, audit, record } = await configured();
+
+    expectError(
+      await record.execute({ ...recordBase, actor: "Ray Nord" }),
+      "INVALID_ACTOR",
+    );
+    expect(await contributions.findByMemberAndYear("member-1", 2026)).toBeNull();
+    expect(await audit.list({ entityType: "CONTRIBUTION" })).toEqual([]);
+  });
+
   test("maps a duplicate save to ALREADY_RECORDED", async () => {
-    const years = await configuredYears();
-    const record = new RecordAnnualContribution(
-      {
-        findByMemberAndYear: async () => null,
+    const base = await configuredYears();
+    const { record } = recordWith({
+      contributions: contributionRepo({
         save: async () => {
           throw new DuplicateContributionError();
         },
-      },
-      years,
-      allowAll,
-      new SequentialIdGenerator("contribution"),
-    );
+      }),
+      years: base.years,
+      attestations: base.attestations,
+    });
 
     expectError(await record.execute(recordBase), "ALREADY_RECORDED");
   });
 
+  test("maps a duplicate attestation save to ATTESTATION_ALREADY_USED", async () => {
+    const base = await configuredYears();
+    const { record } = recordWith({
+      contributions: contributionRepo({
+        save: async () => {
+          throw new DuplicateBankAttestationError();
+        },
+      }),
+      years: base.years,
+      attestations: base.attestations,
+    });
+
+    expectError(await record.execute(recordBase), "ATTESTATION_ALREADY_USED");
+  });
+
   test("maps a missing member save to MEMBER_NOT_FOUND", async () => {
-    const years = await configuredYears();
-    const record = new RecordAnnualContribution(
-      {
-        findByMemberAndYear: async () => null,
+    const base = await configuredYears();
+    const { record } = recordWith({
+      contributions: contributionRepo({
         save: async () => {
           throw new UnknownContributionMemberError();
         },
-      },
-      years,
-      allowAll,
-      new SequentialIdGenerator("contribution"),
-    );
+      }),
+      years: base.years,
+      attestations: base.attestations,
+    });
 
     expectError(await record.execute(recordBase), "MEMBER_NOT_FOUND");
   });
 
   test("returns UNEXPECTED when the repository fails", async () => {
-    const years = await configuredYears();
-    const contributions: ContributionRepository = {
-      findByMemberAndYear: async () => null,
-      save: async () => {
-        throw new Error("commit failed");
-      },
-    };
-    const record = new RecordAnnualContribution(
-      contributions,
-      years,
-      allowAll,
-      new SequentialIdGenerator("contribution"),
-    );
+    const base = await configuredYears();
+    const { record } = recordWith({
+      contributions: contributionRepo({
+        save: async () => {
+          throw new Error("commit failed");
+        },
+      }),
+      years: base.years,
+      attestations: base.attestations,
+    });
 
     expectError(await record.execute(recordBase), "UNEXPECTED");
   });
@@ -452,37 +664,22 @@ describe("RecordAnnualContribution", () => {
     for (const [failure, code] of [
       ["MEMBER_NOT_FOUND", "MEMBER_NOT_FOUND"],
       ["MEMBER_INACTIVE", "MEMBER_INACTIVE"],
+      ["MEMBER_NOT_APPROVED", "MEMBER_NOT_APPROVED"],
       ["KYC_NOT_VERIFIED", "KYC_NOT_VERIFIED"],
       ["KYC_EXPIRED", "KYC_EXPIRED"],
       ["KYC_REVOKED", "KYC_REVOKED"],
     ] as const) {
-      const years = await configuredYears();
-      const record = new RecordAnnualContribution(
-        {
-          findByMemberAndYear: async () => null,
-          save: async () => {},
-        },
-        years,
-        { check: async () => failure },
-        new SequentialIdGenerator("contribution"),
-      );
+      const base = await configuredYears();
+      const { record } = recordWith({
+        years: base.years,
+        attestations: base.attestations,
+        eligibility: { check: async () => failure },
+      });
 
       expectError(await record.execute(recordBase), code);
     }
   });
 });
-
-async function configuredYears() {
-  const years = new InMemoryContributionYearRepository();
-  const audit = new InMemoryAuditLog();
-  const unitOfWork = createInMemoryUnitOfWork(() => ({
-    years,
-    attestations: new InMemoryBankAttestationRepository(),
-    audit,
-  }));
-  unwrap(await new ConfigureContributionYear(unitOfWork).execute(yearCommand));
-  return years;
-}
 
 const bankAttestationBase = {
   id: "attestation-1",
@@ -530,9 +727,11 @@ function bankSetup() {
   const attestations = new InMemoryBankAttestationRepository();
   const members = new InMemoryMemberRepository();
   const audit = new InMemoryAuditLog();
+  const contributions = new InMemoryContributionRepository();
   const unitOfWork = createInMemoryUnitOfWork(() => ({
     years,
     attestations,
+    contributions,
     audit,
   }));
 
@@ -733,6 +932,7 @@ describe("CreateBankAttestation", () => {
             throw new DuplicateBankReferenceError();
           },
         },
+        contributions: new InMemoryContributionRepository(),
         audit: new InMemoryAuditLog(),
       })),
     );
@@ -756,6 +956,7 @@ describe("CreateBankAttestation", () => {
             throw new Error("commit failed");
           },
         },
+        contributions: new InMemoryContributionRepository(),
         audit: new InMemoryAuditLog(),
       })),
     );

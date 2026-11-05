@@ -8,6 +8,7 @@ import {
   MemberStatus,
   type MemberRepository,
 } from "../../../membership/domain/member";
+import { OwnerPkh } from "../../../membership/domain/owner-pkh";
 import type { ContributionEligibilityFailure } from "../../domain/ports/contribution-eligibility";
 import { MembershipContributionEligibility } from "./contribution-eligibility";
 
@@ -72,6 +73,26 @@ describe("MembershipContributionEligibility", () => {
 
     expect(await eligibility.check({ memberId: "member-1", at })).toBe(
       "MEMBER_INACTIVE",
+    );
+  });
+
+  test("rejects a member without a board approval reference", async () => {
+    const members: MemberRepository = {
+      findById: async () =>
+        ({
+          id: "member-1",
+          ownerPkh: OwnerPkh.parse(ownerPkhValue)!,
+          boardApprovalRef: "",
+          status: MemberStatus.Active,
+        }) as unknown as Member,
+      findByOwnerPkh: async () => null,
+      save: async () => {},
+    };
+    const kyc = new InMemoryKycEligibility().eligible(ownerPkhValue, "kyc-1");
+    const eligibility = new MembershipContributionEligibility(members, kyc);
+
+    expect(await eligibility.check({ memberId: "member-1", at })).toBe(
+      "MEMBER_NOT_APPROVED",
     );
   });
 
