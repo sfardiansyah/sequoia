@@ -57,9 +57,9 @@ async function setup() {
     INSERT INTO bank_attestations
       (id, member_id, contribution_year, amount, bank_reference, actor, created_at)
     VALUES
-      ('attestation-contribution-1', '${CONTRACT_MEMBER_ID}', 2026, 1000000,
+      ('attestation-contribution-1', ${CONTRACT_MEMBER_ID}, 2026, 1000000,
        'BANK-REF-1', 'ray', 1700000000000),
-      ('attestation-contribution-2', '${CONTRACT_MEMBER_ID}', 2027, 1000000,
+      ('attestation-contribution-2', ${CONTRACT_MEMBER_ID}, 2027, 1000000,
        'BANK-REF-2', 'ray', 1700000000000);
   `;
 
