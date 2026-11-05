@@ -2,6 +2,7 @@ import { ConfigureContributionYear } from "../contexts/capital/application/confi
 import { CreateBankAttestation } from "../contexts/capital/application/create-bank-attestation";
 import { RecordAnnualContribution } from "../contexts/capital/application/record-annual-contribution";
 import { DrizzleBankAttestationRepository } from "../contexts/capital/adapters/postgres/bank-attestation-repository";
+import { MembershipMemberDirectory } from "../contexts/capital/adapters/membership/member-directory";
 import { DrizzleContributionRepository } from "../contexts/capital/adapters/postgres/contribution-repository";
 import { DrizzleContributionYearRepository } from "../contexts/capital/adapters/postgres/contribution-year-repository";
 import { createPostgresContributionRepository } from "../contexts/capital/adapters/postgres/postgres-contribution-repository";
@@ -24,7 +25,7 @@ export function createCapitalContainer(databaseUrl: string) {
   return {
     configureContributionYear: new ConfigureContributionYear(unitOfWork),
     createBankAttestation: new CreateBankAttestation(
-      membership.memberRepository,
+      new MembershipMemberDirectory(membership.memberRepository),
       new UuidGenerator(),
       unitOfWork,
     ),

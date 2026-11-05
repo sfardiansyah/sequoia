@@ -15,6 +15,7 @@ import { DrizzleContributionRepository } from "./adapters/postgres/contribution-
 import { DrizzleContributionYearRepository } from "./adapters/postgres/contribution-year-repository";
 import * as schema from "./adapters/postgres/schema";
 import { ConfigureContributionYear } from "./application/configure-contribution-year";
+import { MembershipMemberDirectory } from "./adapters/membership/member-directory";
 import { CreateBankAttestation } from "./application/create-bank-attestation";
 import { RecordAnnualContribution } from "./application/record-annual-contribution";
 import type {
@@ -270,7 +271,7 @@ async function bankSetup() {
 
   return {
     createAttestation: new CreateBankAttestation(
-      membersWithMember(),
+      new MembershipMemberDirectory(membersWithMember()),
       new SequentialIdGenerator("attestation"),
       unitOfWork,
     ),

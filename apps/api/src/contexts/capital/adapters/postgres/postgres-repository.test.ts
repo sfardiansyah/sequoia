@@ -8,7 +8,9 @@ import {
 } from "../contribution-repository-contract";
 import {
   Contribution,
+  UnknownContributionAttestationError,
   UnknownContributionMemberError,
+  UnknownContributionYearError,
 } from "../../domain/contribution";
 import { DrizzleContributionRepository } from "./contribution-repository";
 import * as schema from "./schema";
@@ -70,9 +72,7 @@ describe("DrizzleContributionRepository errors", () => {
         id: "contribution-missing",
         memberId: "missing-member",
         contributionYear: 2026,
-        bankAttestationId: "attestation-missing",
-        source: "PILOT",
-        chainTx: null,
+        bankAttestationId: "attestation-contribution-1",
         annualAmount: 1_000_000,
         split: { memberCapitalBps: 7_000, capitalParticipationBps: 3_000 },
         recordedAt: 1_700_000_000_000,
@@ -82,6 +82,52 @@ describe("DrizzleContributionRepository errors", () => {
       await expect(
         repository.save(contribution.value),
       ).rejects.toThrow(UnknownContributionMemberError);
+    } finally {
+      await close();
+    }
+  });
+
+  test("maps a missing year to UnknownContributionYearError", async () => {
+    const { repository, close } = await setup();
+
+    try {
+      const contribution = Contribution.record({
+        id: "contribution-missing-year",
+        memberId: CONTRACT_MEMBER_ID,
+        contributionYear: 2099,
+        bankAttestationId: "attestation-contribution-1",
+        annualAmount: 1_000_000,
+        split: { memberCapitalBps: 7_000, capitalParticipationBps: 3_000 },
+        recordedAt: 1_700_000_000_000,
+      });
+      if (!contribution.ok) throw new Error(contribution.error.code);
+
+      await expect(
+        repository.save(contribution.value),
+      ).rejects.toThrow(UnknownContributionYearError);
+    } finally {
+      await close();
+    }
+  });
+
+  test("maps a missing bank attestation to UnknownContributionAttestationError", async () => {
+    const { repository, close } = await setup();
+
+    try {
+      const contribution = Contribution.record({
+        id: "contribution-missing-attestation",
+        memberId: CONTRACT_MEMBER_ID,
+        contributionYear: 2026,
+        bankAttestationId: "attestation-missing",
+        annualAmount: 1_000_000,
+        split: { memberCapitalBps: 7_000, capitalParticipationBps: 3_000 },
+        recordedAt: 1_700_000_000_000,
+      });
+      if (!contribution.ok) throw new Error(contribution.error.code);
+
+      await expect(
+        repository.save(contribution.value),
+      ).rejects.toThrow(UnknownContributionAttestationError);
     } finally {
       await close();
     }

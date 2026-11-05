@@ -2,7 +2,7 @@
 
 **Status:** Implemented (tickets 03–10)  
 **Scope:** Preprod synthetic pilot, not the co-op ledger  
-**Current repo state:** 234 unit tests and 44 Postgres integration tests, `bun run check` clean  
+**Current repo state:** 233 unit tests and 43 Postgres integration tests, `bun run check` clean  
 **Source:** Analysis of code vs `docs/plan/sequoia-plan.md`, ADRs 0001–0006, `GLOSSARY.md`, and `docs/legal/*`
 
 ## Problem Statement

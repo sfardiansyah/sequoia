@@ -10,10 +10,11 @@ import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
 import type { BankAttestationRepository } from "../domain/bank-attestation";
 import {
   Contribution,
-  ContributionSource,
   DuplicateBankAttestationError,
   DuplicateContributionError,
+  UnknownContributionAttestationError,
   UnknownContributionMemberError,
+  UnknownContributionYearError,
   type ContributionError,
   type ContributionRepository,
 } from "../domain/contribution";
@@ -110,23 +111,11 @@ export class RecordAnnualContribution {
     }
     if (existing) return err({ code: "ALREADY_RECORDED" });
 
-    let used: Contribution | null;
-    try {
-      used = await this.contributions.findByBankAttestationId(
-        bankAttestationId,
-      );
-    } catch (cause) {
-      return err(unexpected(cause));
-    }
-    if (used) return err({ code: "ATTESTATION_ALREADY_USED" });
-
     const contribution = Contribution.record({
       id: this.ids.next(),
       memberId,
       contributionYear: year.year,
       bankAttestationId,
-      source: ContributionSource.Pilot,
-      chainTx: null,
       annualAmount: year.annualAmount,
       split: year.split,
       recordedAt: command.recordedAt,
@@ -154,6 +143,12 @@ export class RecordAnnualContribution {
       }
       if (cause instanceof UnknownContributionMemberError) {
         return err({ code: "MEMBER_NOT_FOUND" });
+      }
+      if (cause instanceof UnknownContributionYearError) {
+        return err({ code: "YEAR_NOT_CONFIGURED" });
+      }
+      if (cause instanceof UnknownContributionAttestationError) {
+        return err({ code: "ATTESTATION_NOT_FOUND" });
       }
       return err(unexpected(cause));
     }

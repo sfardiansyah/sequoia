@@ -13,6 +13,7 @@ import {
 } from "./adapters/in-memory";
 import { ConfigureContributionYear } from "./application/configure-contribution-year";
 import { CreateBankAttestation } from "./application/create-bank-attestation";
+import { MembershipMemberDirectory } from "./adapters/membership/member-directory";
 import { RecordAnnualContribution } from "./application/record-annual-contribution";
 import {
   BankAttestation,
@@ -36,8 +37,6 @@ const contributionBase = {
   memberId: "member-1",
   contributionYear: 2026,
   bankAttestationId: "attestation-1",
-  source: "PILOT" as const,
-  chainTx: null,
   annualAmount: 1_000_000,
   split: { memberCapitalBps: 7_000, capitalParticipationBps: 3_000 },
   recordedAt: 1_700_000_000_000,
@@ -404,7 +403,6 @@ function contributionRepo(
 ): ContributionRepository {
   return {
     findByMemberAndYear: async () => null,
-    findByBankAttestationId: async () => null,
     save: async () => {},
     ...overrides,
   };
@@ -473,10 +471,6 @@ describe("RecordAnnualContribution", () => {
     expect(
       await contributions.findByMemberAndYear("member-1", 2026),
     ).toBe(contribution);
-    expect(
-      await contributions.findByBankAttestationId("attestation-1"),
-    ).toBe(contribution);
-
     const events = await audit.list({ entityType: "CONTRIBUTION" });
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
@@ -742,7 +736,7 @@ function bankSetup() {
     audit,
     configureYear: new ConfigureContributionYear(unitOfWork),
     createAttestation: new CreateBankAttestation(
-      members,
+      new MembershipMemberDirectory(members),
       new SequentialIdGenerator("attestation"),
       unitOfWork,
     ),
@@ -881,17 +875,6 @@ describe("CreateBankAttestation", () => {
     ).toEqual([]);
   });
 
-  test("rejects an amount that differs from the configured annual amount", async () => {
-    const { attestations, audit, createAttestation } = await bankConfigured();
-
-    expectError(
-      await createAttestation.execute({ ...bankCommand, amount: 900_000 }),
-      "AMOUNT_MISMATCH",
-    );
-    expect(await attestations.findById("attestation-1")).toBeNull();
-    expect(await audit.list({ entityType: "BANK_ATTESTATION" })).toEqual([]);
-  });
-
   test("rejects a duplicate bank reference", async () => {
     const { audit, createAttestation } = await bankConfigured();
     unwrap(await createAttestation.execute(bankCommand));
@@ -922,7 +905,7 @@ describe("CreateBankAttestation", () => {
   test("maps a duplicate save to BANK_REFERENCE_ALREADY_USED", async () => {
     const { years } = await bankConfigured();
     const duplicate = new CreateBankAttestation(
-      memberById(bankMember()),
+      new MembershipMemberDirectory(memberById(bankMember())),
       new SequentialIdGenerator("attestation"),
       createInMemoryUnitOfWork(() => ({
         years,
@@ -946,7 +929,7 @@ describe("CreateBankAttestation", () => {
   test("returns UNEXPECTED when the repository fails", async () => {
     const { years } = await bankConfigured();
     const failing = new CreateBankAttestation(
-      memberById(bankMember()),
+      new MembershipMemberDirectory(memberById(bankMember())),
       new SequentialIdGenerator("attestation"),
       createInMemoryUnitOfWork(() => ({
         years,

@@ -15,11 +15,9 @@ export type ContributionId = string & { readonly __brand: "ContributionId" };
 
 export const ContributionSource = {
   Pilot: "PILOT",
-  Chain: "CHAIN",
 } as const;
 
-export type ContributionSource =
-  (typeof ContributionSource)[keyof typeof ContributionSource];
+export type ContributionSource = "PILOT";
 
 export type ContributionError =
   | { readonly code: "INVALID_MEMBER" }
@@ -29,7 +27,6 @@ export type ContributionError =
   | { readonly code: "INVALID_SPLIT" }
   | { readonly code: "INVALID_SNAPSHOT" }
   | { readonly code: "INVALID_ATTESTATION" }
-  | { readonly code: "INVALID_PROVENANCE" }
   | { readonly code: "INVALID_ACTOR" }
   | { readonly code: "ALREADY_RECORDED" }
   | { readonly code: "ATTESTATION_NOT_FOUND" }
@@ -65,6 +62,20 @@ export class UnknownContributionMemberError extends Error {
   }
 }
 
+export class UnknownContributionYearError extends Error {
+  constructor() {
+    super("Contribution year not found");
+    this.name = "UnknownContributionYearError";
+  }
+}
+
+export class UnknownContributionAttestationError extends Error {
+  constructor() {
+    super("Contribution bank attestation not found");
+    this.name = "UnknownContributionAttestationError";
+  }
+}
+
 export class Contribution {
   private constructor(
     readonly id: ContributionId,
@@ -86,8 +97,6 @@ export class Contribution {
     memberId: string;
     contributionYear: number;
     bankAttestationId: string;
-    source: ContributionSource;
-    chainTx: string | null;
     annualAmount: number;
     split: ContributionSplitBps;
     recordedAt: number;
@@ -101,21 +110,6 @@ export class Contribution {
 
     const bankAttestationId = input.bankAttestationId.trim();
     if (!bankAttestationId) return err({ code: "INVALID_ATTESTATION" });
-
-    if (
-      input.source !== ContributionSource.Pilot &&
-      input.source !== ContributionSource.Chain
-    ) {
-      return err({ code: "INVALID_PROVENANCE" });
-    }
-
-    const chainTx = input.chainTx?.trim() ?? null;
-    if (
-      (input.source === ContributionSource.Pilot && chainTx !== null) ||
-      (input.source === ContributionSource.Chain && !chainTx)
-    ) {
-      return err({ code: "INVALID_PROVENANCE" });
-    }
 
     const annualAmount = idr(input.annualAmount);
     if (!annualAmount.ok) return err({ code: "INVALID_AMOUNT" });
@@ -139,8 +133,8 @@ export class Contribution {
         memberId,
         input.contributionYear,
         bankAttestationId,
-        input.source,
-        chainTx,
+        ContributionSource.Pilot,
+        null,
         annualAmount.value,
         memberCapitalBps.value,
         capitalParticipationBps.value,
@@ -165,13 +159,15 @@ export class Contribution {
     capitalParticipation: bigint;
     recordedAt: number;
   }): Result<Contribution, ContributionError> {
+    if (input.source !== ContributionSource.Pilot || input.chainTx !== null) {
+      return err({ code: "INVALID_SNAPSHOT" });
+    }
+
     const recorded = Contribution.record({
       id: input.id,
       memberId: input.memberId,
       contributionYear: input.contributionYear,
       bankAttestationId: input.bankAttestationId,
-      source: input.source,
-      chainTx: input.chainTx,
       annualAmount: input.annualAmount,
       split: {
         memberCapitalBps: input.memberCapitalBps,
@@ -197,6 +193,5 @@ export interface ContributionRepository {
     memberId: string,
     contributionYear: number,
   ): Promise<Contribution | null>;
-  findByBankAttestationId(id: string): Promise<Contribution | null>;
   save(contribution: Contribution): Promise<void>;
 }

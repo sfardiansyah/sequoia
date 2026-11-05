@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { execMigrations } from "./infrastructure/database/testing";
-import { describePilotFlow } from "./pilot-flow-contract";
+import { describePilotFlow } from "./testing/pilot-flow-contract";
 
 describePilotFlow("pilot harness flow (PGlite)", async () => {
   const client = new PGlite();

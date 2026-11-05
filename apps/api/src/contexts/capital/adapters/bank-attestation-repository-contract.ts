@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   BankAttestation,
+  DuplicateBankAttestationIdError,
   DuplicateBankReferenceError,
   type BankAttestationRepository,
 } from "../domain/bank-attestation";
@@ -86,7 +87,7 @@ export function describeBankAttestationRepository(
           repository.save(
             attestation({ id: "attestation-1", bankReference: "BANK-REF-002" }),
           ),
-        ).rejects.toThrow(DuplicateBankReferenceError);
+        ).rejects.toThrow(DuplicateBankAttestationIdError);
       } finally {
         await close();
       }

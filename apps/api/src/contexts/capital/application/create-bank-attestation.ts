@@ -7,13 +7,14 @@ import {
 import { unexpected } from "../../../shared/errors";
 import type { IdGenerator } from "../../../shared/id-generator";
 import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
-import type { MemberRepository } from "../../membership/domain/member";
 import {
   BankAttestation,
   DuplicateBankReferenceError,
   UnknownBankAttestationMemberError,
+  UnknownBankAttestationYearError,
   type BankAttestationError,
 } from "../domain/bank-attestation";
+import type { MemberDirectory } from "../domain/ports/member-directory";
 import type { CapitalWriteScope } from "./write-scope";
 
 export type CreateBankAttestationCommand = {
@@ -28,7 +29,7 @@ export type CreateBankAttestationCommand = {
 
 export class CreateBankAttestation {
   constructor(
-    private readonly members: MemberRepository,
+    private readonly members: MemberDirectory,
     private readonly ids: IdGenerator,
     private readonly unitOfWork: UnitOfWork<CapitalWriteScope>,
   ) {}
@@ -49,13 +50,13 @@ export class CreateBankAttestation {
       return err({ code: "INVALID_YEAR" });
     }
 
-    let member;
+    let exists: boolean;
     try {
-      member = await this.members.findById(memberId);
+      exists = await this.members.exists(memberId);
     } catch (cause) {
       return err(unexpected(cause));
     }
-    if (!member) return err({ code: "MEMBER_NOT_FOUND" });
+    if (!exists) return err({ code: "MEMBER_NOT_FOUND" });
 
     const id = this.ids.next();
 
@@ -77,12 +78,6 @@ export class CreateBankAttestation {
         });
         if (!attestation.ok) return attestation;
 
-        // The annual amount is fixed per year, so any other amount cannot fund
-        // a contribution. Reject it at the source.
-        if (attestation.value.amount !== year.annualAmount) {
-          return err({ code: "AMOUNT_MISMATCH" });
-        }
-
         await write.attestations.save(attestation.value);
         await write.audit.record({
           actor,
@@ -102,6 +97,9 @@ export class CreateBankAttestation {
       }
       if (cause instanceof UnknownBankAttestationMemberError) {
         return err({ code: "MEMBER_NOT_FOUND" });
+      }
+      if (cause instanceof UnknownBankAttestationYearError) {
+        return err({ code: "YEAR_NOT_CONFIGURED" });
       }
       return err(unexpected(cause));
     }

@@ -412,18 +412,19 @@ The notice must state, per purpose: basis, data categories, recipients, transfer
 3. **SHU:** Is a 25% capital share (32.3% of member distributions) “terbatas” under Pasal 5(1)(d)? Is total equity (`simpanan wajib` + `modal penyertaan`) the right capital weight? What happens in a zero-patronage year?
 4. **Statutory allocations:** We designate the 20% endowment as `dana cadangan` and 2.5% as a retained `dana pendidikan`. Confirm the AD wording, that the RA sets or confirms the amounts annually, and that the endowment does not settle exits.
 5. **Founder class:** Is a time-limited founder class with the same 70/30 split, an additional initial `modal penyertaan`, and vesting consistent with Pasal 19(4) and open membership? Is a 5-year `modal penyertaan` redemption lock enforceable? Can a resigned founder hold a non-voting claim?
-6. **Tokens:** Are `MEMBER`, `SW`, `PROJ`, `VOTE`, `CLAIM` "aset kripto"/"aset keuangan digital" under Law 4/2026 and POJK 27/2024 as amended? Does Pasal 221A(8) require exchange reporting for a non-transferable membership token? Is an issuer licence needed under the final offering POJK?
-7. **Securities/ITSK:** Is the project pool a collective investment or `efek`? Is the co-op an ITSK provider under Law 4/2026 Pasal 215? Does member-only, non-transferable status avoid a public offering?
-8. **Crypto holding:** May the co-op hold digital assets on its balance sheet, or only use the chain as a records layer? What custody/valuation/tax rules apply?
-9. **AML:** If the co-op is a PJK, what is the CDD/EDD standard for fixed annual member contributions, and who files STRs — the co-op, the bank, or the payment provider? What is the BO definition for a co-op?
-10. **Retention:** How should the 5-year AML retention interact with UU PDP erasure for KYC evidence, the member register, and on-chain commitments? What retention applies to co-op minutes and member registers?
-11. **Controller/processor:** Is Sumsub a processor or an independent controller for sanctions screening? Is the bank a controller? What DPA/joint-controller terms are required?
-12. **Secret ballot:** Does a nullifier plus choice commitment satisfy the co-op's governance record and the Rapat Anggota evidence requirements, and can the result be verified without linking a member to a choice? Is a member's vote "specific personal data" or a political opinion even when the ballot is secret?
-13. **On-chain revocation:** Can sanctions/PEP revocation status be published on-chain? What disclosure is permitted under AML tipping-off rules and UU PDP?
-14. **Cross-border/localisation:** If the co-op becomes a KSP, do OJK rules require local data centres or specific transfer approvals? What is the UU PDP "equal or higher" test for the UK/EU/Singapore/US?
-15. **Tax:** How are the annual contribution, member loan, `PROJ` distribution, endowment, and token issuance taxed?
-16. **Endowment:** Is a fund that absorbs members' project losses before their own capital permissible as a co-op instrument, and how is it presented in the AD and the annual financial statements? (ADR 0006 already flags this.)
-17. **Pengawas:** Who appoints the supervisory board, what records may it access, and how do its statutory powers interact with the on-chain audit trail?
+6. **Membership scope:** Does admitting only Indonesian natural persons (excluding a Koperasi, foreign individuals, and legal entities) satisfy the open-membership principle in Pasal 5(1)(a), and what should the AD say?
+7. **Tokens:** Are `MEMBER`, `SW`, `PROJ`, `VOTE`, `CLAIM` "aset kripto"/"aset keuangan digital" under Law 4/2026 and POJK 27/2024 as amended? Does Pasal 221A(8) require exchange reporting for a non-transferable membership token? Is an issuer licence needed under the final offering POJK?
+8. **Securities/ITSK:** Is the project pool a collective investment or `efek`? Is the co-op an ITSK provider under Law 4/2026 Pasal 215? Does member-only, non-transferable status avoid a public offering?
+9. **Crypto holding:** May the co-op hold digital assets on its balance sheet, or only use the chain as a records layer? What custody/valuation/tax rules apply?
+10. **AML:** If the co-op is a PJK, what is the CDD/EDD standard for fixed annual member contributions, and who files STRs — the co-op, the bank, or the payment provider? What is the BO definition for a co-op?
+11. **Retention:** How should the 5-year AML retention interact with UU PDP erasure for KYC evidence, the member register, and on-chain commitments? What retention applies to co-op minutes and member registers?
+12. **Controller/processor:** Is Sumsub a processor or an independent controller for sanctions screening? Is the bank a controller? What DPA/joint-controller terms are required?
+13. **Secret ballot:** Does a nullifier plus choice commitment satisfy the co-op's governance record and the Rapat Anggota evidence requirements, and can the result be verified without linking a member to a choice? Is a member's vote "specific personal data" or a political opinion even when the ballot is secret?
+14. **On-chain revocation:** Can sanctions/PEP revocation status be published on-chain? What disclosure is permitted under AML tipping-off rules and UU PDP?
+15. **Cross-border/localisation:** If the co-op becomes a KSP, do OJK rules require local data centres or specific transfer approvals? What is the UU PDP "equal or higher" test for the UK/EU/Singapore/US?
+16. **Tax:** How are the annual contribution, member loan, `PROJ` distribution, endowment, and token issuance taxed?
+17. **Endowment:** Is a fund that absorbs members' project losses before their own capital permissible as a co-op instrument, and how is it presented in the AD and the annual financial statements? (ADR 0006 already flags this.)
+18. **Pengawas:** Who appoints the supervisory board, what records may it access, and how do its statutory powers interact with the on-chain audit trail?
 
 ---
 

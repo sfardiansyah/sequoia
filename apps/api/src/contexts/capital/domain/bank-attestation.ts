@@ -15,7 +15,6 @@ export type BankAttestationError =
   | { readonly code: "INVALID_TIME" }
   | { readonly code: "MEMBER_NOT_FOUND" }
   | { readonly code: "YEAR_NOT_CONFIGURED" }
-  | { readonly code: "AMOUNT_MISMATCH" }
   | { readonly code: "BANK_REFERENCE_ALREADY_USED" }
   | UnexpectedError;
 
@@ -26,10 +25,24 @@ export class DuplicateBankReferenceError extends Error {
   }
 }
 
+export class DuplicateBankAttestationIdError extends Error {
+  constructor() {
+    super("Bank attestation id already used");
+    this.name = "DuplicateBankAttestationIdError";
+  }
+}
+
 export class UnknownBankAttestationMemberError extends Error {
   constructor() {
     super("Bank attestation member not found");
     this.name = "UnknownBankAttestationMemberError";
+  }
+}
+
+export class UnknownBankAttestationYearError extends Error {
+  constructor() {
+    super("Bank attestation contribution year not found");
+    this.name = "UnknownBankAttestationYearError";
   }
 }
 

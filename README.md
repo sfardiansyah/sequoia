@@ -39,7 +39,7 @@ Implemented:
   `/members/me`;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Test suite: 234 unit tests (`bun run check`, PGlite included) and 44 Postgres
+Test suite: 233 unit tests (`bun run check`, PGlite included) and 43 Postgres
 integration tests (`bun run test:integration`).
 
 The pilot is synthetic and preprod: no real IDR, no chain, and no real personal

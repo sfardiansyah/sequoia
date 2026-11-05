@@ -2,10 +2,13 @@ import { eq } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
   BankAttestation,
+  DuplicateBankAttestationIdError,
   DuplicateBankReferenceError,
   UnknownBankAttestationMemberError,
+  UnknownBankAttestationYearError,
   type BankAttestationRepository,
 } from "../../domain/bank-attestation";
+import { postgresError } from "../../../../shared/persistence/adapters/postgres/error";
 import * as schema from "./schema";
 import {
   bankAttestations,
@@ -45,15 +48,6 @@ function toDomain(row: BankAttestationRow): BankAttestation {
   return attestation.value;
 }
 
-function databaseCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-
-  const code = (error as { code?: unknown }).code;
-  if (typeof code === "string") return code;
-
-  return databaseCode((error as { cause?: unknown }).cause);
-}
-
 export class DrizzleBankAttestationRepository
   implements BankAttestationRepository
 {
@@ -72,18 +66,28 @@ export class DrizzleBankAttestationRepository
 
   async save(attestation: BankAttestation): Promise<void> {
     try {
-      const rows = await this.db
-        .insert(bankAttestations)
-        .values(toRow(attestation))
-        .onConflictDoNothing()
-        .returning({ id: bankAttestations.id });
-
-      if (rows.length === 0) throw new DuplicateBankReferenceError();
+      await this.db.insert(bankAttestations).values(toRow(attestation));
     } catch (cause) {
-      if (cause instanceof DuplicateBankReferenceError) throw cause;
-      if (databaseCode(cause) === "23503") {
-        throw new UnknownBankAttestationMemberError();
+      const { code, constraint } = postgresError(cause);
+
+      if (code === "23505") {
+        if (constraint === "bank_attestations_bank_reference_key") {
+          throw new DuplicateBankReferenceError();
+        }
+        if (constraint === "bank_attestations_pkey") {
+          throw new DuplicateBankAttestationIdError();
+        }
       }
+
+      if (code === "23503") {
+        if (constraint === "bank_attestations_member_id_fkey") {
+          throw new UnknownBankAttestationMemberError();
+        }
+        if (constraint === "bank_attestations_contribution_year_fkey") {
+          throw new UnknownBankAttestationYearError();
+        }
+      }
+
       throw cause;
     }
   }

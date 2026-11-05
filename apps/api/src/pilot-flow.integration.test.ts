@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { ensureMigrated } from "./infrastructure/database/testing";
-import { describePilotFlow } from "./pilot-flow-contract";
+import { describePilotFlow } from "./testing/pilot-flow-contract";
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const runIntegration = process.env.RUN_INTEGRATION_TESTS === "1";

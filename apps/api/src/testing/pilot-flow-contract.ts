@@ -1,34 +1,38 @@
 import { describe, expect, test } from "bun:test";
+
+// Test support: builds the pilot flow on one database handle. Production
+// wiring stays in `composition/`.
 import { MemberClass, type Result } from "@sequoia/shared";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import { createApp } from "./app";
-import type { AppConfig } from "./config";
-import { InMemoryNonceStore } from "./contexts/auth/adapters/in-memory-nonce-store";
-import { loadJwtKeys } from "./contexts/auth/adapters/jwt-keys";
-import { newJwtPrivateKey } from "./contexts/auth/adapters/jwt-test-keys";
-import { JwtTokenService } from "./contexts/auth/adapters/jwt-token-service";
-import { AuthService } from "./contexts/auth/application/auth-service";
-import { DrizzleBankAttestationRepository } from "./contexts/capital/adapters/postgres/bank-attestation-repository";
-import { DrizzleContributionRepository } from "./contexts/capital/adapters/postgres/contribution-repository";
-import { DrizzleContributionYearRepository } from "./contexts/capital/adapters/postgres/contribution-year-repository";
-import { MembershipContributionEligibility } from "./contexts/capital/adapters/membership/contribution-eligibility";
-import { ConfigureContributionYear } from "./contexts/capital/application/configure-contribution-year";
-import { CreateBankAttestation } from "./contexts/capital/application/create-bank-attestation";
-import { RecordAnnualContribution } from "./contexts/capital/application/record-annual-contribution";
+import { createApp } from "../app";
+import type { AppConfig } from "../config";
+import { InMemoryNonceStore } from "../contexts/auth/adapters/in-memory-nonce-store";
+import { loadJwtKeys } from "../contexts/auth/adapters/jwt-keys";
+import { newJwtPrivateKey } from "../contexts/auth/adapters/jwt-test-keys";
+import { JwtTokenService } from "../contexts/auth/adapters/jwt-token-service";
+import { AuthService } from "../contexts/auth/application/auth-service";
+import { DrizzleBankAttestationRepository } from "../contexts/capital/adapters/postgres/bank-attestation-repository";
+import { DrizzleContributionRepository } from "../contexts/capital/adapters/postgres/contribution-repository";
+import { DrizzleContributionYearRepository } from "../contexts/capital/adapters/postgres/contribution-year-repository";
+import { MembershipContributionEligibility } from "../contexts/capital/adapters/membership/contribution-eligibility";
+import { MembershipMemberDirectory } from "../contexts/capital/adapters/membership/member-directory";
+import { ConfigureContributionYear } from "../contexts/capital/application/configure-contribution-year";
+import { CreateBankAttestation } from "../contexts/capital/application/create-bank-attestation";
+import { RecordAnnualContribution } from "../contexts/capital/application/record-annual-contribution";
 import {
   DrizzleIssuerDirectory,
   DrizzleKycAttestationRepository,
-} from "./contexts/identity/adapters/postgres/kyc-attestation-repository";
-import { GetKycAttestation } from "./contexts/identity/application/get-kyc-attestation";
-import { IssueKycAttestation } from "./contexts/identity/application/issue-kyc-attestation";
-import { ListKycAttestations } from "./contexts/identity/application/list-kyc-attestations";
-import { IdentityKycEligibility } from "./contexts/membership/adapters/identity/kyc-eligibility";
-import { DrizzleMemberRepository } from "./contexts/membership/adapters/postgres/member-repository";
-import { PostgresMemberProfileReader } from "./contexts/membership/adapters/postgres/member-profile-reader";
-import { AdmitMember } from "./contexts/membership/application/admit-member";
-import { DrizzleAuditLog } from "./shared/audit/adapters/postgres/audit-log";
-import { UuidGenerator } from "./shared/id-generator";
-import { createDrizzleUnitOfWork } from "./shared/persistence/adapters/postgres/unit-of-work";
+} from "../contexts/identity/adapters/postgres/kyc-attestation-repository";
+import { GetKycAttestation } from "../contexts/identity/application/get-kyc-attestation";
+import { IssueKycAttestation } from "../contexts/identity/application/issue-kyc-attestation";
+import { ListKycAttestations } from "../contexts/identity/application/list-kyc-attestations";
+import { IdentityKycEligibility } from "../contexts/membership/adapters/identity/kyc-eligibility";
+import { DrizzleMemberRepository } from "../contexts/membership/adapters/postgres/member-repository";
+import { PostgresMemberProfileReader } from "../contexts/membership/adapters/postgres/member-profile-reader";
+import { AdmitMember } from "../contexts/membership/application/admit-member";
+import { DrizzleAuditLog } from "../shared/audit/adapters/postgres/audit-log";
+import { UuidGenerator } from "../shared/id-generator";
+import { createDrizzleUnitOfWork } from "../shared/persistence/adapters/postgres/unit-of-work";
 
 export type PilotFlowHarness = {
   readonly db: PgDatabase<PgQueryResultHKT, any>;
@@ -109,7 +113,7 @@ async function build(setup: () => Promise<PilotFlowHarness>) {
     ),
     configureYear: new ConfigureContributionYear(capitalUow),
     attest: new CreateBankAttestation(
-      members,
+      new MembershipMemberDirectory(members),
       new UuidGenerator(),
       capitalUow,
     ),

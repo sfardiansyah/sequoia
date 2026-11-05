@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS contributions (
   member_id text NOT NULL REFERENCES members (id),
   contribution_year integer NOT NULL REFERENCES contribution_years (year),
   bank_attestation_id text NOT NULL UNIQUE REFERENCES bank_attestations (id),
-  source text NOT NULL DEFAULT 'PILOT' CHECK (source IN ('PILOT', 'CHAIN')),
+  source text NOT NULL DEFAULT 'PILOT' CHECK (source = 'PILOT'),
   chain_tx text,
   annual_amount bigint NOT NULL,
   member_capital_bps integer NOT NULL,
@@ -119,10 +119,9 @@ CREATE TABLE IF NOT EXISTS contributions (
   CHECK (capital_participation >= 0),
   CHECK (member_capital + capital_participation = annual_amount),
   CHECK (recorded_at >= 0),
-  -- The pilot writes PILOT with no chain reference; CHAIN is reserved for the
-  -- future indexer and must carry the transaction that proves the record.
-  CHECK (source <> 'PILOT' OR chain_tx IS NULL),
-  CHECK (chain_tx IS NULL OR length(trim(chain_tx)) > 0)
+  -- The pilot writes PILOT with no chain reference. The column is reserved for
+  -- the future indexer; adding CHAIN values is a migration.
+  CHECK (chain_tx IS NULL)
 );
 
 CREATE TABLE IF NOT EXISTS audit_events (

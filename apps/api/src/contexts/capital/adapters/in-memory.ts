@@ -1,4 +1,5 @@
 import {
+  DuplicateBankAttestationIdError,
   DuplicateBankReferenceError,
   type BankAttestation,
   type BankAttestationRepository,
@@ -44,10 +45,6 @@ export class InMemoryContributionRepository implements ContributionRepository {
     return this.byMemberYear.get(`${memberId}:${contributionYear}`) ?? null;
   }
 
-  async findByBankAttestationId(id: string): Promise<Contribution | null> {
-    return this.byAttestation.get(id) ?? null;
-  }
-
   async save(contribution: Contribution): Promise<void> {
     if (this.byId.has(contribution.id)) {
       throw new DuplicateContributionError();
@@ -78,10 +75,10 @@ export class InMemoryBankAttestationRepository
   }
 
   async save(attestation: BankAttestation): Promise<void> {
-    if (
-      this.byId.has(attestation.id) ||
-      this.byReference.has(attestation.bankReference)
-    ) {
+    if (this.byId.has(attestation.id)) {
+      throw new DuplicateBankAttestationIdError();
+    }
+    if (this.byReference.has(attestation.bankReference)) {
       throw new DuplicateBankReferenceError();
     }
 
