@@ -38,11 +38,14 @@ CREATE TABLE IF NOT EXISTS members (
   id text PRIMARY KEY,
   owner_pkh text NOT NULL UNIQUE,
   kyc_attestation_id text NOT NULL,
+  board_approval_ref text NOT NULL CHECK (length(trim(board_approval_ref)) > 0),
+  approved_at bigint NOT NULL,
   member_class text NOT NULL CHECK (member_class IN ('STANDARD', 'FOUNDER')),
   status text NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE', 'EXITED')),
   joined_at bigint NOT NULL,
   FOREIGN KEY (kyc_attestation_id, owner_pkh)
-    REFERENCES kyc_attestations (id, subject_pkh)
+    REFERENCES kyc_attestations (id, subject_pkh),
+  CHECK (approved_at >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS auth_nonces (

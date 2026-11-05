@@ -20,6 +20,8 @@ function member(status: MemberStatus = MemberStatus.Active) {
     id: "member-1",
     ownerPkh: ownerPkhValue,
     kycAttestationId: "kyc-1",
+    boardApprovalRef: "board-2026-04",
+    approvedAt: 1_690_000_000_000,
     memberClass: "STANDARD",
     status,
     joinedAt: 1_690_000_000_000,

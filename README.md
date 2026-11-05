@@ -44,7 +44,7 @@ SEQUOIA_OPERATOR=ray bun run sequoia kyc revoke <attestation-id> --reason "..."
 bun run sequoia kyc list --expiring-within 30
 bun run sequoia kyc list --status REVOKED
 bun run sequoia audit list --actor ray --limit 20
-bun run sequoia member admit --owner-pkh ... --attestation <attestation-id>
+bun run sequoia member admit --owner-pkh ... --attestation <attestation-id> --approval-ref board-2026-04
 bun run sequoia contribution year set --contribution-year 2026 --annual-amount 1000000
 bun run sequoia contribution record --member-id <member-id> --contribution-year 2026
 ```

@@ -1,12 +1,14 @@
 export const AUDIT_ACTIONS = {
   kycIssued: "KYC_ISSUED",
   kycRevoked: "KYC_REVOKED",
+  memberAdmitted: "MEMBER_ADMITTED",
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
 
 export const AUDIT_ENTITY_TYPES = {
   kycAttestation: "KYC_ATTESTATION",
+  member: "MEMBER",
 } as const;
 
 export type AuditEntityType =

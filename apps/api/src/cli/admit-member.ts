@@ -1,6 +1,7 @@
 import { isMemberClass } from "@sequoia/shared";
 import { defineCommand } from "citty";
 import { createMembershipContainer } from "../composition/membership";
+import { resolveOperator } from "./operator";
 
 export default defineCommand({
   meta: {
@@ -10,6 +11,7 @@ export default defineCommand({
   args: {
     "owner-pkh": { type: "string", required: true },
     attestation: { type: "string", required: true },
+    "approval-ref": { type: "string", required: true },
     "member-class": { type: "string", default: "STANDARD" },
     "joined-at": { type: "string" },
     json: { type: "boolean", default: false },
@@ -17,6 +19,8 @@ export default defineCommand({
   async run({ args }) {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL is required");
+
+    const actor = resolveOperator();
 
     const memberClass = args.memberClass as string;
     if (!isMemberClass(memberClass)) {
@@ -35,9 +39,11 @@ export default defineCommand({
       const result = await admitMember.execute({
         ownerPkh: args.ownerPkh as string,
         kycAttestationId: args.attestation as string,
+        boardApprovalRef: args.approvalRef as string,
         memberClass,
         joinedAt,
         now: Date.now(),
+        actor,
       });
 
       if (!result.ok) {
@@ -53,6 +59,7 @@ export default defineCommand({
         id: result.value.id,
         ownerPkh: result.value.ownerPkh.value,
         kycAttestationId: result.value.kycAttestationId,
+        boardApprovalRef: result.value.boardApprovalRef,
         status: result.value.status,
       };
 
@@ -60,7 +67,7 @@ export default defineCommand({
         console.log(JSON.stringify(output));
       } else {
         console.log(
-          `Admitted ${output.id} (${output.ownerPkh}) with ${output.kycAttestationId}`,
+          `Admitted ${output.id} (${output.ownerPkh}) with ${output.kycAttestationId} under ${output.boardApprovalRef}`,
         );
       }
     } finally {

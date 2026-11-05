@@ -14,6 +14,8 @@ export type MemberRepositoryHarness = {
 export const CONTRACT_SUBJECT_PKH =
   "18987c1612069d4080a0eb247820cb987fea81bddeaafdd41f996281";
 export const CONTRACT_ATTESTATION_ID = "kyc-contract-1";
+export const CONTRACT_BOARD_APPROVAL_REF = "board-2026-04";
+export const CONTRACT_APPROVED_AT = 1_700_000_000_000;
 
 function admitted(
   id = "member-1",
@@ -26,6 +28,8 @@ function admitted(
     id,
     ownerPkh: parsed,
     kycAttestationId: CONTRACT_ATTESTATION_ID,
+    boardApprovalRef: CONTRACT_BOARD_APPROVAL_REF,
+    approvedAt: CONTRACT_APPROVED_AT,
     memberClass: "STANDARD",
     joinedAt: 1_700_000_000_000,
   });
@@ -76,12 +80,16 @@ export function describeMemberRepository(
         expect((await repository.findById(member.id))?.id).toBe(member.id);
         expect(found?.status).toBe(MemberStatus.Active);
         expect(found?.kycAttestationId).toBe(CONTRACT_ATTESTATION_ID);
+        expect(found?.boardApprovalRef).toBe(CONTRACT_BOARD_APPROVAL_REF);
+        expect(found?.approvedAt).toBe(CONTRACT_APPROVED_AT);
         expect(found?.joinedAt).toBe(member.joinedAt);
 
         const updated = Member.rehydrate({
           id: member.id,
           ownerPkh: member.ownerPkh.value,
           kycAttestationId: member.kycAttestationId,
+          boardApprovalRef: member.boardApprovalRef,
+          approvedAt: member.approvedAt,
           memberClass: member.memberClass,
           status: MemberStatus.Exited,
           joinedAt: member.joinedAt,

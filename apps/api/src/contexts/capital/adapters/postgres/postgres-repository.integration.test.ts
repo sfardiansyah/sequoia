@@ -34,9 +34,11 @@ async function setup() {
   `;
   await client`
     INSERT INTO members
-      (id, owner_pkh, kyc_attestation_id, member_class, status, joined_at)
+      (id, owner_pkh, kyc_attestation_id, board_approval_ref, approved_at,
+       member_class, status, joined_at)
     VALUES (
       ${CONTRACT_MEMBER_ID}, ${memberPkh}, ${attestationId},
+      'board-2026-04', 1700000000000,
       'STANDARD', 'ACTIVE', 1700000000000
     )
   `;
