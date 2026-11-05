@@ -8,7 +8,7 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Milestone 17: Pilot boundary and audit foundation.
+Pilot harness MVP (tickets 03–10).
 
 Implemented:
 
@@ -29,14 +29,26 @@ Implemented:
   same transaction;
 - founder vesting: 50% at year 4 and 50% at year 5;
 - Elysia API; membership domain, Postgres repository, migrations, citty CLI, CIP-30 auth with durable nonces, EdDSA JWT claims with `kid`, public JWKS, package-based auth rate limiting, and `/members/me` with the member's KYC block and contribution summary;
-- identity context with manual KYC attestations: issuers, expiry, revocation,
-  renewal, and an admission gate that requires a valid attestation and a board
-  approval reference (standard members only);
+- identity context with manual KYC attestations: issuers, expiry, structured
+  revocation reason codes, an optional `retain_until` marker, renewal, and an
+  admission gate that requires a valid attestation and a board approval
+  reference (standard members only). Evidence pointers stay database-only and
+  never appear in CLI or API output;
+- one end-to-end pilot flow on PGlite and Postgres: KYC issue → board-approved
+  admission → contribution year → mock bank attestation → contribution →
+  `/members/me`;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
+Test suite: 234 unit tests (`bun run check`, PGlite included) and 44 Postgres
+integration tests (`bun run test:integration`).
+
+The pilot is synthetic and preprod: no real IDR, no chain, and no real personal
+data. Its rows are provisional, not the co-op ledger. See
+`docs/plan/sequoia-pilot-mvp/`, ADR 0004's pilot-exception section, and ADR 0007.
+
 Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, the full
-capital context beyond contribution years, snapshots, and bank attestations, the
-governance context, web app.
+capital context beyond contribution years, snapshots, and bank attestations,
+distributions, exits, the governance context, and the web app.
 
 ## Commands
 

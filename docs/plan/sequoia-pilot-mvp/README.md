@@ -14,7 +14,7 @@ pilot-exception section and ADR 0007.
 
 - **M17: Pilot boundary + audit** — shipped tickets 01 and 02 (closed).
 - **M18: Audit transaction scope** — shipped ticket 11 (closed).
-- **Pilot harness MVP** — tickets 03–10, the remaining pilot work.
+- **Pilot harness MVP** — shipped tickets 03–10 (closed).
 
 ## Finding the frontier
 

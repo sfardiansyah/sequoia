@@ -1,8 +1,8 @@
 # Sequoia pilot harness MVP
 
-**Status:** Draft for handoff  
+**Status:** Implemented (tickets 03–10)  
 **Scope:** Preprod synthetic pilot, not the co-op ledger  
-**Current repo state:** Milestone 18 (audit transaction scope), `bun run check` clean  
+**Current repo state:** 234 unit tests and 44 Postgres integration tests, `bun run check` clean  
 **Source:** Analysis of code vs `docs/plan/sequoia-plan.md`, ADRs 0001–0006, `GLOSSARY.md`, and `docs/legal/*`
 
 ## Problem Statement
@@ -86,7 +86,7 @@ No chain, real money, real KYC provider, distribution, exit, founder extra capit
 
 ### Milestone position
 
-- Milestone 18 is complete: audit and domain writes share one transaction.
+- Tickets 03–10 are implemented on the pilot integration branch.
 - This pilot track is a bounded exception, not the next product milestone.
 - After the pilot, return to the product plan. ADR 0004 still says contracts come first for the real product; this pilot must not become the authoritative ledger.
 - The next product milestone remains Aiken config/membership (M1), then governance, treasury, distribution, and exit.

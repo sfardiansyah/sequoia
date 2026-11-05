@@ -16,7 +16,7 @@ Sources are primary unless marked. Source keys `[S#]` resolve in §9; plan/ADR c
 | Surplus: 25% capital key | **Counsel; materially improved** | The split is now 20% endowment (`dana cadangan`) / 2.5% education / 52.5% patronage / 25% capital. Capital is 32.3% of member distributions, not 50%, and there is a `pendidikan perkoperasian` line. The zero-patronage case still makes the only member distribution capital-based, and “terbatas” has no statutory number. [S1: Pasal 5(1)(c)–(d), 45(2)–(3)] | Counsel opinion on 25% and 2.5%; gate zero-patronage distributions; confirm the education fund is retained and restricted. |
 | Founder class and 5-year lock | **Counsel question** | No explicit prohibition on classes; Pasal 19(4) requires equal rights "sebagaimana diatur dalam Anggaran Dasar", and Pasal 24(3) preserves one vote. The lock is enforceable, if at all, as a capital-redemption lock, not a ban on resignation. Pasal 18(2) is for associate members, not founders. [S1: 18(2), 19(4), 24(3)] | Put a time-limited founder class, vesting, deferred claim, and sunset in the AD. Do not give extra votes. |
 | Token / crypto characterisation | **Needs change / counsel** | Non-transferability reduces, but does not decide, whether the tokens are `aset kripto`/`aset keuangan digital`. Law 4/2026 gives OJK licensing categories and adds exchange/trading-provider rules; whether those reach a non-transferable membership token is unverified. POJK 23/2025 confirms the trading POJK does not regulate offerings; a draft offering POJK is pending. [S4: 221A; S6: 4(2); S7] | Obtain a token-characterisation opinion. Do not trade, market, or use the tokens as payment. Monitor the final offering POJK and PADK 3/2026. |
-| Privacy architecture | **Blocker** | The design puts PKH, balances, votes, KYC expiry, and revocation status on a public chain; votes are public by default; proposal metadata goes to public IPFS; `member_commitment` is unspecified and a plain hash of NIK is brute-forceable. Erasure is not designed. [Plan §3.9, §4.5, §6.3, §7.2; ADR 0002] | New ADR 0007: no personal data on-chain; keyed commitments; secret ballot; off-chain mapping; DPIA before pilot. |
+| Privacy architecture | **Partially resolved; contracts and DPIA pending** | ADR 0007 and the updated plan remove public votes (nullifier + choice commitment), keep KYC at a keyed commitment, and keep bank references off-chain. The contracts are not built, `member_commitment` construction is still unspecified, and erasure is not designed. [Plan §3.9, §4.5, §6.3, §7.2; ADR 0007] | Implement ADR 0007; specify the commitment and salt custody; DPIA before real member data. |
 | UU PDP program | **Blocker before pilot** | §2.3 asserts "consent" and "PDP Law compliance" but there is no lawful basis per purpose, retention schedule, DPO, DPIA, breach runbook, DSAR procedure, processor DPA, transfer assessment, or privacy notice. [Plan §2.3; ADR 0002] | Build the program in §6–§7 before real member data. |
 | GDPR | **Not in scope today; not uniformly stricter** | A closed Indonesian co-op with Indonesian members is likely outside Art 3. EU members, EU targeting, or monitoring EU users can bring it in. GDPR is more prescriptive and has larger administrative fines; UU PDP is stricter on deadlines, consent form, recording, and criminal liability. [S15; S17] | Document the Art 3 assessment. Adopt GDPR as a design baseline, not as a substitute for UU PDP. |
 | AML/CFT | **Conditional; lower under this design** | A `koperasi yang melakukan kegiatan simpan pinjam` is a reporting party: CDD, 5-year retention, STR/goAML, monitoring. `simpanan wajib` alone is own capital, not simpan-pinjam; the main business is projects, not lending. If the co-op does not lend member funds or take withdrawable savings, it likely is not a PJK on this ground. The plan still has KYC but no AML program. [S10: 17(1)(a)(13), 18, 21(2); S11] | Confirm no lending/withdrawable-savings trigger; if none, keep CDD through the bank/provider and document the conclusion. If a PJK, build the full AML program before IDR. |
@@ -148,10 +148,11 @@ The statute says:
 | KYC via Privy | Co-op controller; Privy processor (verify) | NIK, name, address, DOB, selfie/biometric, passport, sanction/PEP result | Specific data; no DPA; retention; provider sub-processors; cross-border if any. |
 | AML/sanctions via Sumsub | Co-op controller; Sumsub processor **or controller/joint controller** for its own screening | Identity, sanctions/PEP, risk score | Role is unverified; if Sumsub determines purposes/retention, it is a controller, not a processor. |
 | Bank/payment (Xendit/Midtrans/Flip, bank) | Bank is a controller for its account/AML; payment provider may be processor for initiation, controller for its own AML | Name, account, amount, reference | No DPA/role allocation; no notice. |
+| Pilot contribution records (`contribution_years`, `contributions`, `bank_attestations`) | Co-op controller | Member id, contribution year, split amounts, mock bank reference, operator, timestamps | Provisional off-chain pilot rows; never in another member's profile or a public dashboard; bank references never in audit detail. |
 | Cloud/S3/R2 evidence store | Processor | KYC documents, selfies, case files | Encryption/key management/access/retention; region/transfer. |
 | Cardano chain | Co-op as issuer/controller; node operators are not processors | PKH, member_id, balances, votes, KYC expiry/revocation | Public, immutable, linkable; no DPA possible with node operators. |
 | IPFS | Co-op controller; pinning provider processor; network participants not processors | Proposal docs, potentially names/invoices | Public, permanent, replicated; no deletion. |
-| Public dashboard | Co-op controller | Aggregates; per-member balances if shown | Re-identification in small groups. |
+| Public dashboard | Co-op controller | Aggregates only; never per-member balances, votes, KYC level, or identity | Re-identification in small groups. |
 | Indexer logs / Sentry | Processor(s) | Addresses, IPs, request metadata | Retention; log scrubbing; transfer. |
 
 ### 3.2 Obligations
@@ -163,7 +164,7 @@ The statute says:
 | Specific data | KYC collects NIK, biometrics, passport, financial data. | No heightened controls or DPIA. [S12: Pasal 4(2)] | Classify; restrict access; DPIA; retention. |
 | Accuracy / correction | No procedure. | 3×24h correction duty; on-chain data cannot be corrected. [S12: Pasal 29–30] | Off-chain source of truth; correction workflow; on-chain versioning. |
 | Purpose limitation | On-chain data is reusable by anyone. | Public chain enables secondary use; no technical limit. [S12: Pasal 27–28] | Minimise; no PII on-chain; notice. |
-| Retention | No schedule. ADR 0002 says "retention is the exposure" but sets no period. | AML 5 years; PDP deletion; member register; tax; backups. [S1: 17(2); S10: 21(2); S12: 16(2)(g), 42–44] | Retention matrix + deletion jobs + legal hold. |
+| Retention | No schedule. ADR 0002 says "retention is the exposure" but sets no period; `kyc_attestations.retain_until` records an optional date and nothing acts on it. | AML 5 years; PDP deletion; member register; tax; backups. [S1: 17(2); S10: 21(2); S12: 16(2)(g), 42–44] | Retention matrix + deletion jobs + legal hold. |
 | Access / correction | Mentioned in §2.3; no procedure. | 3×24h deadline. [S12: Pasal 30, 32] | DSAR SOP; identity verification; log. |
 | Erasure / destruction | No procedure. | On-chain immutability; 3×24h? (no explicit deadline for erasure, but must act). [S12: Pasal 8, 43–45] | Design for unlinkability; delete off-chain; explain limits. |
 | Restriction / objection | Not addressed. | 3×24h. [S12: Pasal 41] | Workflow and system flags. |
@@ -259,7 +260,7 @@ If GDPR applies, Art 27 requires an EU representative (unless the narrow exempti
 | `member_commitment` | Yes (plan §6.3) | **Yes if the co-op holds the salt/key; may become non-personal if truly destroyed.** | A plain hash of NIK is brute-forceable; unsalted hashes are generally insufficient for public chains. [S16] |
 | KYC level, expiry, `revoked` | Yes | **Yes**, and revocation may reveal sanctions/PEP status. | Linkable to the member; sensitive in context. [S16] |
 | `SW` / `PROJ` balances | Yes | **Yes**: financial data, a specific category under UU PDP. | Public chain exposes each member's position. [S12: Pasal 4(2)(f)] |
-| Vote choice + `member_id` | Yes | **Yes**; potentially sensitive. | Links a member to a governance choice; public by default enables coercion. [S12: Pasal 4(2); S15: Art 9] |
+| Vote choice + `member_id` | Yes | **Yes**; potentially sensitive. | The plan now carries neither on chain (ADR 0007); the contract must enforce the nullifier and choice commitment. Linking a member to a choice enables coercion. [S12: Pasal 4(2); S15: Art 9] |
 | Merkle root over `(member_id, weights)` | Yes | **Yes if the leaves/salt are linkable; may be unlinkable after deletion.** | A commitment is only as anonymous as the off-chain data and salt. [S16] |
 | Proposal metadata on IPFS | Yes (URI/hash) | **Yes if the content includes names, invoices, recipients, beneficiaries.** | Public, content-addressed, replicated; no deletion. [S16] |
 | Dashboard aggregates | No | **No if k-anonymous; yes if small cells.** | Re-identification in a 10–30 member pilot. [S16] |
@@ -295,7 +296,7 @@ If the co-op holds the key and salt, the commitment is personal data in its hand
 
 ### 5.4 Voting
 
-The plan makes votes public by default and defers commit-reveal. [Plan §3.9] That is a privacy-by-default problem: it links a named member to a choice, enables coercion, and creates a permanent public political/economic record. Commit-reveal only moves the disclosure; it does not erase it.
+The plan previously made votes public by default. ADR 0007 replaces that with a nullifier and a choice commitment; the contracts are not built. A public ballot would link a named member to a choice, enable coercion, and create a permanent public political/economic record. Commit-reveal only moves the disclosure; it does not erase it.
 
 Recommendation:
 - Default to a **secret ballot**: on-chain `VOTE` datum contains a proposal ID, a nullifier (proof the voter is a member and has not voted), and a commitment to the choice; no `member_id`, no `choice`, no weight.
@@ -358,22 +359,22 @@ The DPIA must cover: purposes and lawful bases; data categories and flows; on-ch
 
 | # | Gap | Repo evidence | Action |
 |---|---|---|---|
-| P1 | `evidence_ref` is an unverified pointer, possibly containing PII; no encryption/access/retention. | ADR 0002; Migration `evidence_ref`; Plan §7.2 | Classify; encrypt; least privilege; audit; retention. |
-| P2 | `subject_pkh` is stored and linkable; `revoke_reason` is free text. | Migration `kyc_attestations`; `members.owner_pkh` | Treat as personal data; restrict; retention; no free-text sensitive reasons. |
+| P1 | `evidence_ref` is an unverified pointer, possibly containing PII; no encryption/access/retention. The CLI and API no longer return it (ticket 03); the database is the only read path. | ADR 0002; Migration `evidence_ref`; Plan §7.2 | Classify; encrypt; least privilege; audit; retention. |
+| P2 | `subject_pkh` is stored and linkable; revocation now stores one of four reason codes, not free text (ticket 03). | Migration `kyc_attestations`; `members.owner_pkh` | Treat as personal data; restrict; retention; keep the reason-code set closed. |
 | P3 | `member_commitment` construction unspecified; plain hash risk. | Plan §2.3, §6.3; ADR 0002 | Spec: HMAC + per-member salt + KMS; test vectors. |
-| P4 | Votes public by default; `VoteDatum` includes `member_id`/`choice`. | Plan §3.9, §6.3 | Secret ballot; nullifier; no member_id/choice; opt-in only. |
+| P4 | Plan §3.9 and `VoteDatum` now use a nullifier and a choice commitment (ADR 0007); the contracts are not built, so enforcement is pending. | Plan §3.9, §6.3 | Secret ballot; nullifier; no member_id/choice; opt-in only. |
 | P5 | Proposal metadata on public IPFS. | Plan §4.3, §7.2 | No-PII schema; encrypted off-chain; hash on-chain. |
 | P6 | Dashboard/chain exposes balances and coverage. | Plan §4.10, §5.5, §6.3 | Aggregate; k≥5; commitments/permissioned chain; notice. |
 | P7 | No processor DPAs or role analysis (Privy, Sumsub, bank/payment, cloud, IPFS, indexer, Sentry). | Plan §2.3, §7.2, §7.9 | DPAs; sub-processor list; controller/processor mapping. |
 | P8 | No cross-border transfer assessment. | Plan §7.2, §7.9 | UU PDP Pasal 56 assessment; SCCs/TIA; no PII on public nodes. |
-| P9 | No retention schedule; AML 5 years vs PDP deletion. | ADR 0002; Migration; UU 8/2010 Pasal 21(2) | Retention matrix; legal hold; deletion jobs; salt/key destruction. |
+| P9 | No retention schedule; AML 5 years vs PDP deletion. `kyc_attestations.retain_until` records an optional date but no job acts on it (ticket 03). | ADR 0002; Migration; UU 8/2010 Pasal 21(2) | Retention matrix; legal hold; deletion jobs; salt/key destruction. |
 | P10 | No privacy notice, DSAR, breach runbook, consent register. | Plan §2.3 | Indonesian notice; 3×24h SOPs; templates; training. |
 | P11 | No DPIA, DPO/privacy officer. | Plan §2.3 | DPIA before pilot; appoint officer. |
 | P12 | No evidence-store key management/audit log. | Plan §7.2; Migration | KMS, envelope encryption, rotation, access logs, backups. |
 | P13 | ESO registration and audit trail not addressed. | Plan §7.2 | Register; implement PP 71/2019 audit trail. |
-| P14 | KYC revocation does not freeze membership. | ADR 0002; Plan §4.9 | Gate voting/contributions/exit on valid attestation; legal review. |
+| P14 | Contribution recording is gated on an active member, a valid KYC attestation, and a matching bank attestation (ticket 07); revoked or expired KYC does not freeze an existing member. Voting and exit gates are still pending. | ADR 0002; Plan §4.9; ticket 07 | Keep the contribution gate; add voting and exit gates; legal review. |
 | P15 | Member register/beneficial ownership not mapped. | Plan §3.1; Migration | Off-chain register; BO register; statutory access. |
-| P16 | Bank attestation datum may expose a member's payment amount/reference. | Plan §6.2, §7.5 | Keep the bank reference off-chain or hashed; publish only aggregate reserve/spend figures. |
+| P16 | Bank attestation datum may expose a member's payment amount/reference. The pilot stores mock bank attestations off-chain and never returns the reference from `/members/me` or the audit log (ticket 06). | Plan §6.2, §7.5; ticket 06 | Keep the bank reference off-chain or hashed; publish only aggregate reserve/spend figures. |
 
 ### 6.3 Documentation / policy gaps
 
@@ -417,7 +418,7 @@ The notice must state, per purpose: basis, data categories, recipients, transfer
 9. **AML:** If the co-op is a PJK, what is the CDD/EDD standard for fixed annual member contributions, and who files STRs — the co-op, the bank, or the payment provider? What is the BO definition for a co-op?
 10. **Retention:** How should the 5-year AML retention interact with UU PDP erasure for KYC evidence, the member register, and on-chain commitments? What retention applies to co-op minutes and member registers?
 11. **Controller/processor:** Is Sumsub a processor or an independent controller for sanctions screening? Is the bank a controller? What DPA/joint-controller terms are required?
-12. **Public votes:** Is a member's vote "specific personal data" or a political opinion? Can public-by-default voting be based on consent, or does it require a different basis/design?
+12. **Secret ballot:** Does a nullifier plus choice commitment satisfy the co-op's governance record and the Rapat Anggota evidence requirements, and can the result be verified without linking a member to a choice? Is a member's vote "specific personal data" or a political opinion even when the ballot is secret?
 13. **On-chain revocation:** Can sanctions/PEP revocation status be published on-chain? What disclosure is permitted under AML tipping-off rules and UU PDP?
 14. **Cross-border/localisation:** If the co-op becomes a KSP, do OJK rules require local data centres or specific transfer approvals? What is the UU PDP "equal or higher" test for the UK/EU/Singapore/US?
 15. **Tax:** How are the annual contribution, member loan, `PROJ` distribution, endowment, and token issuance taxed?
