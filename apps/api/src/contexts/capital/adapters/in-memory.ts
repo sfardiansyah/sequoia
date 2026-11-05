@@ -1,4 +1,11 @@
 import {
+  DuplicateBankAttestationIdError,
+  DuplicateBankReferenceError,
+  type BankAttestation,
+  type BankAttestationRepository,
+} from "../domain/bank-attestation";
+import {
+  DuplicateBankAttestationError,
   DuplicateContributionError,
   type Contribution,
   type ContributionRepository,
@@ -29,6 +36,7 @@ export class InMemoryContributionYearRepository
 export class InMemoryContributionRepository implements ContributionRepository {
   private readonly byId = new Map<string, Contribution>();
   private readonly byMemberYear = new Map<string, Contribution>();
+  private readonly byAttestation = new Map<string, Contribution>();
 
   async findByMemberAndYear(
     memberId: string,
@@ -46,8 +54,35 @@ export class InMemoryContributionRepository implements ContributionRepository {
     if (this.byMemberYear.has(key)) {
       throw new DuplicateContributionError();
     }
+    if (this.byAttestation.has(contribution.bankAttestationId)) {
+      throw new DuplicateBankAttestationError();
+    }
 
     this.byId.set(contribution.id, contribution);
     this.byMemberYear.set(key, contribution);
+    this.byAttestation.set(contribution.bankAttestationId, contribution);
+  }
+}
+
+export class InMemoryBankAttestationRepository
+  implements BankAttestationRepository
+{
+  private readonly byId = new Map<string, BankAttestation>();
+  private readonly byReference = new Map<string, BankAttestation>();
+
+  async findById(id: string): Promise<BankAttestation | null> {
+    return this.byId.get(id) ?? null;
+  }
+
+  async save(attestation: BankAttestation): Promise<void> {
+    if (this.byId.has(attestation.id)) {
+      throw new DuplicateBankAttestationIdError();
+    }
+    if (this.byReference.has(attestation.bankReference)) {
+      throw new DuplicateBankReferenceError();
+    }
+
+    this.byId.set(attestation.id, attestation);
+    this.byReference.set(attestation.bankReference, attestation);
   }
 }

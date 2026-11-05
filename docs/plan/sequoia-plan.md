@@ -98,6 +98,7 @@ exception).
 16. Contribution years and snapshots: `ContributionYear` (annual amount, split, cap), `ConfigureContributionYear`, `RecordAnnualContribution` with an active-member/current-KYC eligibility gate, `contribution_years`/`contributions` migration, Postgres/PGlite repositories, `sequoia contribution` CLI.
 17. Pilot boundary and audit foundation: ADR 0007 (no PII on chain, keyed commitments, secret ballot, aggregate dashboard), ADR 0004 pilot exception, append-only `audit_events` with an UPDATE/DELETE trigger, `AuditLog` port with in-memory and Postgres adapters, `SEQUOIA_OPERATOR` actor validation, audit rows on KYC issue and revoke, `sequoia audit list`.
 18. Audit transaction scope: a `UnitOfWork` port gives a write command transaction-bound repositories and audit log, so the domain write and its audit row commit together and an audit failure fails the command; identity is wired, membership and capital adopt it with their audit rows.
+19. Pilot harness MVP (tickets 03–10): KYC revocation reason codes and `retain_until`, board-approved admission with a standard-only pilot policy, contribution-year approval and a domain-pinned 70/30 split, mock bank attestations, bank-attestation-gated contribution snapshots with `PILOT` provenance, `/members/me` contribution summaries, one end-to-end PGlite/Postgres flow, and docs/legal alignment.
 
 #### Current auth decisions
 
@@ -186,13 +187,19 @@ This rule exists because security and architecture stabilization must not be com
 - No mainnet/testnet address network validation in auth.
 - No refresh token/session revocation yet.
 - Redis is not wired into the application.
-- KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof.
+- KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof. It is not returned by the CLI or API; the database is the only read path.
 - Revoked or expired KYC blocks new contribution snapshots but does not freeze an existing member; voting/exit gates do not exist yet.
-- Board approval is not recorded; admission is gated on KYC only.
-- Audit covers KYC issue and revoke only. Admission, contribution year setup,
-  bank attestation, and contribution recording are not audited yet.
-- The operator is a self-declared lowercase slug from `SEQUOIA_OPERATOR`; there
-  is no operator registry, login, or per-action approval.
+- Board approval is recorded for admission and contribution years; the
+  governance context that produces the approval does not exist yet.
+- Audit covers KYC issue/revoke, admission, contribution year setup, bank
+  attestation, and contribution recording. The operator is a self-declared
+  lowercase slug from `SEQUOIA_OPERATOR`; there is no operator registry, login,
+  or per-action approval.
+- The pilot's member, contribution, and bank-attestation rows are provisional
+  PostgreSQL projections marked `PILOT`; they are not the co-op ledger.
+- `retain_until` is stored but no deletion job or retention schedule runs.
+- Associate membership is not offered; membership is Indonesian natural
+  persons only.
 - Aiken contracts, the full capital/governance contexts, and frontend are not built yet.
 
 #### Resume checklist
@@ -317,7 +324,7 @@ As of 19 October 2026:
 
 ### 3.1 Membership
 
-- Membership is open to natural persons (and possibly legal entities) who pass KYC and board admission. Admission currently records only the KYC attestation; board approval is not recorded until the governance context exists.
+- Membership is open to Indonesian natural persons who pass KYC and board admission. A Koperasi is legally eligible as a full member under Pasal 18(1) but is not supported yet. Associate membership under Pasal 18(2) is not offered. Admission records a board approval reference; the governance context that produces board decisions does not exist yet.
 - Each member receives one `MEMBER` NFT.
 - Membership is non-transferable. Succession only through the legal process and board approval.
 - One member, one vote.
@@ -463,8 +470,8 @@ At month 60:
 - Structural changes, split changes, board changes, and bylaws: two-thirds of votes cast with 50% quorum.
 - 7-day timelock for structural and parameter changes.
 - Proposal bond: returnable if quorum is reached; forfeited to the treasury if spam.
-- Votes are public in the pilot harness only. On-chain votes are secret per ADR
-  0007: a member commits to a choice and reveals it at tally, or is tallied
+- Voting is not implemented in the pilot harness. On-chain votes are secret per
+  ADR 0007: a member commits to a choice and reveals it at tally, or is tallied
   without revealing it. Quorum and counts stay public; individual ballots do not.
 - Delegation is out of scope for v1.
 
@@ -592,7 +599,7 @@ surplus_capital_bps:                       2500
 2. Proposal bond is locked.
 3. Proposal NFT and UTxO are created.
 4. Voting opens at `start` and closes at `end`.
-5. Each member votes once; vote receipt NFT is minted.
+5. Each member votes once; a vote receipt NFT proves participation only. The ballot carries a nullifier and a choice commitment, never the member id or the choice (ADR 0007).
 6. After `end`, anyone can tally in batches.
 7. If quorum and threshold are met, status becomes `Passed`.
 8. Execution creates/updates the project UTxO.
@@ -688,7 +695,7 @@ surplus_capital_bps:                       2500
 - Monthly reconciliation of bank statements vs on-chain `Member Capital` redemption value.
 - Quarterly reserve attestation.
 - Annual independent audit.
-- Public dashboard shows `Member Capital` coverage, `Capital Participation` book value, and the endowment balance.
+- Public dashboard shows aggregates only: `Member Capital` coverage, `Capital Participation` book value, and the endowment balance. Never a member's balances, votes, KYC level, or identity (ADR 0007).
 - Any discrepancy triggers a board incident process.
 
 ### 4.11 Patronage attestation (patronage)
@@ -855,7 +862,9 @@ The chain cannot verify the bank balance or prevent a fraudulent transfer. The t
 Config UTxO          — state NFT, parameters
 MemberRecord UTxO    — one per member; holds MEMBER + MCAP + PROJ
 Proposal UTxO        — one per proposal; PROPOSAL NFT
-Vote UTxO            — one per member per proposal; VOTE receipt
+Vote UTxO            — one per member per proposal at the ballot script;
+                       nullifier + commitment, no member id or choice
+Vote receipt NFT     — proves participation only; no link to the choice
 Project UTxO         — one per approved project; budget/spent
 Distribution UTxO    — one per surplus distribution; Merkle root over both weight
                        classes; holds the distributable 77.5% only
@@ -863,7 +872,7 @@ Endowment UTxO       — singleton; endowment balance, cumulative absorbed losse
                        and development spent
 ExitClaim UTxO       — one per exiting member; deferred Capital Participation/founder payout
 KycAttestation UTxO  — issuer attestation; no PII
-BankAttestation UTxO — contribution/reserve/spend attestations
+BankAttestation UTxO — contribution/reserve/spend commitments; bank references stay off-chain (ADR 0007)
 PatronageAttestation UTxO — per-fiscal-year patronage figures; no per-transaction data
 ```
 
@@ -940,9 +949,8 @@ pub type ProposalDatum {
 
 pub type VoteDatum {
   proposal_id: Int,
-  member_id: ByteArray,
-  choice: Choice,
-  weight: Int,
+  nullifier: ByteArray,
+  choice_commitment: ByteArray,
   receipt_nft: AssetName,
 }
 
@@ -1232,7 +1240,7 @@ Use same-origin reverse proxy to avoid CORS/cookie issues.
 ### 7.9 KYC integration
 
 - Privy for Indonesian e-KYC (civil registry, OJK-registered).
-- Sumsub for AML/sanctions/transaction monitoring and foreign members.
+- Sumsub for AML/sanctions/transaction monitoring. Membership is Indonesian natural persons only; there are no foreign members.
 - Manual board KYC fallback for the pilot.
 - No PII on-chain.
 

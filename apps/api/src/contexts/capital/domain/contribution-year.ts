@@ -1,5 +1,7 @@
 import {
   BPS_DENOMINATOR,
+  DEFAULT_SPLITS,
+  MemberClass,
   STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
   bps,
   err,
@@ -12,18 +14,23 @@ import {
 } from "@sequoia/shared";
 import type { UnexpectedError } from "../../../shared/errors";
 
+const PILOT_SPLIT = DEFAULT_SPLITS[MemberClass.Standard];
+
 export type ContributionYearError =
   | { readonly code: "INVALID_YEAR" }
+  | { readonly code: "INVALID_APPROVAL_REF" }
   | { readonly code: "INVALID_AMOUNT" }
   | { readonly code: "INVALID_SPLIT" }
   | { readonly code: "INVALID_CAP" }
   | { readonly code: "INVALID_TIME" }
+  | { readonly code: "INVALID_ACTOR" }
   | { readonly code: "YEAR_ALREADY_CONFIGURED" }
   | UnexpectedError;
 
 export class ContributionYear {
   private constructor(
     readonly year: number,
+    readonly approvalRef: string,
     readonly annualAmount: IdrAmount,
     readonly memberCapitalBps: BasisPoints,
     readonly capitalParticipationBps: BasisPoints,
@@ -40,6 +47,7 @@ export class ContributionYear {
 
   static configure(input: {
     year: number;
+    approvalRef: string;
     annualAmount: number;
     memberCapitalBps: number;
     capitalParticipationBps: number;
@@ -49,6 +57,9 @@ export class ContributionYear {
     if (!Number.isInteger(input.year) || input.year <= 0) {
       return err({ code: "INVALID_YEAR" });
     }
+
+    const approvalRef = input.approvalRef.trim();
+    if (!approvalRef) return err({ code: "INVALID_APPROVAL_REF" });
 
     const annualAmount = idr(input.annualAmount);
     if (!annualAmount.ok || annualAmount.value <= 0) {
@@ -81,6 +92,14 @@ export class ContributionYear {
       return err({ code: "INVALID_CAP" });
     }
 
+    // The pilot pins the plan's 70/30 split in the domain, not only in the CLI.
+    if (
+      memberCapitalBps.value !== PILOT_SPLIT.memberCapitalBps ||
+      capitalParticipationBps.value !== PILOT_SPLIT.capitalParticipationBps
+    ) {
+      return err({ code: "INVALID_SPLIT" });
+    }
+
     if (!Number.isInteger(input.createdAt) || input.createdAt < 0) {
       return err({ code: "INVALID_TIME" });
     }
@@ -88,6 +107,7 @@ export class ContributionYear {
     return ok(
       new ContributionYear(
         input.year,
+        approvalRef,
         annualAmount.value,
         memberCapitalBps.value,
         capitalParticipationBps.value,
@@ -99,6 +119,7 @@ export class ContributionYear {
 
   static rehydrate(input: {
     year: number;
+    approvalRef: string;
     annualAmount: number;
     memberCapitalBps: number;
     capitalParticipationBps: number;

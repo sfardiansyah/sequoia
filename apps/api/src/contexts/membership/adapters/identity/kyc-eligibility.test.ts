@@ -74,7 +74,7 @@ describe("IdentityKycEligibility.checkCurrent", () => {
     const issued = attestation({ id: "kyc-1" });
     await attestations.saveIssued(issued);
     const revoked = issued.revoke({
-      reason: "sanctions hit",
+      reasonCode: "SANCTIONS",
       revokedAt: issuedAt + 1,
     });
     if (!revoked.ok) throw new Error(revoked.error.code);

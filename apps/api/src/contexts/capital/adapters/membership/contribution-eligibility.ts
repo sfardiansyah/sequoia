@@ -22,6 +22,9 @@ export class MembershipContributionEligibility
     if (member.status !== MemberStatus.Active) {
       return "MEMBER_INACTIVE" as const;
     }
+    if (!member.boardApprovalRef) {
+      return "MEMBER_NOT_APPROVED" as const;
+    }
 
     const failure = await this.kyc.checkCurrent({
       subjectPkh: member.ownerPkh.value,

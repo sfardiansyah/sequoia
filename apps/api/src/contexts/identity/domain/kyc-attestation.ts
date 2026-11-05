@@ -5,15 +5,36 @@ import { SubjectPkh } from "./subject-pkh";
 
 export const KYC_VALIDITY_DAYS = 365;
 
+export const KycRevokeReason = {
+  Sanctions: "SANCTIONS",
+  Pep: "PEP",
+  DocumentMismatch: "DOCUMENT_MISMATCH",
+  Other: "OTHER",
+} as const;
+
+export type KycRevokeReason =
+  (typeof KycRevokeReason)[keyof typeof KycRevokeReason];
+
+const KYC_REVOKE_REASONS: readonly string[] = Object.values(KycRevokeReason);
+
+/** Structured revocation reason, or null for free text and unknown codes. */
+export function parseKycRevokeReason(value: string): KycRevokeReason | null {
+  const code = value.trim();
+  return KYC_REVOKE_REASONS.includes(code)
+    ? (code as KycRevokeReason)
+    : null;
+}
+
 export type IdentityError =
   | { readonly code: "INVALID_SUBJECT" }
   | { readonly code: "INVALID_EVIDENCE" }
   | { readonly code: "INVALID_EXPIRY" }
+  | { readonly code: "INVALID_RETAIN_UNTIL" }
   | { readonly code: "ISSUER_NOT_FOUND" }
   | { readonly code: "ISSUER_INACTIVE" }
   | { readonly code: "ATTESTATION_NOT_FOUND" }
   | { readonly code: "ATTESTATION_NOT_ACTIVE" }
-  | { readonly code: "REVOKE_REASON_REQUIRED" }
+  | { readonly code: "INVALID_REVOKE_REASON" }
   | { readonly code: "INVALID_ACTOR" }
   | UnexpectedError;
 
@@ -31,7 +52,8 @@ export class KycAttestation {
     readonly expiresAt: number,
     readonly status: AttestationState,
     readonly revokedAt: number | null,
-    readonly revokeReason: string | null,
+    readonly revokeReason: KycRevokeReason | null,
+    readonly retainUntil: number | null,
   ) {}
 
   static issue(input: {
@@ -41,6 +63,7 @@ export class KycAttestation {
     evidenceRef: string;
     issuedAt: number;
     expiresAt: number;
+    retainUntil?: number | null | undefined;
   }): Result<KycAttestation, IdentityError> {
     const subjectPkh = SubjectPkh.parse(input.subjectPkh);
     if (!subjectPkh) return err({ code: "INVALID_SUBJECT" });
@@ -59,6 +82,14 @@ export class KycAttestation {
       return err({ code: "INVALID_EXPIRY" });
     }
 
+    const retainUntil = input.retainUntil ?? null;
+    if (
+      retainUntil !== null &&
+      (!isValidTime(retainUntil) || retainUntil <= input.issuedAt)
+    ) {
+      return err({ code: "INVALID_RETAIN_UNTIL" });
+    }
+
     return ok(
       new KycAttestation(
         input.id,
@@ -70,6 +101,7 @@ export class KycAttestation {
         AttestationState.Active,
         null,
         null,
+        retainUntil,
       ),
     );
   }
@@ -83,7 +115,8 @@ export class KycAttestation {
     expiresAt: number;
     status: AttestationState;
     revokedAt: number | null;
-    revokeReason: string | null;
+    revokeReason: KycRevokeReason | null;
+    retainUntil: number | null;
   }): Result<KycAttestation, IdentityError> {
     const issued = KycAttestation.issue(input);
     if (!issued.ok) return issued;
@@ -99,6 +132,7 @@ export class KycAttestation {
         input.status,
         input.revokedAt,
         input.revokeReason,
+        issued.value.retainUntil,
       ),
     );
   }
@@ -108,15 +142,15 @@ export class KycAttestation {
   }
 
   revoke(input: {
-    reason: string;
+    reasonCode: string;
     revokedAt: number;
   }): Result<KycAttestation, IdentityError> {
     if (this.status !== AttestationState.Active) {
       return err({ code: "ATTESTATION_NOT_ACTIVE" });
     }
 
-    const reason = input.reason.trim();
-    if (!reason) return err({ code: "REVOKE_REASON_REQUIRED" });
+    const reason = parseKycRevokeReason(input.reasonCode);
+    if (!reason) return err({ code: "INVALID_REVOKE_REASON" });
     if (!isValidTime(input.revokedAt)) return err({ code: "INVALID_EXPIRY" });
 
     return ok(
@@ -130,6 +164,7 @@ export class KycAttestation {
         AttestationState.Revoked,
         input.revokedAt,
         reason,
+        this.retainUntil,
       ),
     );
   }
@@ -145,6 +180,7 @@ export class KycAttestation {
       AttestationState.Superseded,
       this.revokedAt,
       this.revokeReason,
+      this.retainUntil,
     );
   }
 }

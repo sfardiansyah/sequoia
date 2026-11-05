@@ -3,6 +3,7 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Issuer, IssuerDirectory } from "../../domain/issuer";
 import {
   KycAttestation,
+  parseKycRevokeReason,
   type KycAttestationFilter,
   type KycAttestationRepository,
 } from "../../domain/kyc-attestation";
@@ -27,7 +28,8 @@ function toRow(attestation: KycAttestation): KycAttestationInsert {
     expiresAt: attestation.expiresAt,
     status: attestation.status,
     revokedAt: attestation.revokedAt,
-    revokeReason: attestation.revokeReason,
+    revokeReasonCode: attestation.revokeReason,
+    retainUntil: attestation.retainUntil,
   };
 }
 
@@ -41,7 +43,11 @@ function toDomain(row: KycAttestationRow): KycAttestation {
     expiresAt: row.expiresAt,
     status: row.status as AttestationStateType,
     revokedAt: row.revokedAt ?? null,
-    revokeReason: row.revokeReason ?? null,
+    revokeReason:
+      row.revokeReasonCode === null
+        ? null
+        : parseKycRevokeReason(row.revokeReasonCode),
+    retainUntil: row.retainUntil ?? null,
   });
 
   if (!attestation.ok) {

@@ -22,9 +22,12 @@ CREATE TABLE IF NOT EXISTS kyc_attestations (
   expires_at bigint NOT NULL,
   status text NOT NULL CHECK (status IN ('ACTIVE', 'SUPERSEDED', 'REVOKED')),
   revoked_at bigint,
-  revoke_reason text,
+  revoke_reason_code text
+    CHECK (revoke_reason_code IN ('SANCTIONS', 'PEP', 'DOCUMENT_MISMATCH', 'OTHER')),
+  retain_until bigint,
   CHECK (expires_at > issued_at),
-  CHECK ((status = 'REVOKED') = (revoked_at IS NOT NULL AND revoke_reason IS NOT NULL)),
+  CHECK (retain_until IS NULL OR retain_until > issued_at),
+  CHECK ((status = 'REVOKED') = (revoked_at IS NOT NULL AND revoke_reason_code IS NOT NULL)),
   UNIQUE (id, subject_pkh)
 );
 
@@ -38,11 +41,14 @@ CREATE TABLE IF NOT EXISTS members (
   id text PRIMARY KEY,
   owner_pkh text NOT NULL UNIQUE,
   kyc_attestation_id text NOT NULL,
+  board_approval_ref text NOT NULL CHECK (length(trim(board_approval_ref)) > 0),
+  approved_at bigint NOT NULL,
   member_class text NOT NULL CHECK (member_class IN ('STANDARD', 'FOUNDER')),
   status text NOT NULL CHECK (status IN ('ACTIVE', 'INACTIVE', 'EXITED')),
   joined_at bigint NOT NULL,
   FOREIGN KEY (kyc_attestation_id, owner_pkh)
-    REFERENCES kyc_attestations (id, subject_pkh)
+    REFERENCES kyc_attestations (id, subject_pkh),
+  CHECK (approved_at >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS auth_nonces (
@@ -56,12 +62,14 @@ CREATE INDEX IF NOT EXISTS auth_nonces_expires_at_idx
 
 CREATE TABLE IF NOT EXISTS contribution_years (
   year integer PRIMARY KEY,
+  approval_ref text NOT NULL,
   annual_amount bigint NOT NULL,
   member_capital_bps integer NOT NULL,
   capital_participation_bps integer NOT NULL,
   standard_capital_participation_max_bps integer NOT NULL,
   created_at bigint NOT NULL,
   CHECK (year > 0),
+  CHECK (length(trim(approval_ref)) > 0),
   CHECK (annual_amount > 0),
   CHECK (member_capital_bps BETWEEN 0 AND 10000),
   CHECK (capital_participation_bps BETWEEN 0 AND 10000),
@@ -76,10 +84,26 @@ CREATE TABLE IF NOT EXISTS contribution_years (
   CHECK (created_at >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS bank_attestations (
+  id text PRIMARY KEY,
+  member_id text NOT NULL REFERENCES members (id),
+  contribution_year integer NOT NULL REFERENCES contribution_years (year),
+  amount bigint NOT NULL,
+  bank_reference text NOT NULL UNIQUE CHECK (length(trim(bank_reference)) > 0),
+  actor text NOT NULL,
+  created_at bigint NOT NULL,
+  CHECK (amount > 0),
+  CHECK (actor ~ '^[a-z0-9][a-z0-9._-]{0,63}$'),
+  CHECK (created_at >= 0)
+);
+
 CREATE TABLE IF NOT EXISTS contributions (
   id text PRIMARY KEY,
   member_id text NOT NULL REFERENCES members (id),
   contribution_year integer NOT NULL REFERENCES contribution_years (year),
+  bank_attestation_id text NOT NULL UNIQUE REFERENCES bank_attestations (id),
+  source text NOT NULL DEFAULT 'PILOT' CHECK (source = 'PILOT'),
+  chain_tx text,
   annual_amount bigint NOT NULL,
   member_capital_bps integer NOT NULL,
   capital_participation_bps integer NOT NULL,
@@ -94,7 +118,10 @@ CREATE TABLE IF NOT EXISTS contributions (
   CHECK (member_capital >= 0),
   CHECK (capital_participation >= 0),
   CHECK (member_capital + capital_participation = annual_amount),
-  CHECK (recorded_at >= 0)
+  CHECK (recorded_at >= 0),
+  -- The pilot writes PILOT with no chain reference. The column is reserved for
+  -- the future indexer; adding CHAIN values is a migration.
+  CHECK (chain_tx IS NULL)
 );
 
 CREATE TABLE IF NOT EXISTS audit_events (

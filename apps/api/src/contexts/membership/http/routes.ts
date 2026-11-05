@@ -54,6 +54,7 @@ export function membershipRoutes(deps: {
       status: member.status,
       joinedAt: member.joinedAt,
       kyc: member.kyc,
+      contributions: member.contributions,
     };
   });
 }

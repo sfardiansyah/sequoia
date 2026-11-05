@@ -2,6 +2,7 @@ import { defineCommand } from "citty";
 import { createIdentityContainer } from "../composition/identity";
 import {
   KYC_VALIDITY_DAYS,
+  parseKycRevokeReason,
   type IdentityError,
 } from "../contexts/identity/domain/kyc-attestation";
 import { KycStatus } from "../contexts/identity/domain/kyc-status";
@@ -34,6 +35,7 @@ const issue = defineCommand({
     "evidence-ref": { type: "string", required: true },
     issuer: { type: "string", default: "MANUAL" },
     "expires-at": { type: "string" },
+    "retain-until": { type: "string" },
     json: { type: "boolean", default: false },
   },
   async run({ args }) {
@@ -48,6 +50,12 @@ const issue = defineCommand({
       throw new Error("--expires-at must be an epoch millisecond integer");
     }
 
+    const retainUntil =
+      args.retainUntil === undefined ? null : Number(args.retainUntil);
+    if (retainUntil !== null && !Number.isInteger(retainUntil)) {
+      throw new Error("--retain-until must be an epoch millisecond integer");
+    }
+
     const container = createIdentityContainer(databaseUrl());
 
     try {
@@ -57,6 +65,7 @@ const issue = defineCommand({
         evidenceRef: args.evidenceRef as string,
         issuedAt,
         expiresAt,
+        retainUntil,
         actor,
       });
 
@@ -67,6 +76,7 @@ const issue = defineCommand({
         subjectPkh: result.value.subjectPkh.value,
         issuerId: result.value.issuerId,
         expiresAt: result.value.expiresAt,
+        retainUntil: result.value.retainUntil,
       };
 
       console.log(
@@ -84,16 +94,23 @@ const revoke = defineCommand({
   meta: { name: "revoke", description: "Revoke a KYC attestation" },
   args: {
     id: { type: "positional", required: true },
-    reason: { type: "string", required: true },
+    "reason-code": { type: "string", required: true },
   },
   async run({ args }) {
     const actor = resolveOperator();
+    const reasonCode = parseKycRevokeReason(args.reasonCode as string);
+    if (!reasonCode) {
+      throw new Error(
+        "--reason-code must be SANCTIONS, PEP, DOCUMENT_MISMATCH, or OTHER",
+      );
+    }
+
     const container = createIdentityContainer(databaseUrl());
 
     try {
       const result = await container.revokeKycAttestation.execute({
         attestationId: args.id as string,
-        reason: args.reason as string,
+        reasonCode,
         revokedAt: Date.now(),
         actor,
       });
@@ -160,7 +177,7 @@ const list = defineCommand({
 
       for (const attestation of result.value) {
         console.log(
-          `${attestation.id}  ${attestation.subjectPkh}  ${attestation.status}  ${attestation.issuerId}  issued ${new Date(attestation.issuedAt).toISOString()}  expires ${new Date(attestation.expiresAt).toISOString()}  ${attestation.evidenceRef}`,
+          `${attestation.id}  ${attestation.subjectPkh}  ${attestation.status}  ${attestation.issuerId}  issued ${new Date(attestation.issuedAt).toISOString()}  expires ${new Date(attestation.expiresAt).toISOString()}`,
         );
       }
     } finally {

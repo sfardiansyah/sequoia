@@ -2,10 +2,14 @@ import { and, eq } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
   Contribution,
+  DuplicateBankAttestationError,
   DuplicateContributionError,
+  UnknownContributionAttestationError,
   UnknownContributionMemberError,
+  UnknownContributionYearError,
   type ContributionRepository,
 } from "../../domain/contribution";
+import { postgresError } from "../../../../shared/persistence/adapters/postgres/error";
 import * as schema from "./schema";
 import {
   contributions,
@@ -20,6 +24,9 @@ function toRow(contribution: Contribution): ContributionInsert {
     id: contribution.id,
     memberId: contribution.memberId,
     contributionYear: contribution.contributionYear,
+    bankAttestationId: contribution.bankAttestationId,
+    source: contribution.source,
+    chainTx: contribution.chainTx,
     annualAmount: contribution.annualAmount,
     memberCapitalBps: contribution.memberCapitalBps,
     capitalParticipationBps: contribution.capitalParticipationBps,
@@ -34,6 +41,9 @@ function toDomain(row: ContributionRow): Contribution {
     id: row.id,
     memberId: row.memberId,
     contributionYear: row.contributionYear,
+    bankAttestationId: row.bankAttestationId,
+    source: row.source as Contribution["source"],
+    chainTx: row.chainTx ?? null,
     annualAmount: row.annualAmount,
     memberCapitalBps: row.memberCapitalBps,
     capitalParticipationBps: row.capitalParticipationBps,
@@ -47,15 +57,6 @@ function toDomain(row: ContributionRow): Contribution {
   }
 
   return contribution.value;
-}
-
-function databaseCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-
-  const code = (error as { code?: unknown }).code;
-  if (typeof code === "string") return code;
-
-  return databaseCode((error as { cause?: unknown }).cause);
 }
 
 export class DrizzleContributionRepository
@@ -84,18 +85,29 @@ export class DrizzleContributionRepository
 
   async save(contribution: Contribution): Promise<void> {
     try {
-      const rows = await this.db
-        .insert(contributions)
-        .values(toRow(contribution))
-        .onConflictDoNothing()
-        .returning({ id: contributions.id });
-
-      if (rows.length === 0) throw new DuplicateContributionError();
+      await this.db.insert(contributions).values(toRow(contribution));
     } catch (cause) {
-      if (cause instanceof DuplicateContributionError) throw cause;
-      if (databaseCode(cause) === "23503") {
-        throw new UnknownContributionMemberError();
+      const { code, constraint } = postgresError(cause);
+
+      if (code === "23505") {
+        if (constraint === "contributions_bank_attestation_id_key") {
+          throw new DuplicateBankAttestationError();
+        }
+        throw new DuplicateContributionError();
       }
+
+      if (code === "23503") {
+        if (constraint === "contributions_bank_attestation_id_fkey") {
+          throw new UnknownContributionAttestationError();
+        }
+        if (constraint === "contributions_contribution_year_fkey") {
+          throw new UnknownContributionYearError();
+        }
+        if (constraint === "contributions_member_id_fkey") {
+          throw new UnknownContributionMemberError();
+        }
+      }
+
       throw cause;
     }
   }

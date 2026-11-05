@@ -5,6 +5,7 @@ import {
   STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
 } from "@sequoia/shared";
 import { createCapitalContainer } from "../composition/capital";
+import { resolveOperator } from "./operator";
 
 const standardSplit = DEFAULT_SPLITS[MemberClass.Standard];
 
@@ -16,10 +17,12 @@ const setYear = defineCommand({
   args: {
     "contribution-year": { type: "string", required: true },
     "annual-amount": { type: "string", required: true },
+    "approval-ref": { type: "string", required: true },
     "created-at": { type: "string" },
     json: { type: "boolean", default: false },
   },
   async run({ args }) {
+    const actor = resolveOperator();
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
@@ -30,12 +33,14 @@ const setYear = defineCommand({
     try {
       const result = await container.configureContributionYear.execute({
         year: Number(args.contributionYear),
+        approvalRef: args.approvalRef as string,
         annualAmount: Number(args.annualAmount),
         memberCapitalBps: standardSplit.memberCapitalBps,
         capitalParticipationBps: standardSplit.capitalParticipationBps,
         standardCapitalParticipationMaxBps:
           STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
         createdAt,
+        actor,
       });
 
       if (!result.ok) {
@@ -47,6 +52,7 @@ const setYear = defineCommand({
 
       const output = {
         year: result.value.year,
+        approvalRef: result.value.approvalRef,
         annualAmount: result.value.annualAmount,
         memberCapitalBps: result.value.memberCapitalBps,
         capitalParticipationBps: result.value.capitalParticipationBps,
@@ -82,6 +88,7 @@ const record = defineCommand({
   args: {
     "member-id": { type: "string", required: true },
     "contribution-year": { type: "string", required: true },
+    "bank-attestation": { type: "string", required: true },
     "recorded-at": { type: "string" },
     json: { type: "boolean", default: false },
   },
@@ -91,13 +98,16 @@ const record = defineCommand({
 
     const recordedAt =
       args.recordedAt === undefined ? Date.now() : Number(args.recordedAt);
+    const actor = resolveOperator();
     const container = createCapitalContainer(databaseUrl);
 
     try {
       const result = await container.recordContribution.execute({
         memberId: args.memberId as string,
         contributionYear: Number(args.contributionYear),
+        bankAttestationId: args.bankAttestation as string,
         recordedAt,
+        actor,
       });
 
       if (!result.ok) {
@@ -111,6 +121,8 @@ const record = defineCommand({
         id: result.value.id,
         memberId: result.value.memberId,
         contributionYear: result.value.contributionYear,
+        bankAttestationId: result.value.bankAttestationId,
+        source: result.value.source,
         annualAmount: result.value.annualAmount,
         memberCapitalBps: result.value.memberCapitalBps,
         capitalParticipationBps: result.value.capitalParticipationBps,
@@ -130,7 +142,67 @@ const record = defineCommand({
   },
 });
 
+const attest = defineCommand({
+  meta: {
+    name: "attest",
+    description: "Create a mock bank attestation",
+  },
+  args: {
+    "member-id": { type: "string", required: true },
+    "contribution-year": { type: "string", required: true },
+    amount: { type: "string", required: true },
+    "bank-ref": { type: "string", required: true },
+    "created-at": { type: "string" },
+    json: { type: "boolean", default: false },
+  },
+  async run({ args }) {
+    const actor = resolveOperator();
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) throw new Error("DATABASE_URL is required");
+
+    const createdAt =
+      args.createdAt === undefined ? Date.now() : Number(args.createdAt);
+    const container = createCapitalContainer(databaseUrl);
+
+    try {
+      const result = await container.createBankAttestation.execute({
+        memberId: args.memberId as string,
+        contributionYear: Number(args.contributionYear),
+        amount: Number(args.amount),
+        bankReference: args.bankRef as string,
+        createdAt,
+        actor,
+      });
+
+      if (!result.ok) {
+        console.error(`Attestation failed: ${result.error.code}`);
+        if (result.error.code === "UNEXPECTED") console.error(result.error.cause);
+        process.exitCode = 1;
+        return;
+      }
+
+      const output = {
+        id: result.value.id,
+        memberId: result.value.memberId,
+        contributionYear: result.value.contributionYear,
+        amount: String(result.value.amount),
+        bankReference: result.value.bankReference,
+        actor: result.value.actor,
+        createdAt: result.value.createdAt,
+      };
+
+      console.log(
+        Boolean(args.json)
+          ? JSON.stringify(output)
+          : `Created ${output.id} for ${output.memberId} (${output.contributionYear}): ${output.amount} IDR ref ${output.bankReference} by ${output.actor}`,
+      );
+    } finally {
+      await container.close();
+    }
+  },
+});
+
 export default defineCommand({
   meta: { name: "contribution", description: "Contribution administration" },
-  subCommands: { year, record },
+  subCommands: { year, record, attest },
 });

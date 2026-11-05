@@ -1,11 +1,13 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { ensureMigrated } from "../../../../infrastructure/database/testing";
+import { describeBankAttestationRepository } from "../bank-attestation-repository-contract";
 import {
   CONTRACT_MEMBER_ID,
   describeContributionRepository,
 } from "../contribution-repository-contract";
 import { describeContributionYearRepository } from "../contribution-year-repository-contract";
+import { DrizzleBankAttestationRepository } from "./bank-attestation-repository";
 import { DrizzleContributionRepository } from "./contribution-repository";
 import { DrizzleContributionYearRepository } from "./contribution-year-repository";
 import * as schema from "./schema";
@@ -22,7 +24,7 @@ async function setup() {
   await ensureMigrated(databaseUrl);
   const client = postgres(databaseUrl, { max: 1 });
   await client`
-    TRUNCATE TABLE contributions, contribution_years, members, kyc_attestations
+    TRUNCATE TABLE bank_attestations, contributions, contribution_years, members, kyc_attestations
   `;
   await client`
     INSERT INTO kyc_attestations
@@ -34,19 +36,31 @@ async function setup() {
   `;
   await client`
     INSERT INTO members
-      (id, owner_pkh, kyc_attestation_id, member_class, status, joined_at)
+      (id, owner_pkh, kyc_attestation_id, board_approval_ref, approved_at,
+       member_class, status, joined_at)
     VALUES (
       ${CONTRACT_MEMBER_ID}, ${memberPkh}, ${attestationId},
+      'board-2026-04', 1700000000000,
       'STANDARD', 'ACTIVE', 1700000000000
     )
   `;
   await client`
     INSERT INTO contribution_years
-      (year, annual_amount, member_capital_bps, capital_participation_bps,
-       standard_capital_participation_max_bps, created_at)
+      (year, approval_ref, annual_amount, member_capital_bps,
+       capital_participation_bps, standard_capital_participation_max_bps,
+       created_at)
     VALUES
-      (2026, 1000000, 7000, 3000, 5000, 1700000000000),
-      (2027, 1000000, 7000, 3000, 5000, 1700000000000)
+      (2026, 'BOARD-2026-001', 1000000, 7000, 3000, 5000, 1700000000000),
+      (2027, 'BOARD-2027-001', 1000000, 7000, 3000, 5000, 1700000000000)
+  `;
+  await client`
+    INSERT INTO bank_attestations
+      (id, member_id, contribution_year, amount, bank_reference, actor, created_at)
+    VALUES
+      ('attestation-contribution-1', ${CONTRACT_MEMBER_ID}, 2026, 1000000,
+       'BANK-REF-1', 'ray', 1700000000000),
+      ('attestation-contribution-2', ${CONTRACT_MEMBER_ID}, 2027, 1000000,
+       'BANK-REF-2', 'ray', 1700000000000);
   `;
 
   const db = drizzle(client, { schema });
@@ -54,6 +68,7 @@ async function setup() {
   return {
     contributions: new DrizzleContributionRepository(db),
     years: new DrizzleContributionYearRepository(db),
+    attestations: new DrizzleBankAttestationRepository(db),
     close: () => client.end(),
   };
 }
@@ -72,6 +87,14 @@ if (runIntegration && databaseUrl) {
     async () => {
       const { years, close } = await setup();
       return { repository: years, close };
+    },
+  );
+
+  describeBankAttestationRepository(
+    "DrizzleBankAttestationRepository (Postgres)",
+    async () => {
+      const { attestations, close } = await setup();
+      return { repository: attestations, close };
     },
   );
 }

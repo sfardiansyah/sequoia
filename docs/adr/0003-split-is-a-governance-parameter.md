@@ -55,6 +55,12 @@ history only needs to be readable, not recomputable.
 
 ## Consequences
 
+**Pilot exception (2026-11-05):** the synthetic pilot harness pins the
+contribution split to `7000/3000` and the standard cap to `5000` bps in the
+domain and the migration (ticket 05), because an unvalidated pilot configuration
+would bypass the governance parameter. The parameter stays in the real-product
+schema; lifting the pin is a pilot-expiry change, not a redesign.
+
 **Implementation status (2026-11-01):** the shared primitive accepts a split,
 both classes default to 7000/3000, and `contributions` stores the applied bps
 alongside the resulting unit amounts. `contribution_years` fixes the annual
