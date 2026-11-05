@@ -189,7 +189,7 @@ This rule exists because security and architecture stabilization must not be com
 - KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof.
 - Revoked or expired KYC blocks new contribution snapshots but does not freeze an existing member; voting/exit gates do not exist yet.
 - Board approval is not recorded; admission is gated on KYC only.
-- Audit covers KYC issue and revoke only. Admission, contribution year setup,
+- Audit covers KYC issue and revoke, and contribution year setup. Admission,
   bank attestation, and contribution recording are not audited yet.
 - The operator is a self-declared lowercase slug from `SEQUOIA_OPERATOR`; there
   is no operator registry, login, or per-action approval.

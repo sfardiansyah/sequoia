@@ -13,6 +13,7 @@ export const CONTRACT_CONTRIBUTION_YEAR = 2028;
 
 function year(input: {
   year?: number;
+  approvalRef?: string;
   annualAmount?: number;
   memberCapitalBps?: number;
   capitalParticipationBps?: number;
@@ -20,6 +21,7 @@ function year(input: {
 }): ContributionYear {
   const configured = ContributionYear.configure({
     year: input.year ?? CONTRACT_CONTRIBUTION_YEAR,
+    approvalRef: input.approvalRef ?? "BOARD-2028-001",
     annualAmount: input.annualAmount ?? 1_000_000,
     memberCapitalBps: input.memberCapitalBps ?? 7_000,
     capitalParticipationBps: input.capitalParticipationBps ?? 3_000,
@@ -54,6 +56,7 @@ export function describeContributionYearRepository(
 
         const found = await repository.findByYear(CONTRACT_CONTRIBUTION_YEAR);
         expect(found?.year).toBe(CONTRACT_CONTRIBUTION_YEAR);
+        expect(found?.approvalRef).toBe("BOARD-2028-001");
         expect(Number(found?.annualAmount)).toBe(1_000_000);
         expect(Number(found?.memberCapitalBps)).toBe(7_000);
         expect(Number(found?.capitalParticipationBps)).toBe(3_000);

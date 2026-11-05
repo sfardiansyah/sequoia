@@ -5,6 +5,7 @@ import {
   STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
 } from "@sequoia/shared";
 import { createCapitalContainer } from "../composition/capital";
+import { resolveOperator } from "./operator";
 
 const standardSplit = DEFAULT_SPLITS[MemberClass.Standard];
 
@@ -16,10 +17,12 @@ const setYear = defineCommand({
   args: {
     "contribution-year": { type: "string", required: true },
     "annual-amount": { type: "string", required: true },
+    "approval-ref": { type: "string", required: true },
     "created-at": { type: "string" },
     json: { type: "boolean", default: false },
   },
   async run({ args }) {
+    const actor = resolveOperator();
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
@@ -30,12 +33,14 @@ const setYear = defineCommand({
     try {
       const result = await container.configureContributionYear.execute({
         year: Number(args.contributionYear),
+        approvalRef: args.approvalRef as string,
         annualAmount: Number(args.annualAmount),
         memberCapitalBps: standardSplit.memberCapitalBps,
         capitalParticipationBps: standardSplit.capitalParticipationBps,
         standardCapitalParticipationMaxBps:
           STANDARD_CAPITAL_PARTICIPATION_MAX_BPS,
         createdAt,
+        actor,
       });
 
       if (!result.ok) {
@@ -47,6 +52,7 @@ const setYear = defineCommand({
 
       const output = {
         year: result.value.year,
+        approvalRef: result.value.approvalRef,
         annualAmount: result.value.annualAmount,
         memberCapitalBps: result.value.memberCapitalBps,
         capitalParticipationBps: result.value.capitalParticipationBps,

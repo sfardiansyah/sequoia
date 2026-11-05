@@ -42,11 +42,12 @@ async function setup() {
   `;
   await client`
     INSERT INTO contribution_years
-      (year, annual_amount, member_capital_bps, capital_participation_bps,
-       standard_capital_participation_max_bps, created_at)
+      (year, approval_ref, annual_amount, member_capital_bps,
+       capital_participation_bps, standard_capital_participation_max_bps,
+       created_at)
     VALUES
-      (2026, 1000000, 7000, 3000, 5000, 1700000000000),
-      (2027, 1000000, 7000, 3000, 5000, 1700000000000)
+      (2026, 'BOARD-2026-001', 1000000, 7000, 3000, 5000, 1700000000000),
+      (2027, 'BOARD-2027-001', 1000000, 7000, 3000, 5000, 1700000000000)
   `;
 
   const db = drizzle(client, { schema });
