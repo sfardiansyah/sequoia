@@ -12,6 +12,6 @@ export function createPostgresMemberRepository(databaseUrl: string) {
     client,
     db,
     repository: new DrizzleMemberRepository(db),
-    profile: new PostgresMemberProfileReader(client),
+    profile: new PostgresMemberProfileReader(db),
   };
 }

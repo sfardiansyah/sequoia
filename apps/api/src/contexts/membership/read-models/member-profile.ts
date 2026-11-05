@@ -26,8 +26,8 @@ export type MemberProfile = {
 };
 
 /**
- * Read model: one SQL join, no aggregate. `at` is required because KYC status
- * is derived from expiry rather than stored. The KYC block comes from the
+ * Read model: member, newest KYC attestation, and contribution summaries.
+ * `at` is required because KYC status is derived from expiry rather than stored. The KYC block comes from the
  * subject's newest attestation, not the row recorded at admission, so a
  * renewal (which supersedes the admission row) stays visible.
  */
