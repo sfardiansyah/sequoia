@@ -125,6 +125,22 @@ exist only for that harness; they do not describe the co-op ledger.
 | **Pilot Record** | A provisional, off-chain row written by the pilot harness; not the co-op ledger and not the chain. | "ledger", "authoritative record" |
 | **Revocation Reason Code** | The structured reason a KYC attestation was revoked: `SANCTIONS`, `PEP`, `DOCUMENT_MISMATCH`, or `OTHER`. | "revocation reason" for free text |
 
+## On-chain (M1)
+
+These are the on-chain terms. The pilot's **Bank Attestation** is a different
+thing: a provisional database row, not a chain record.
+
+| Term | Meaning | Avoid |
+|---|---|---|
+| **State NFT** | The single token that identifies the canonical config box. | "state token" for the config box |
+| **Config** | The on-chain box holding one contribution year's rulebook: annual amount, split, cap, and authorities. | "settings", "params" |
+| **Member Record** | The on-chain box holding one member's `MEMBER` NFT, Member Capital, and Capital Participation. The balances are the tokens in the box. | "wallet", "account" |
+| **KYC Attestation** | The issuer-signed on-chain proof that a member passed KYC: keyed commitment, level, expiry. No PII. Revoked by burning. | "KYC record", "verification" when the attestation is meant |
+| **Bank Proof** | The treasurer-issued on-chain proof that a contribution reached the bank account: member, year, amount, hashed bank reference. Spent by the contribution. | "bank attestation" (that is the pilot row) |
+| **Board** | The config authority that approves admissions and, later, config changes: a set of keys plus a threshold. Not a member class. | "admin", "operator" when the board is meant |
+| **Issuer** | The authority that signs KYC attestations. | "KYC provider" (that is the vendor) |
+| **Treasurer** | The authority that issues bank proofs. | "bank", "payment provider" |
+
 ## Money
 
 | Term | Meaning |
