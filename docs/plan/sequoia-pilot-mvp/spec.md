@@ -1,9 +1,9 @@
 # Sequoia pilot harness MVP
 
-**Status:** Implemented (tickets 03–10)  
+**Status:** Implemented (tickets 03–10). Next: M1 (ADR 0008)  
 **Scope:** Preprod synthetic pilot, not the co-op ledger  
 **Current repo state:** 233 unit tests and 43 Postgres integration tests, `bun run check` clean  
-**Source:** Analysis of code vs `docs/plan/sequoia-plan.md`, ADRs 0001–0006, `GLOSSARY.md`, and `docs/legal/*`
+**Source:** Analysis of code vs `docs/plan/sequoia-plan.md`, ADRs 0001–0007, `GLOSSARY.md`, and `docs/legal/*`
 
 ## Problem Statement
 
@@ -89,7 +89,7 @@ No chain, real money, real KYC provider, distribution, exit, founder extra capit
 - Tickets 03–10 are implemented on the pilot integration branch.
 - This pilot track is a bounded exception, not the next product milestone.
 - After the pilot, return to the product plan. ADR 0004 still says contracts come first for the real product; this pilot must not become the authoritative ledger.
-- The next product milestone remains Aiken config/membership (M1), then governance, treasury, distribution, and exit.
+- The next product milestone remains Aiken config/membership (M1), then governance, treasury, distribution, and exit. M1's on-chain shape is fixed in ADR 0008.
 
 ### Open decisions kept out of code
 

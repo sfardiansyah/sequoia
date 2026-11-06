@@ -63,20 +63,25 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-11-03
+### Current implementation handoff — 2026-11-06
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
-**Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken later  
+**Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken (M1)  
 **Test command:** `bun run check`  
-**Current status:** 148 tests pass, typecheck clean, Postgres integration suite green
+**Current status:** 233 unit tests pass, typecheck clean, 43 Postgres integration tests green  
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
 **Pilot boundary:** the harness in that directory is preprod and synthetic. Its
 PostgreSQL rows are provisional, not the co-op ledger (ADR 0004's pilot
 exception).
+
+**Next milestone:** M1 — Aiken `config` and `membership` (ADR 0008). The
+GitHub milestone is `M1: Config + Membership`; the tickets are issues #17–#26.
+M1 is preprod only: no real IDR, no real personal data, and no preprod
+deployment in the milestone itself.
 
 #### Completed milestones
 
@@ -220,7 +225,8 @@ bun run sequoia kyc list
 bun run sequoia audit list
 ```
 
-Read this handoff section first, then continue with priority 1.
+Read this handoff section first, then continue with M1 (ADR 0008). The ADR
+0004 order supersedes the off-chain-first reading of the priority list below.
 
 ---
 

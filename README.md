@@ -8,7 +8,8 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Pilot harness MVP (tickets 03–10).
+Pilot harness MVP (tickets 03–10). Next: **M1 — Aiken config and membership**
+(ADR 0008, GitHub milestone `M1: Config + Membership`).
 
 Implemented:
 
@@ -46,9 +47,10 @@ The pilot is synthetic and preprod: no real IDR, no chain, and no real personal
 data. Its rows are provisional, not the co-op ledger. See
 `docs/plan/sequoia-pilot-mvp/`, ADR 0004's pilot-exception section, and ADR 0007.
 
-Not built yet: Aiken contracts, provisioned KYC provider/bank adapters, the full
-capital context beyond contribution years, snapshots, and bank attestations,
-distributions, exits, the governance context, and the web app.
+Not built yet: Aiken contracts (next, M1), provisioned KYC provider/bank
+adapters, the full capital context beyond contribution years, snapshots, and
+bank attestations, distributions, exits, the governance context, and the web
+app.
 
 ## Commands
 
@@ -131,7 +133,7 @@ separate from Cardano wallet keys; production keys belong in a secret manager.
 ```text
 packages/shared/    domain primitives
 apps/               API, web, indexer, issuer (later)
-contracts/          Aiken validators (later)
+contracts/          Aiken validators (M1, ADR 0008)
 docs/adr/           architecture decisions
 ```
 

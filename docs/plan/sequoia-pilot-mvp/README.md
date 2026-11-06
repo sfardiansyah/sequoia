@@ -15,6 +15,8 @@ pilot-exception section and ADR 0007.
 - **M17: Pilot boundary + audit** — shipped tickets 01 and 02 (closed).
 - **M18: Audit transaction scope** — shipped ticket 11 (closed).
 - **Pilot harness MVP** — shipped tickets 03–10 (closed).
+- **Next: M1 — Aiken config + membership** — ADR 0008, GitHub milestone
+  `M1: Config + Membership`.
 
 ## Finding the frontier
 
