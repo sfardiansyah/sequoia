@@ -40,14 +40,14 @@ Implemented:
   `/members/me`;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Test suite: 233 unit tests (`bun run check`, PGlite included) and 43 Postgres
+Test suite: 237 unit tests (`bun run check`, PGlite included) and 43 Postgres
 integration tests (`bun run test:integration`).
 
 The pilot is synthetic and preprod: no real IDR, no chain, and no real personal
 data. Its rows are provisional, not the co-op ledger. See
 `docs/plan/sequoia-pilot-mvp/`, ADR 0004's pilot-exception section, and ADR 0007.
 
-Not built yet: Aiken contracts (next, M1), provisioned KYC provider/bank
+Not built yet: provisioned KYC provider/bank
 adapters, the full capital context beyond contribution years, snapshots, and
 bank attestations, distributions, exits, the governance context, and the web
 app.
@@ -57,6 +57,8 @@ app.
 ```sh
 bun install
 bun run check
+bun run check:contracts             # requires aiken on PATH
+bun run test:contracts
 bun run test:integration             # requires TEST_DATABASE_URL
 bun run dev:api
 bun run sequoia migrate

@@ -1,0 +1,9 @@
+{
+  "name": "@sequoia/offchain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@lucid-evolution/lucid": "^0.8.9"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "preamble": {
+    "title": "sequoia/contracts",
+    "description": "Sequoia co-op validators (M1: config and membership)",
+    "version": "0.1.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.24+bacbeb3"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "probe.probe.spend",
+      "datum": {
+        "title": "_datum",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "redeemer": {
+        "title": "_redeemer",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "compiledCode": "588d01010029800aba2aba1aab9faab9eaab9dab9a48888896600264646644b30013370e900118031baa00189919912cc004cdc42400064660020026eb0c034c038c02cdd51806804112cc0040062900044cdc02400466004004601e002806a29462c8040c028004c028c02c004c01cdd5000c59005180380098039804000980380098019baa0078a4d13656400401",
+      "hash": "186a334bf0ba76610a061cc7e55d06fbfac8798ab9cba30f26b73656"
+    },
+    {
+      "title": "probe.probe.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "588d01010029800aba2aba1aab9faab9eaab9dab9a48888896600264646644b30013370e900118031baa00189919912cc004cdc42400064660020026eb0c034c038c02cdd51806804112cc0040062900044cdc02400466004004601e002806a29462c8040c028004c028c02c004c01cdd5000c59005180380098039804000980380098019baa0078a4d13656400401",
+      "hash": "186a334bf0ba76610a061cc7e55d06fbfac8798ab9cba30f26b73656"
+    }
+  ],
+  "definitions": {
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    }
+  }
+}

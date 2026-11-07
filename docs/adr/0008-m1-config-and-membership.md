@@ -323,12 +323,17 @@ real IDR.
 - The founder class is a label pending counsel. If counsel rejects it, only
   preprod data is affected.
 
+## Toolchain answers (2026-11-07)
+
+- Aiken is pinned to `v1.1.24`, with `plutus = "v3"` and
+  `aiken-lang/stdlib v4.0.0`.
+- The Lucid Evolution emulator supports CIP-31 reference inputs and CIP-33
+  reference scripts under Plutus V3. Evidence and caveats are in
+  `contracts/README.md` and `packages/offchain/test/emulator-probe.test.ts`.
+  The Scalus JS emulator is the fallback if a ledger-rule discrepancy appears.
+
 ## Open questions
 
-- Does the Lucid emulator support CIP-31 reference inputs and CIP-33 reference
-  scripts with Plutus V3? If not, the emulator tickets fall back to Yaci DevKit.
-- Pin Aiken v1.1.24, or the newest version Lucid supports? Decide in the
-  toolchain ticket.
 - Map provider KYC levels to the M1 integer in the identity context. The datum
   stores only the number.
 - Legal: founder class permissibility, whether board members must be members,
