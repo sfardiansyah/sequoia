@@ -8,6 +8,7 @@ specified by `docs/adr/0008-m1-config-and-membership.md`.
 - Aiken `v1.1.24`, pinned as `compiler` in `aiken.toml`.
 - `plutus = "v3"`.
 - `aiken-lang/stdlib v4.0.0`, pinned in `aiken.lock`.
+- `aiken-lang/fuzz v3` for property tests.
 
 Install Aiken from the release page or with the installer, and put the binary on
 `PATH`:
@@ -29,6 +30,13 @@ From the repository root, `bun run check:contracts` runs all three and fails if
 it is the only interface the off-chain builders read; `build/` is generated and
 ignored.
 
+The shared test vectors live at `packages/shared/vectors/aiken.json`. They are
+the source of truth for the split and vesting math: the TS test in
+`packages/shared/src/vectors.test.ts` and the Aiken tests both read them.
+`bun run gen:vectors` regenerates `lib/sequoia/vectors.ak` from the JSON and
+formats it; `bun run check:vectors` regenerates and fails if the committed file
+drifts. CI runs the latter.
+
 Parameters are applied at transaction-build time with Lucid's
 `applyParamsToScript`, not with `aiken blueprint apply`. The state NFT policy
 takes the seed `OutputReference`, which only exists at build time, and the other
@@ -37,7 +45,10 @@ scripts take the state NFT policy ID, which is derived from it.
 ## Layout
 
 - `validators/` — one file per validator, entry point only.
-- `lib/sequoia/` — shared logic; added by ticket #20.
+- `lib/sequoia/types.ak` — the ADR 0008 datums and enums.
+- `lib/sequoia/split.ak` — the contribution split, mirroring `@sequoia/shared`.
+- `lib/sequoia/vesting.ak` — the founder vesting schedule.
+- `lib/sequoia/vectors.ak` — generated from the shared JSON; do not edit.
 - `*.test.ak` — unit and property tests, colocated with the code.
 
 `validators/probe.ak` is a toolchain probe. Ticket #21 removes it when the

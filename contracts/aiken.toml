@@ -9,3 +9,8 @@ description = "Sequoia co-op validators (M1: config and membership)"
 name = "aiken-lang/stdlib"
 version = "v4.0.0"
 source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "v3"
+source = "github"

@@ -18,6 +18,8 @@
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test",
     "check:contracts": "cd contracts && aiken fmt --check && aiken check && aiken build && git diff --exit-code -- plutus.json",
+    "gen:vectors": "bun scripts/gen-aiken-vectors.ts && cd contracts && aiken fmt lib/sequoia/vectors.ak",
+    "check:vectors": "bun run gen:vectors && git diff --exit-code -- contracts/lib/sequoia/vectors.ak",
     "test:contracts": "bun test packages/offchain"
   },
   "devDependencies": {

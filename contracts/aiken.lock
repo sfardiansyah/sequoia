@@ -6,10 +6,22 @@ name = "aiken-lang/stdlib"
 version = "v4.0.0"
 source = "github"
 
+[[requirements]]
+name = "aiken-lang/fuzz"
+version = "v3"
+source = "github"
+
 [[packages]]
 name = "aiken-lang/stdlib"
 version = "v4.0.0"
 requirements = []
 source = "github"
 
+[[packages]]
+name = "aiken-lang/fuzz"
+version = "v3"
+requirements = []
+source = "github"
+
 [etags]
+"aiken-lang/fuzz@v3" = [{ secs_since_epoch = 1794066843, nanos_since_epoch = 576230381 }, "e50b4b551afc5ca73975315ef1e73e587f73fe0570396ecc58e293d512e62f30"]

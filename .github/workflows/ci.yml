@@ -39,10 +39,14 @@ jobs:
       - uses: aiken-lang/setup-aiken@v1
         with:
           version: v1.1.24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
       - run: aiken fmt --check
         working-directory: contracts
       - run: aiken check
         working-directory: contracts
       - run: aiken build
         working-directory: contracts
+      - run: bun run check:vectors
       - run: git diff --exit-code -- contracts/plutus.json
