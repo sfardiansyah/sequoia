@@ -162,6 +162,17 @@ the config box with the initial `ConfigDatum`. The config datum carries the
 three script policy IDs, which the transaction builder computes after applying
 the state NFT policy parameter to each script.
 
+Genesis is deployer-trusted. The state NFT policy is parameterized by the seed
+output reference and can check only that the seed is spent and exactly one
+`STATE` is minted; it cannot know the config script hash, because parameterizing
+it with that hash would be circular (the config hash depends on the state policy
+ID, which depends on the seed). So the config box address, its datum shape, and
+the three policy IDs inside the datum are builder- and test-verified, not
+chain-verified. A board signature would not change that: the deployer compiles
+the script, so it could compile one that ignores signatures. M1 genesis is
+therefore unsigned; the account of what was deployed is a deployment-time
+manifest, which is outside M1.
+
 **Join (membership mint).**
 
 - Inputs: member-funded ADA.
@@ -328,8 +339,10 @@ real IDR.
 - Aiken is pinned to `v1.1.24`, with `plutus = "v3"` and
   `aiken-lang/stdlib v4.0.0`.
 - The Lucid Evolution emulator supports CIP-31 reference inputs and CIP-33
-  reference scripts under Plutus V3. Evidence and caveats are in
-  `contracts/README.md` and `packages/offchain/test/emulator-probe.test.ts`.
+  reference scripts under Plutus V3. Evidence: the emulator probe in
+  `contracts/README.md`, whose test was removed with `validators/probe.ak` in
+  ticket #21 and remains in git history; the M1 config reads are reference
+  inputs, so ticket #22 exercises them again.
   The Scalus JS emulator is the fallback if a ledger-rule discrepancy appears.
 
 ## Open questions

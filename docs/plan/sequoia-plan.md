@@ -70,7 +70,7 @@ The co-op is a member-owned organization that:
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken (M1)  
 **Test command:** `bun run check`  
-**Current status:** 233 unit tests pass, typecheck clean, 43 Postgres integration tests green  
+**Current status:** 241 unit tests pass, typecheck clean, 43 Postgres integration tests green  
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
@@ -80,6 +80,7 @@ exception).
 
 **Next milestone:** M1 — Aiken `config` and `membership` (ADR 0008). The
 GitHub milestone is `M1: Config + Membership`; the tickets are issues #17–#26.
+Tickets #17–#21 are done; #22–#26 remain.
 M1 is preprod only: no real IDR, no real personal data, and no preprod
 deployment in the milestone itself.
 
@@ -104,6 +105,7 @@ deployment in the milestone itself.
 17. Pilot boundary and audit foundation: ADR 0007 (no PII on chain, keyed commitments, secret ballot, aggregate dashboard), ADR 0004 pilot exception, append-only `audit_events` with an UPDATE/DELETE trigger, `AuditLog` port with in-memory and Postgres adapters, `SEQUOIA_OPERATOR` actor validation, audit rows on KYC issue and revoke, `sequoia audit list`.
 18. Audit transaction scope: a `UnitOfWork` port gives a write command transaction-bound repositories and audit log, so the domain write and its audit row commit together and an audit failure fails the command; identity is wired, membership and capital adopt it with their audit rows.
 19. Pilot harness MVP (tickets 03–10): KYC revocation reason codes and `retain_until`, board-approved admission with a standard-only pilot policy, contribution-year approval and a domain-pinned 70/30 split, mock bank attestations, bank-attestation-gated contribution snapshots with `PILOT` provenance, `/members/me` contribution summaries, one end-to-end PGlite/Postgres flow, and docs/legal alignment.
+20. M1 on-chain foundation (tickets #17–#21): Aiken toolchain pinned to v1.1.24, shared split/vesting primitives with cross-language vectors, ADR 0008, the one-shot `state_nft` policy and the immutable `config` validator, and an emulator genesis test (seed, one `STATE`, config box, and its negative cases).
 
 #### Current auth decisions
 
@@ -205,7 +207,9 @@ This rule exists because security and architecture stabilization must not be com
 - `retain_until` is stored but no deletion job or retention schedule runs.
 - Associate membership is not offered; membership is Indonesian natural
   persons only.
-- Aiken contracts, the full capital/governance contexts, and frontend are not built yet.
+- Aiken `state_nft` and `config` are built and tested in the emulator; KYC, bank
+  proof, membership, the full capital/governance contexts, and the frontend are
+  not built yet.
 
 #### Resume checklist
 

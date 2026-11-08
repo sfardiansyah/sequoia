@@ -45,21 +45,21 @@ scripts take the state NFT policy ID, which is derived from it.
 ## Layout
 
 - `validators/` — one file per validator, entry point only.
+- `validators/state_nft.ak` — one-shot `STATE` mint, parameterized by the seed output.
+- `validators/config.ak` — the config box; M1 has no spend path.
 - `lib/sequoia/types.ak` — the ADR 0008 datums and enums.
 - `lib/sequoia/split.ak` — the contribution split, mirroring `@sequoia/shared`.
 - `lib/sequoia/vesting.ak` — the founder vesting schedule.
 - `lib/sequoia/vectors.ak` — generated from the shared JSON; do not edit.
 - `*.test.ak` — unit and property tests, colocated with the code.
 
-`validators/probe.ak` is a toolchain probe. Ticket #21 removes it when the
-`config` validator lands.
-
 ## Emulator support (answered 2026-11-07)
 
 ADR 0008 asked whether Lucid Evolution's emulator supports CIP-31 reference
 inputs and CIP-33 reference scripts with Plutus V3.
 
-**Yes, both**, verified by `packages/offchain/test/emulator-probe.test.ts`:
+**Yes, both**, as verified by an emulator probe before ticket #21 removed it
+with `validators/probe.ak` (the test is in git history):
 
 - the applied script hash matches the blueprint hash;
 - a Plutus V3 spend succeeds when it reads a reference input;
