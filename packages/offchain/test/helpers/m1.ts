@@ -7,7 +7,9 @@ import {
   getAddressDetails,
   validatorToAddress,
   validatorToScriptHash,
+  type EmulatorAccount,
   type LucidEvolution,
+  type SlotConfig,
   type Script,
   type TxSignBuilder,
   type UTxO,
@@ -21,15 +23,45 @@ import { compiledValidator } from "../../src/blueprint";
 
 export const STATE_ASSET_NAME = "STATE";
 export const CONFIG_MIN_LOVELACE = 5_000_000n;
+export const KYC_MIN_LOVELACE = 3_000_000n;
 const SEED_LOVELACE = 12_345_678n;
 
-export type M1Ledger = { emulator: Emulator; lucid: LucidEvolution };
+export type M1Actors = {
+  deployer: EmulatorAccount;
+  kycIssuer: EmulatorAccount;
+  bankIssuer: EmulatorAccount;
+};
+
+export type M1Ledger = {
+  emulator: Emulator;
+  lucid: LucidEvolution;
+  actors: M1Actors;
+  roles: M1Roles;
+  slotConfig: SlotConfig;
+};
 
 export type M1Roles = {
   boardKeys: string[];
   kycIssuer: string;
   bankIssuer: string;
 };
+
+// #23–#26 replace the membership and bank placeholders with real hashes.
+export const PLACEHOLDER_POLICY = "00".repeat(28);
+
+export function m1TestConfig(): TestConfig {
+  return {
+    contributionYear: 2026n,
+    annualAmount: 1_000_000n,
+    memberCapitalBps: 7_000n,
+    capitalParticipationBps: 3_000n,
+    standardCapitalParticipationMaxBps: 5_000n,
+    boardThreshold: 2n,
+    network: 0n,
+    membershipPolicy: PLACEHOLDER_POLICY,
+    bankPolicy: PLACEHOLDER_POLICY,
+  };
+}
 
 export type TestConfig = {
   contributionYear: bigint;
@@ -40,7 +72,6 @@ export type TestConfig = {
   boardThreshold: bigint;
   network: bigint;
   membershipPolicy: string;
-  kycPolicy: string;
   bankPolicy: string;
 };
 
@@ -51,29 +82,38 @@ const keyHash = (address: string): string => getAddressDetails(address).paymentC
  * `T`), so these two wrappers pin the value side.
  */
 type PlutusDataArg = ReturnType<typeof Data.castTo>;
-const castTo = (value: unknown, schema: unknown): PlutusDataArg =>
+export const castTo = (value: unknown, schema: unknown): PlutusDataArg =>
   (Data.castTo as unknown as (v: unknown, s: unknown) => PlutusDataArg)(value, schema);
-const encode = (value: unknown, schema: unknown): string =>
+export const encode = (value: unknown, schema: unknown): string =>
   (Data.to as unknown as (v: unknown, s: unknown) => string)(value, schema);
 
-export function m1Roles(): M1Roles {
+export function m1Roles(actors: M1Actors): M1Roles {
   const board = [0, 1, 2].map(() =>
     keyHash(generateEmulatorAccount({ lovelace: 0n }).address),
   );
   return {
     boardKeys: board,
-    kycIssuer: keyHash(generateEmulatorAccount({ lovelace: 0n }).address),
-    bankIssuer: keyHash(generateEmulatorAccount({ lovelace: 0n }).address),
+    kycIssuer: keyHash(actors.kycIssuer.address),
+    bankIssuer: keyHash(actors.bankIssuer.address),
   };
 }
 
-/** A funded emulator and a wallet that owns the seed. */
+/** A funded emulator: the deployer owns the seed; issuers pay for their own txs. */
 export async function m1Ledger(): Promise<M1Ledger> {
-  const account = generateEmulatorAccount({ lovelace: 1_000_000_000n });
-  const emulator = new Emulator([account]);
+  const deployer = generateEmulatorAccount({ lovelace: 1_000_000_000n });
+  const kycIssuer = generateEmulatorAccount({ lovelace: 100_000_000n });
+  const bankIssuer = generateEmulatorAccount({ lovelace: 100_000_000n });
+  const emulator = new Emulator([deployer, kycIssuer, bankIssuer]);
   const lucid = await Lucid(emulator, "Custom");
-  lucid.selectWallet.fromSeed(account.seedPhrase);
-  return { emulator, lucid };
+  lucid.selectWallet.fromSeed(deployer.seedPhrase);
+  const actors = { deployer, kycIssuer, bankIssuer };
+  // The emulator-derived slot mapping is fixed when Lucid is constructed.
+  const slotConfig = lucid.newTx().rawConfig().lucidConfig.slotConfig;
+  return { emulator, lucid, actors, roles: m1Roles(actors), slotConfig };
+}
+
+export function selectActor(ledger: M1Ledger, actor: keyof M1Actors): void {
+  ledger.lucid.selectWallet.fromSeed(ledger.actors[actor].seedPhrase);
 }
 
 export function stateNftScript(seed: UTxO): Script {
@@ -96,6 +136,16 @@ export function configScript(stateNftPolicy: string): Script {
     script: applyParamsToScript(compiledValidator("config.config.spend").compiledCode, [
       castTo(stateNftPolicy, Data.Bytes()),
     ]),
+  };
+}
+
+export function kycScript(stateNftPolicy: string): Script {
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(
+      compiledValidator("kyc_attestation.kyc_attestation.mint").compiledCode,
+      [castTo(stateNftPolicy, Data.Bytes())],
+    ),
   };
 }
 
@@ -122,7 +172,7 @@ const configDatumSchema = Data.Object({
 });
 
 /** Field order mirrors `contracts/lib/sequoia/types.ak`. */
-export function configDatum(roles: M1Roles, config: TestConfig) {
+export function configDatum(roles: M1Roles, config: TestConfig, kycPolicy: string) {
   return encode(
     {
       contribution_year: config.contributionYear,
@@ -136,7 +186,7 @@ export function configDatum(roles: M1Roles, config: TestConfig) {
       bank_issuer: { VerificationKey: roles.bankIssuer },
       network: config.network,
       membership_policy: config.membershipPolicy,
-      kyc_policy: config.kycPolicy,
+      kyc_policy: kycPolicy,
       bank_policy: config.bankPolicy,
     },
     configDatumSchema,
@@ -170,6 +220,9 @@ export type Genesis = {
   stateNftPolicy: string;
   configValidator: Script;
   configAddress: string;
+  kycValidator: Script;
+  kycPolicy: string;
+  kycAddress: string;
   datum: string;
   configUtxo: UTxO;
 };
@@ -180,16 +233,18 @@ export type Genesis = {
  */
 export async function genesis(
   ledger: M1Ledger,
-  roles: M1Roles,
   config: TestConfig,
 ): Promise<Genesis> {
-  const { lucid, emulator } = ledger;
+  const { lucid, emulator, roles } = ledger;
   const seed = await createSeed(ledger);
   const stateNft = stateNftScript(seed);
   const stateNftPolicy = validatorToScriptHash(stateNft);
   const configValidator = configScript(stateNftPolicy);
   const configAddress = validatorToAddress("Custom", configValidator);
-  const datum = configDatum(roles, config);
+  const kycValidator = kycScript(stateNftPolicy);
+  const kycPolicy = validatorToScriptHash(kycValidator);
+  const kycAddress = validatorToAddress("Custom", kycValidator);
+  const datum = configDatum(roles, config, kycPolicy);
   const unit = stateUnit(stateNftPolicy);
 
   const tx = await lucid
@@ -213,6 +268,9 @@ export async function genesis(
     stateNftPolicy,
     configValidator,
     configAddress,
+    kycValidator,
+    kycPolicy,
+    kycAddress,
     datum,
     configUtxo,
   };

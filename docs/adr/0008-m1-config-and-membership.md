@@ -3,7 +3,9 @@
 ## Status
 
 Accepted. 2026-11-06. Applies to M1 (`config` + `membership`) and replaces
-the plan §6.3 sketch wherever the two disagree.
+the plan §6.3 sketch wherever the two disagree. Amended 2026-11-10: KYC
+issuance, renewal, and revocation are implemented; renewal is spend-validated
+because a same-name mint and burn nets to zero.
 
 ## Context
 
@@ -79,6 +81,11 @@ One membership policy, four asset names:
 
 `MCAP` and `PROJ` are fungible; the balance is the quantity in the member box.
 `MEMBER` and `BANK` are NFTs: unique asset names, quantity 1.
+
+Renewal is not a mint action. It moves the `member_id` token to a replacement
+box at the same script, so the mint field stays empty. Expressing it as a burn
+plus a mint nets to zero and still leaves the mint handler uninvoked; the KYC
+spend handler validates the replacement box (§5).
 
 The state NFT is separate: `STATE` under the one-shot state NFT policy.
 
@@ -211,13 +218,33 @@ manifest, which is outside M1.
   config; `amount` matches config; `bank_ref_hash` and `nonce` are unique
   off-chain.
 
-**Issue / renew / revoke KYC (KYC mint + spend).**
+**Issue KYC (KYC mint).**
+
+- Signatories: `kyc_issuer`, a key in M1.
+- Mint `1 member_id` under the KYC policy and create one box at the KYC script
+  with a `KycDatum`.
+- Checks: `config.kyc_policy` is this policy; the issuer key signed and equals
+  `KycDatum.issuer`; the datum `member_id` equals the token name; `level >= 1`;
+  `issued_at` equals the transaction's validity lower bound; `expires_at` is
+  later; the commitment is non-empty; no other output holds the token.
+
+**Renew KYC (KYC spend).**
 
 - Signatories: `kyc_issuer`.
-- Issue and renew mint `1 member_id` under the KYC policy and create or replace
-  the KYC box. Renew spends the old box and mints the new one with the same
-  `member_id`. Revoke spends the box and burns the NFT, so the member record's
-  next gated action finds no live attestation.
+- Spend the old box and create exactly one replacement at the KYC script with
+  the same `member_id`. The token moves between boxes and the transaction's mint
+  field stays empty, so the mint handler does not run; the spend handler checks
+  the replacement.
+- Checks: the old datum's issuer signed; the token name matches the old datum;
+  the replacement repeats the issue checks and its `expires_at` strictly
+  increases. Renewing an expired attestation is allowed.
+
+**Revoke KYC (spend + burn).**
+
+- Signatories: `kyc_issuer`.
+- Spend the box and burn the token. The mint handler checks the issuer and that
+  no output recreates the token; the spend handler checks the same from the
+  spent box's side, so neither half of the transaction can revoke alone.
 
 **Config update.** Not in M1. The config box has no spend path.
 
@@ -230,9 +257,10 @@ manifest, which is outside M1.
    burn branch for exit.
 2. **One member per admitted member.** The KYC issuer assigns one `member_id`
    per person; the board approves one admission per `member_id`; the join check
-   binds the KYC box to the new member id. A duplicate admission requires the
-   issuer and the board to collude. That is the trust boundary; the chain does
-   not prove personhood.
+   binds the KYC box to the new member id. The ledger enforces one live KYC box
+   per `member_id` (unique asset name, one output holding it), so duplicating
+   *boxes* is impossible; duplicating *people* requires the issuer and the board
+   to collude. That is the trust boundary; the chain does not prove personhood.
 3. **One contribution per year.** `last_contribution_year` in the member box
    plus the config year on the bank proof.
 4. **No live KYC, no gated action.** Expiry is checked against the transaction
@@ -246,6 +274,11 @@ manifest, which is outside M1.
 7. **Config is immutable in M1.** No spend path.
 8. **Board and issuers are separate from member wallets.** A member wallet
    compromise must not approve admissions, issue KYC, or issue bank proofs.
+9. **KYC renewal is spend-validated.** A renewal moves the `member_id` token to
+   a replacement box at the same script; it is not a mint, and a burn plus a
+   mint would net to zero and still leave the mint handler uninvoked. The KYC
+   spend handler checks the replacement box; the mint handler runs only for
+   issuance and revocation.
 
 ### 7. Authorities
 
@@ -301,6 +334,9 @@ production migration from M1 is owed.
 - Aiken unit and property tests: split math and rounding, vesting schedule,
   token conservation, non-transferability, board threshold, bank proof replay,
   KYC expiry and revocation.
+- KYC attestation tests: issue, renewal, revoke, member-id mismatch, non-later
+  expiry, key-only issuer, config reference requirements, and the net-zero
+  renewal path.
 - Lucid emulator: genesis → issue KYC → issue bank proof → join (standard and
   founder) → contribute. Failure cases: non-board signer, expired KYC, revoked
   KYC, wrong year, wrong amount, spent proof, second contribution in the same

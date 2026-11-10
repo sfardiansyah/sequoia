@@ -42,6 +42,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
       - run: aiken fmt --check
         working-directory: contracts
       - run: aiken check
@@ -49,4 +50,5 @@ jobs:
       - run: aiken build
         working-directory: contracts
       - run: bun run check:vectors
+      - run: bun run test:contracts
       - run: git diff --exit-code -- contracts/plutus.json

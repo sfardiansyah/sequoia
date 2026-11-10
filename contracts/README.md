@@ -47,11 +47,29 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/` — one file per validator, entry point only.
 - `validators/state_nft.ak` — one-shot `STATE` mint, parameterized by the seed output.
 - `validators/config.ak` — the config box; M1 has no spend path.
+- `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
 - `lib/sequoia/types.ak` — the ADR 0008 datums and enums.
+- `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
+- `lib/sequoia/kyc_rules.ak` — issue, renew, and revoke checks.
 - `lib/sequoia/split.ak` — the contribution split, mirroring `@sequoia/shared`.
 - `lib/sequoia/vesting.ak` — the founder vesting schedule.
 - `lib/sequoia/vectors.ak` — generated from the shared JSON; do not edit.
 - `*.test.ak` — unit and property tests, colocated with the code.
+
+## KYC actions
+
+The KYC policy and the KYC box's spending validator are one script. `Issue` is a
+mint action, `Revoke` spends and burns, and `Renew` is **spend-only**: the
+`member_id` token moves to a replacement box at the same script, so the mint
+field stays empty and the spend handler validates the replacement (ADR 0008 §5).
+A builder that tries to express renewal as a burn plus a mint nets to zero and
+still never invokes the mint handler.
+
+Every KYC transaction reads the config as a reference input. `txInfoSignatories`
+is the transaction's required-signer list, so a builder must add the issuer's
+address explicitly; paying the fee is not enough. `issued_at` equals the
+transaction's validity lower bound as seen on-chain, which is the start of the
+slot enclosing the `validFrom` time, not the wall-clock value.
 
 ## Emulator support (answered 2026-11-07)
 

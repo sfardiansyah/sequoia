@@ -6,33 +6,15 @@ import {
   expectRejected,
   genesis,
   m1Ledger,
-  m1Roles,
+  m1TestConfig,
   stateNftScript,
   stateUnit,
   submitTx,
   type Genesis,
   type M1Ledger,
-  type M1Roles,
-  type TestConfig,
 } from "./helpers/m1";
 
-// #22–#24 replace these with the real applied script hashes; nothing reads them in M1.
-const PLACEHOLDER_POLICY = "00".repeat(28);
-
-const roles: M1Roles = m1Roles();
-
-const config: TestConfig = {
-  contributionYear: 2026n,
-  annualAmount: 1_000_000n,
-  memberCapitalBps: 7_000n,
-  capitalParticipationBps: 3_000n,
-  standardCapitalParticipationMaxBps: 5_000n,
-  boardThreshold: 2n,
-  network: 0n,
-  membershipPolicy: PLACEHOLDER_POLICY,
-  kycPolicy: PLACEHOLDER_POLICY,
-  bankPolicy: PLACEHOLDER_POLICY,
-};
+const config = m1TestConfig();
 
 describe("state NFT and config genesis", () => {
   let ledger: M1Ledger;
@@ -40,7 +22,7 @@ describe("state NFT and config genesis", () => {
 
   beforeAll(async () => {
     ledger = await m1Ledger();
-    m1 = await genesis(ledger, roles, config);
+    m1 = await genesis(ledger, config);
   });
 
   test("genesis creates exactly one config box holding one STATE", async () => {
@@ -64,17 +46,19 @@ describe("state NFT and config genesis", () => {
     expect(datum.index).toBe(0);
     expect(datum.fields).toHaveLength(13);
     expect(datum.fields.slice(0, 5)).toEqual([2026n, 1_000_000n, 7_000n, 3_000n, 5_000n]);
-    expect(datum.fields[5]).toEqual(roles.boardKeys);
+    expect(datum.fields[5]).toEqual(ledger.roles.boardKeys);
     expect(datum.fields[6]).toBe(2n);
-    expect(constr(datum.fields[7])).toEqual({ index: 0, fields: [roles.kycIssuer] });
-    expect(constr(datum.fields[8])).toEqual({ index: 0, fields: [roles.bankIssuer] });
-    expect(datum.fields.slice(9)).toEqual([0n, PLACEHOLDER_POLICY, PLACEHOLDER_POLICY, PLACEHOLDER_POLICY]);
+    expect(constr(datum.fields[7])).toEqual({ index: 0, fields: [ledger.roles.kycIssuer] });
+    expect(constr(datum.fields[8])).toEqual({ index: 0, fields: [ledger.roles.bankIssuer] });
+    expect(datum.fields.slice(9)).toEqual([0n, config.membershipPolicy, m1.kycPolicy, config.bankPolicy]);
   });
 
   test("the config address and the state policy are the applied script hashes", () => {
     const addressHash = getAddressDetails(m1.configAddress).paymentCredential?.hash;
     expect(addressHash).toBe(validatorToScriptHash(m1.configValidator));
     expect(validatorToScriptHash(m1.stateNft)).toBe(m1.stateNftPolicy);
+    expect(validatorToScriptHash(m1.kycValidator)).toBe(m1.kycPolicy);
+    expect(getAddressDetails(m1.kycAddress).paymentCredential?.hash).toBe(m1.kycPolicy);
   });
 
   test("the seed is spent by genesis", async () => {
