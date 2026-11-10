@@ -1,13 +1,8 @@
-import {
-  Constr,
-  Data,
-  slotToBeginUnixTime,
-  unixTimeToEnclosingSlot,
-  type UTxO,
-} from "@lucid-evolution/lucid";
+import { Constr, Data, type UTxO } from "@lucid-evolution/lucid";
 import {
   KYC_MIN_LOVELACE,
   encode,
+  scriptTime,
   submitTx,
   type Genesis,
   type M1Ledger,
@@ -65,18 +60,6 @@ export function kycUnit(kycPolicy: string, memberId: string): string {
 }
 
 export const kycRedeemer = (index: number) => Data.to(new Constr(index, []));
-
-/**
- * A validator sees the transaction's lower bound as the start of the enclosing
- * slot, not the wall-clock time passed to `validFrom`. Issuance and renewal pin
- * `issued_at` to that bound, so builders must use this value for both.
- */
-export function scriptTime(ledger: M1Ledger, unixTime: number): number {
-  return slotToBeginUnixTime(
-    unixTimeToEnclosingSlot(unixTime, ledger.slotConfig),
-    ledger.slotConfig,
-  );
-}
 
 export async function issueKyc(
   ledger: M1Ledger,

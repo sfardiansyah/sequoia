@@ -1,65 +1,19 @@
 use aiken/collection/dict
 use aiken/collection/list
 use aiken/crypto.{VerificationKeyHash}
-use aiken/interval.{Finite}
-use cardano/address.{Script, VerificationKey}
+use cardano/address.{Script}
 use cardano/assets.{AssetName, PolicyId, quantity_of, tokens}
-use cardano/transaction.{InlineDatum, Output, OutputReference, Transaction}
+use cardano/transaction.{Output, OutputReference, Transaction}
+use sequoia/tx.{inline_datum, lower_bound, one_token_output, require_key_signer}
 use sequoia/types.{ConfigDatum, KycDatum}
 
 // KYC attestation rules (ADR 0008 §4, §5, §6). Issuance is checked by the mint
 // handler; renewal is spend-only because burning and minting the same
 // `member_id` nets to zero and never invokes the mint handler.
 
-/// The config names one issuer. M1 supports key issuers only: a Plutus script
-/// cannot sign a transaction, and M1 runs one operator key (ADR 0008 §7).
-fn require_issuer(config: ConfigDatum, self: Transaction) -> VerificationKeyHash {
-  let key_hash = when config.kyc_issuer is {
-    VerificationKey(hash) -> hash
-    Script(_) -> fail @"kyc_rules: issuer must be a key in M1"
-  }
-  if list.any(self.extra_signatories, fn(signer) { signer == key_hash }) {
-    key_hash
-  } else {
-    fail @"kyc_rules: kyc issuer must sign"
-  }
-}
-
-fn lower_bound(self: Transaction) -> Int {
-  when self.validity_range.lower_bound.bound_type is {
-    Finite(time) -> time
-    _ -> fail @"kyc_rules: transaction needs a validity lower bound"
-  }
-}
-
-fn output_of_attestation(
-  policy_id: PolicyId,
-  asset_name: AssetName,
-  self: Transaction,
-) -> Output {
-  let holders = list.filter(
-    self.outputs,
-    fn(output) { quantity_of(output.value, policy_id, asset_name) == 1 },
-  )
-  when holders is {
-    [output] ->
-      if output.address.payment_credential != Script(policy_id) {
-        fail @"kyc_rules: attestation must stay at the KYC script"
-      } else {
-        output
-      }
-    _ -> fail @"kyc_rules: exactly one output must hold the attestation"
-  }
-}
-
 fn datum_of(output: Output) -> KycDatum {
-  when output.datum is {
-    InlineDatum(raw) -> {
-      expect datum: KycDatum = raw
-      datum
-    }
-    _ -> fail @"kyc_rules: attestation datum must be inline"
-  }
+  expect datum: KycDatum = inline_datum(output)
+  datum
 }
 
 fn checked_datum(
@@ -109,11 +63,11 @@ pub fn issue(
   if config.kyc_policy != policy_id {
     fail @"kyc_rules: config names a different KYC policy"
   } else {
-    let issuer = require_issuer(config, self)
+    let issuer = require_key_signer(config.kyc_issuer, self)
     expect [Pair(asset_name, 1)] = tokens(self.mint, policy_id)
       |> dict.to_pairs()
     checked_datum(
-      datum_of(output_of_attestation(policy_id, asset_name, self)),
+      datum_of(one_token_output(policy_id, asset_name, policy_id, self)),
       asset_name,
       issuer,
       self,
@@ -127,10 +81,10 @@ pub fn renew(
   old_datum: KycDatum,
   self: Transaction,
 ) -> Bool {
-  let issuer = require_issuer(config, self)
+  let issuer = require_key_signer(config.kyc_issuer, self)
   let asset_name = spent_attestation(config.kyc_policy, own_ref, self)
   let new_datum = datum_of(
-    output_of_attestation(config.kyc_policy, asset_name, self),
+    one_token_output(config.kyc_policy, asset_name, config.kyc_policy, self),
   )
   if old_datum.issuer != issuer {
     fail @"kyc_rules: attestation was not issued by the signer"
@@ -149,7 +103,7 @@ pub fn revoke(
   old_datum: KycDatum,
   self: Transaction,
 ) -> Bool {
-  let issuer = require_issuer(config, self)
+  let issuer = require_key_signer(config.kyc_issuer, self)
   let asset_name = spent_attestation(config.kyc_policy, own_ref, self)
   if old_datum.issuer != issuer {
     fail @"kyc_rules: attestation was not issued by the signer"
@@ -175,7 +129,7 @@ pub fn revoke_mint(
   if config.kyc_policy != policy_id {
     fail @"kyc_rules: config names a different KYC policy"
   } else {
-    let issuer = require_issuer(config, self)
+    let issuer = require_key_signer(config.kyc_issuer, self)
     expect [Pair(asset_name, -1)] = tokens(self.mint, policy_id)
       |> dict.to_pairs()
     let sources = list.filter(

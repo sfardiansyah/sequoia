@@ -5,7 +5,9 @@
 Accepted. 2026-11-06. Applies to M1 (`config` + `membership`) and replaces
 the plan §6.3 sketch wherever the two disagree. Amended 2026-11-10: KYC
 issuance, renewal, and revocation are implemented; renewal is spend-validated
-because a same-name mint and burn nets to zero.
+because a same-name mint and burn nets to zero. Bank-proof issuance and
+treasurer cancellation are implemented; the parameterless bank guard requires
+the proof NFT to be burned whenever its box is spent.
 
 ## Context
 
@@ -211,12 +213,29 @@ manifest, which is outside M1.
 
 - Inputs: treasurer-funded ADA.
 - Reference inputs: config.
-- Signatories: `bank_issuer`.
-- Mint: `1 nonce` (`BANK`).
-- Output: bank proof box with `BankProofDatum`.
-- Checks: bank issuer signed; `issuer` matches; `contribution_year` matches
-  config; `amount` matches config; `bank_ref_hash` and `nonce` are unique
-  off-chain.
+- Signatories: `bank_issuer`, a key in M1.
+- Mint: `1 nonce` (`BANK`) under the membership policy.
+- Output: one bank proof box at the bank script with a `BankProofDatum`.
+- Checks: `config.membership_policy` is this policy; the bank issuer key signed
+  and equals `BankProofDatum.issuer`; exactly one output at
+  `Script(config.bank_policy)` holds the token with an inline `BankProofDatum`;
+  `nonce` is non-empty and matches the token name; `contribution_year` and
+  `amount` match the config; `member_id` is non-empty and at most 32 bytes;
+  `bank_ref_hash` is non-empty; `issued_at` equals the validity lower bound.
+  `nonce` and `bank_ref_hash` uniqueness is enforced off-chain.
+
+**Cancel bank proof (`BurnBankProof`, membership mint + guard spend).**
+
+- Inputs: the proof box.
+- Reference inputs: config.
+- Signatories: `bank_issuer` (the config credential; the datum issuer is an
+  audit snapshot, not the authority).
+- Mint: `-1 nonce`.
+- Checks: `config.membership_policy` is this policy; the burned proof's source
+  box is the one at the bank script; no output recreates the token. The guard
+  independently requires the burn, so neither half can cancel alone.
+- This is the treasurer's escape hatch for a stale proof. #25's contribution is
+  the member's one-use burn.
 
 **Issue KYC (KYC mint).**
 
@@ -266,7 +285,9 @@ manifest, which is outside M1.
 4. **No live KYC, no gated action.** Expiry is checked against the transaction
    validity; revocation is the absence of a live KYC box.
 5. **One use per bank proof.** The proof is a UTxO that is spent, and the bank
-   script requires its NFT to be burned in the same transaction.
+   script requires its NFT to be burned in the same transaction. Cancelling a
+   stale proof is the config bank issuer's call; the datum issuer is an audit
+   snapshot, not the authority.
 6. **No double count.** `MCAP + PROJ` minted equals the annual amount; the split
    comes from config; the plan's rounding rule (floor `MCAP`, remainder to
    `PROJ`) is implemented in `lib/sequoia/split.ak` and mirrored by
@@ -337,10 +358,14 @@ production migration from M1 is owed.
 - KYC attestation tests: issue, renewal, revoke, member-id mismatch, non-later
   expiry, key-only issuer, config reference requirements, and the net-zero
   renewal path.
+- Bank proof tests: issue, cancel, guard burn requirement, nonce/token-name
+  binding, year and amount binding, member-id bounds, bank reference hash,
+  key-only issuer, and a wallet-output rejection.
 - Lucid emulator: genesis → issue KYC → issue bank proof → join (standard and
   founder) → contribute. Failure cases: non-board signer, expired KYC, revoked
   KYC, wrong year, wrong amount, spent proof, second contribution in the same
-  year, and an attempt to send member tokens to a wallet.
+  year, and an attempt to send member tokens to a wallet. The bank proof's own
+  cases: issue, treasurer cancel, and a spend without a burn.
 - CI: `aiken fmt --check`, `aiken check`, `aiken build`, `bun run check`.
 - `contracts/plutus.json` is committed and is the only interface the Lucid
   builders read.
