@@ -1,11 +1,10 @@
 use aiken/collection/list
-use cardano/assets.{AssetName, PolicyId, from_asset, quantity_of, restricted_to}
+use cardano/assets.{PolicyId, from_asset, quantity_of, restricted_to}
 use cardano/transaction.{OutputReference, Transaction}
+use sequoia/types.{state_asset_name}
 
 /// One-shot State NFT: the policy is compiled against one seed output, so the
 /// `STATE` token can exist only in the transaction that spends that output.
-pub const state_asset_name: AssetName = "STATE"
-
 validator state_nft(seed_ref: OutputReference) {
   mint(_redeemer: Data, policy_id: PolicyId, self: Transaction) {
     let seed_spent = list.any(
