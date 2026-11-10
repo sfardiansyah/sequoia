@@ -48,9 +48,13 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/state_nft.ak` — one-shot `STATE` mint, parameterized by the seed output.
 - `validators/config.ak` — the config box; M1 has no spend path.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
+- `validators/membership.ak` — the membership policy; bank-proof actions in #23.
+- `validators/bank_attestation.ak` — parameterless bank proof guard.
 - `lib/sequoia/types.ak` — the ADR 0008 datums and enums.
 - `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
+- `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
 - `lib/sequoia/kyc_rules.ak` — issue, renew, and revoke checks.
+- `lib/sequoia/bank_rules.ak` — bank-proof issue, cancel, and guard checks.
 - `lib/sequoia/split.ak` — the contribution split, mirroring `@sequoia/shared`.
 - `lib/sequoia/vesting.ak` — the founder vesting schedule.
 - `lib/sequoia/vectors.ak` — generated from the shared JSON; do not edit.
@@ -70,6 +74,16 @@ is the transaction's required-signer list, so a builder must add the issuer's
 address explicitly; paying the fee is not enough. `issued_at` equals the
 transaction's validity lower bound as seen on-chain, which is the start of the
 slot enclosing the `validFrom` time, not the wall-clock value.
+
+## Bank proofs
+
+The `BANK` token is minted under the membership policy and locked at the
+parameterless `bank_attestation` guard. The guard reads the token it holds from
+its own input and requires it to be burned, so a proof cannot be spent without
+being destroyed. Issuing is the treasurer's (`IssueBankProof`); cancelling a
+stale proof is the same key (`BurnBankProof`); #25's contribution burns it when
+the member pays. `nonce` is the asset name and `bank_ref_hash` is a hash, never
+the raw bank reference; duplicate checks stay off-chain.
 
 ## Emulator support (answered 2026-11-07)
 

@@ -6,6 +6,7 @@ import {
   genesis,
   m1Ledger,
   m1TestConfig,
+  scriptTime,
   selectActor,
   submitTx,
   type Genesis,
@@ -21,7 +22,6 @@ import {
   kycUnit,
   renewKyc,
   revokeKyc,
-  scriptTime,
 } from "./helpers/kyc";
 
 const config = m1TestConfig();

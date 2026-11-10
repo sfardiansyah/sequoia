@@ -55,6 +55,13 @@ pub type KycRedeemer {
   Revoke
 }
 
+/// Membership actions. `Join`, `Contribute`, and the spend-only transfer action
+/// arrive with #24/#25; they append so these indices stay stable.
+pub type MembershipRedeemer {
+  IssueBankProof
+  BurnBankProof
+}
+
 pub type KycDatum {
   issuer: VerificationKeyHash,
   member_id: ByteArray,

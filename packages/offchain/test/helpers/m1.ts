@@ -5,6 +5,8 @@ import {
   applyParamsToScript,
   generateEmulatorAccount,
   getAddressDetails,
+  slotToBeginUnixTime,
+  unixTimeToEnclosingSlot,
   validatorToAddress,
   validatorToScriptHash,
   type EmulatorAccount,
@@ -46,9 +48,6 @@ export type M1Roles = {
   bankIssuer: string;
 };
 
-// #23–#26 replace the membership and bank placeholders with real hashes.
-export const PLACEHOLDER_POLICY = "00".repeat(28);
-
 export function m1TestConfig(): TestConfig {
   return {
     contributionYear: 2026n,
@@ -58,8 +57,6 @@ export function m1TestConfig(): TestConfig {
     standardCapitalParticipationMaxBps: 5_000n,
     boardThreshold: 2n,
     network: 0n,
-    membershipPolicy: PLACEHOLDER_POLICY,
-    bankPolicy: PLACEHOLDER_POLICY,
   };
 }
 
@@ -71,8 +68,6 @@ export type TestConfig = {
   standardCapitalParticipationMaxBps: bigint;
   boardThreshold: bigint;
   network: bigint;
-  membershipPolicy: string;
-  bankPolicy: string;
 };
 
 const keyHash = (address: string): string => getAddressDetails(address).paymentCredential!.hash;
@@ -116,6 +111,17 @@ export function selectActor(ledger: M1Ledger, actor: keyof M1Actors): void {
   ledger.lucid.selectWallet.fromSeed(ledger.actors[actor].seedPhrase);
 }
 
+/**
+ * A validator sees the lower bound as the start of the enclosing slot, not the
+ * wall-clock value passed to `validFrom`. Datums pinned to the bound use this.
+ */
+export function scriptTime(ledger: M1Ledger, unixTime: number): number {
+  return slotToBeginUnixTime(
+    unixTimeToEnclosingSlot(unixTime, ledger.slotConfig),
+    ledger.slotConfig,
+  );
+}
+
 export function stateNftScript(seed: UTxO): Script {
   const seedRef = castTo(
     { transaction_id: seed.txHash, output_index: BigInt(seed.outputIndex) },
@@ -136,6 +142,26 @@ export function configScript(stateNftPolicy: string): Script {
     script: applyParamsToScript(compiledValidator("config.config.spend").compiledCode, [
       castTo(stateNftPolicy, Data.Bytes()),
     ]),
+  };
+}
+
+export function membershipScript(stateNftPolicy: string): Script {
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(
+      compiledValidator("membership.membership.mint").compiledCode,
+      [castTo(stateNftPolicy, Data.Bytes())],
+    ),
+  };
+}
+
+export function bankScript(): Script {
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(
+      compiledValidator("bank_attestation.bank_attestation.spend").compiledCode,
+      [],
+    ),
   };
 }
 
@@ -172,7 +198,13 @@ const configDatumSchema = Data.Object({
 });
 
 /** Field order mirrors `contracts/lib/sequoia/types.ak`. */
-export function configDatum(roles: M1Roles, config: TestConfig, kycPolicy: string) {
+export type PolicyHashes = { membership: string; kyc: string; bank: string };
+
+export function configDatum(
+  roles: M1Roles,
+  config: TestConfig,
+  policies: PolicyHashes,
+) {
   return encode(
     {
       contribution_year: config.contributionYear,
@@ -185,9 +217,9 @@ export function configDatum(roles: M1Roles, config: TestConfig, kycPolicy: strin
       kyc_issuer: { VerificationKey: roles.kycIssuer },
       bank_issuer: { VerificationKey: roles.bankIssuer },
       network: config.network,
-      membership_policy: config.membershipPolicy,
-      kyc_policy: kycPolicy,
-      bank_policy: config.bankPolicy,
+      membership_policy: policies.membership,
+      kyc_policy: policies.kyc,
+      bank_policy: policies.bank,
     },
     configDatumSchema,
   );
@@ -220,9 +252,14 @@ export type Genesis = {
   stateNftPolicy: string;
   configValidator: Script;
   configAddress: string;
+  membershipValidator: Script;
+  membershipPolicy: string;
   kycValidator: Script;
   kycPolicy: string;
   kycAddress: string;
+  bankValidator: Script;
+  bankPolicy: string;
+  bankAddress: string;
   datum: string;
   configUtxo: UTxO;
 };
@@ -241,10 +278,19 @@ export async function genesis(
   const stateNftPolicy = validatorToScriptHash(stateNft);
   const configValidator = configScript(stateNftPolicy);
   const configAddress = validatorToAddress("Custom", configValidator);
+  const membershipValidator = membershipScript(stateNftPolicy);
+  const membershipPolicy = validatorToScriptHash(membershipValidator);
   const kycValidator = kycScript(stateNftPolicy);
   const kycPolicy = validatorToScriptHash(kycValidator);
   const kycAddress = validatorToAddress("Custom", kycValidator);
-  const datum = configDatum(roles, config, kycPolicy);
+  const bankValidator = bankScript();
+  const bankPolicy = validatorToScriptHash(bankValidator);
+  const bankAddress = validatorToAddress("Custom", bankValidator);
+  const datum = configDatum(roles, config, {
+    membership: membershipPolicy,
+    kyc: kycPolicy,
+    bank: bankPolicy,
+  });
   const unit = stateUnit(stateNftPolicy);
 
   const tx = await lucid
@@ -268,9 +314,14 @@ export async function genesis(
     stateNftPolicy,
     configValidator,
     configAddress,
+    membershipValidator,
+    membershipPolicy,
     kycValidator,
     kycPolicy,
     kycAddress,
+    bankValidator,
+    bankPolicy,
+    bankAddress,
     datum,
     configUtxo,
   };

@@ -50,15 +50,23 @@ describe("state NFT and config genesis", () => {
     expect(datum.fields[6]).toBe(2n);
     expect(constr(datum.fields[7])).toEqual({ index: 0, fields: [ledger.roles.kycIssuer] });
     expect(constr(datum.fields[8])).toEqual({ index: 0, fields: [ledger.roles.bankIssuer] });
-    expect(datum.fields.slice(9)).toEqual([0n, config.membershipPolicy, m1.kycPolicy, config.bankPolicy]);
+    expect(datum.fields.slice(9)).toEqual([
+      0n,
+      m1.membershipPolicy,
+      m1.kycPolicy,
+      m1.bankPolicy,
+    ]);
   });
 
   test("the config address and the state policy are the applied script hashes", () => {
     const addressHash = getAddressDetails(m1.configAddress).paymentCredential?.hash;
     expect(addressHash).toBe(validatorToScriptHash(m1.configValidator));
     expect(validatorToScriptHash(m1.stateNft)).toBe(m1.stateNftPolicy);
+    expect(validatorToScriptHash(m1.membershipValidator)).toBe(m1.membershipPolicy);
     expect(validatorToScriptHash(m1.kycValidator)).toBe(m1.kycPolicy);
+    expect(validatorToScriptHash(m1.bankValidator)).toBe(m1.bankPolicy);
     expect(getAddressDetails(m1.kycAddress).paymentCredential?.hash).toBe(m1.kycPolicy);
+    expect(getAddressDetails(m1.bankAddress).paymentCredential?.hash).toBe(m1.bankPolicy);
   });
 
   test("the seed is spent by genesis", async () => {
