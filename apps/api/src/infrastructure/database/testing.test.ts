@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { assertTestDatabase } from "./testing";
+import {
+  assertTestDatabase,
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "./testing";
 
 describe("assertTestDatabase", () => {
   test("accepts a database ending in _test", () => {
@@ -63,5 +67,20 @@ describe("assertTestDatabase", () => {
     expect(() =>
       assertTestDatabase("postgres://user:secret@localhost/", undefined),
     ).toThrow(/must name a database/);
+  });
+});
+
+describe("openPgliteTestDatabase", () => {
+  test("wipes what the previous test wrote", async () => {
+    const first = await openPgliteTestDatabase();
+    await first.exec("CREATE TABLE leftover (id integer)");
+    await closePgliteTestDatabase();
+
+    const second = await openPgliteTestDatabase();
+    const result = await second.query<{ leftover: string | null }>(
+      "SELECT to_regclass('leftover') AS leftover",
+    );
+
+    expect(result.rows[0]?.leftover).toBeNull();
   });
 });

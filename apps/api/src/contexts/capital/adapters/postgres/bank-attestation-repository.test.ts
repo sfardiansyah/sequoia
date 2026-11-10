@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { execMigrations } from "../../../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../../../infrastructure/database/testing";
 import {
   CONTRACT_BANK_MEMBER_ID,
   describeBankAttestationRepository,
@@ -17,8 +19,7 @@ const memberPkh = "18987c1612069d4080a0eb247820cb987fea81bddeaafdd41f996281";
 const attestationId = "kyc-bank-attestation-contract";
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
 
   await client.exec(`
     INSERT INTO kyc_attestations
@@ -46,7 +47,7 @@ async function setup() {
 
   return {
     repository: new DrizzleBankAttestationRepository(db),
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 
@@ -54,8 +55,7 @@ describeBankAttestationRepository("DrizzleBankAttestationRepository", setup);
 
 describe("bank_attestations constraints", () => {
   test("rejects a blank bank reference", async () => {
-    const client = new PGlite();
-    await execMigrations(client);
+    const client = await openPgliteTestDatabase();
 
     try {
       await expect(
@@ -67,13 +67,12 @@ describe("bank_attestations constraints", () => {
         `),
       ).rejects.toThrow(/bank_attestations_bank_reference_check/);
     } finally {
-      await client.close();
+      await closePgliteTestDatabase();
     }
   });
 
   test("rejects a non-positive amount", async () => {
-    const client = new PGlite();
-    await execMigrations(client);
+    const client = await openPgliteTestDatabase();
 
     try {
       await expect(
@@ -85,7 +84,7 @@ describe("bank_attestations constraints", () => {
         `),
       ).rejects.toThrow(/bank_attestations_amount_check/);
     } finally {
-      await client.close();
+      await closePgliteTestDatabase();
     }
   });
 });

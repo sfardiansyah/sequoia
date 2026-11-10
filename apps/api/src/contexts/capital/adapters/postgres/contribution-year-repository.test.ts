@@ -1,20 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { execMigrations } from "../../../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../../../infrastructure/database/testing";
 import { describeContributionYearRepository } from "../contribution-year-repository-contract";
 import { DrizzleContributionYearRepository } from "./contribution-year-repository";
 import * as schema from "./schema";
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
 
   const db = drizzle(client, { schema });
 
   return {
     repository: new DrizzleContributionYearRepository(db),
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 
@@ -25,8 +26,7 @@ describeContributionYearRepository(
 
 describe("contribution_years constraints", () => {
   test("rejects a cap above the governance ceiling", async () => {
-    const client = new PGlite();
-    await execMigrations(client);
+    const client = await openPgliteTestDatabase();
 
     try {
       await client.exec(`
@@ -47,13 +47,12 @@ describe("contribution_years constraints", () => {
         `),
       ).rejects.toThrow(/contribution_years_cap_within_governance_max/);
     } finally {
-      await client.close();
+      await closePgliteTestDatabase();
     }
   });
 
   test("rejects a blank approval reference", async () => {
-    const client = new PGlite();
-    await execMigrations(client);
+    const client = await openPgliteTestDatabase();
 
     try {
       await expect(
@@ -66,7 +65,7 @@ describe("contribution_years constraints", () => {
         `),
       ).rejects.toThrow(/contribution_years_approval_ref_check/);
     } finally {
-      await client.close();
+      await closePgliteTestDatabase();
     }
   });
 });

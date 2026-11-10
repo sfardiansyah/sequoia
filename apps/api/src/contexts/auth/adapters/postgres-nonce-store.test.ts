@@ -1,12 +1,13 @@
-import { PGlite } from "@electric-sql/pglite";
 import type { Sql } from "postgres";
-import { execMigrations } from "../../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../../infrastructure/database/testing";
 import { describeNonceStore } from "./nonce-store-contract";
 import { PostgresNonceStore } from "./postgres-nonce-store";
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
 
   const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
     const text = strings.reduce(
@@ -20,7 +21,7 @@ async function setup() {
 
   return {
     store: new PostgresNonceStore(sql),
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 

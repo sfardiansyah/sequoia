@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import type { Result } from "@sequoia/shared";
 import { DrizzleAuditLog } from "../../shared/audit/adapters/postgres/audit-log";
@@ -7,7 +6,10 @@ import type { AuditEvent, NewAuditEvent } from "../../shared/audit/audit-event";
 import type { AuditFilter, AuditLog } from "../../shared/audit/port";
 import { createDrizzleUnitOfWork } from "../../shared/persistence/adapters/postgres/unit-of-work";
 import { SequentialIdGenerator } from "../../shared/id-generator";
-import { execMigrations } from "../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../infrastructure/database/testing";
 import {
   DrizzleIssuerDirectory,
   DrizzleKycAttestationRepository,
@@ -77,8 +79,7 @@ class SwitchableAttestationRepository extends DrizzleKycAttestationRepository {
 }
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
   const db = drizzle(client, { schema });
 
   const auditState = { failing: false };
@@ -102,7 +103,7 @@ async function setup() {
     audit: new DrizzleAuditLog(db),
     auditState,
     writeState,
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import type { Result } from "@sequoia/shared";
 import { DrizzleAuditLog } from "../../shared/audit/adapters/postgres/audit-log";
@@ -7,7 +6,10 @@ import type { AuditEvent, NewAuditEvent } from "../../shared/audit/audit-event";
 import type { AuditFilter, AuditLog } from "../../shared/audit/port";
 import { SequentialIdGenerator } from "../../shared/id-generator";
 import { createDrizzleUnitOfWork } from "../../shared/persistence/adapters/postgres/unit-of-work";
-import { execMigrations } from "../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../infrastructure/database/testing";
 import { InMemoryKycEligibility } from "./adapters/in-memory";
 import { DrizzleMemberRepository } from "./adapters/postgres/member-repository";
 import * as schema from "./adapters/postgres/schema";
@@ -67,8 +69,7 @@ class SwitchableMemberRepository extends DrizzleMemberRepository {
 }
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
   await client.exec(`
     INSERT INTO kyc_attestations
       (id, subject_pkh, issuer_id, evidence_ref, issued_at, expires_at, status)
@@ -97,7 +98,7 @@ async function setup() {
     audit: new DrizzleAuditLog(db),
     auditState,
     writeState,
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 

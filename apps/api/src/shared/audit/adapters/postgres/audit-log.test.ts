@@ -1,19 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { execMigrations } from "../../../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../../../infrastructure/database/testing";
 import { describeAuditLog } from "../audit-log-contract";
 import { DrizzleAuditLog } from "./audit-log";
 import * as schema from "./schema";
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
   const db = drizzle(client, { schema });
 
   return {
     log: new DrizzleAuditLog(db),
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 
@@ -21,8 +22,7 @@ describeAuditLog("DrizzleAuditLog", setup);
 
 describe("audit_events append-only trigger", () => {
   async function seeded() {
-    const client = new PGlite();
-    await execMigrations(client);
+    const client = await openPgliteTestDatabase();
     await client.exec(`
       INSERT INTO audit_events
         (id, actor, action, entity_type, entity_id, occurred_at)
@@ -47,7 +47,7 @@ describe("audit_events append-only trigger", () => {
       );
       expect(rows.rows[0]?.count).toBe(1);
     } finally {
-      await client.close();
+      await closePgliteTestDatabase();
     }
   });
 });

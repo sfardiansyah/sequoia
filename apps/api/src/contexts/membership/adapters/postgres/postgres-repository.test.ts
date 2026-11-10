@@ -1,6 +1,8 @@
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { execMigrations } from "../../../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../../../infrastructure/database/testing";
 import {
   CONTRACT_ATTESTATION_ID,
   CONTRACT_SUBJECT_PKH,
@@ -10,8 +12,7 @@ import { DrizzleMemberRepository } from "./member-repository";
 import * as schema from "./schema";
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
   await client.exec(`
     INSERT INTO kyc_attestations
       (id, subject_pkh, issuer_id, evidence_ref, issued_at, expires_at, status)
@@ -25,7 +26,7 @@ async function setup() {
 
   return {
     repository: new DrizzleMemberRepository(db),
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 

@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { PGlite } from "@electric-sql/pglite";
 import { migrateDatabase } from "./migrate";
 
 const migrationsDir = fileURLToPath(new URL("./migrations", import.meta.url));
@@ -32,6 +33,38 @@ export async function execMigrations(client: {
   for (const file of files) {
     await client.exec(await readFile(`${migrationsDir}/${file}`, "utf8"));
   }
+}
+
+let pglite: Promise<PGlite> | undefined;
+let schemaIsEmpty = false;
+
+async function dropSchema(target: PGlite): Promise<void> {
+  await target.exec(
+    "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;",
+  );
+  schemaIsEmpty = true;
+}
+
+/**
+ * A pristine, migrated PGlite database. Booting one costs ~1s, so the whole
+ * test run shares a single instance (one per worker process under --parallel)
+ * and every call wipes it. Tests must stay sequential inside a process.
+ */
+export async function openPgliteTestDatabase(): Promise<PGlite> {
+  pglite ??= Promise.resolve(new PGlite());
+  const target = await pglite;
+
+  if (!schemaIsEmpty) await dropSchema(target);
+  schemaIsEmpty = false;
+  await execMigrations(target);
+
+  return target;
+}
+
+/** End of a test: throw away everything it wrote. */
+export async function closePgliteTestDatabase(): Promise<void> {
+  if (!pglite) return;
+  if (!schemaIsEmpty) await dropSchema(await pglite);
 }
 
 type DatabaseTarget = {

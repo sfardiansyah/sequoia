@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { execMigrations } from "../../../../infrastructure/database/testing";
+import {
+  closePgliteTestDatabase,
+  openPgliteTestDatabase,
+} from "../../../../infrastructure/database/testing";
 import {
   CONTRACT_MEMBER_ID,
   describeContributionRepository,
@@ -19,8 +21,7 @@ const memberPkh = "18987c1612069d4080a0eb247820cb987fea81bddeaafdd41f996281";
 const attestationId = "kyc-contribution-contract";
 
 async function setup() {
-  const client = new PGlite();
-  await execMigrations(client);
+  const client = await openPgliteTestDatabase();
 
   await client.exec(`
     INSERT INTO kyc_attestations
@@ -57,7 +58,7 @@ async function setup() {
 
   return {
     repository: new DrizzleContributionRepository(db),
-    close: () => client.close(),
+    close: closePgliteTestDatabase,
   };
 }
 
