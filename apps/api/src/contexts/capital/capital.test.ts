@@ -28,6 +28,7 @@ import {
 } from "./domain/contribution";
 import {
   ContributionYear,
+  DuplicateContributionYearError,
   type ContributionYearRepository,
 } from "./domain/contribution-year";
 import type { BankAttestationRepository } from "./domain/bank-attestation";
@@ -301,6 +302,18 @@ describe("ConfigureContributionYear", () => {
 
     expectError(
       await configureYear.execute({ ...yearCommand, annualAmount: 2_000_000 }),
+      "YEAR_ALREADY_CONFIGURED",
+    );
+  });
+
+  test("maps a concurrent duplicate year to YEAR_ALREADY_CONFIGURED", async () => {
+    const { configureYear, years } = setup();
+    years.save = async () => {
+      throw new DuplicateContributionYearError();
+    };
+
+    expectError(
+      await configureYear.execute(yearCommand),
       "YEAR_ALREADY_CONFIGURED",
     );
   });

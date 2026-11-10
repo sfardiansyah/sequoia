@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   ContributionYear,
+  DuplicateContributionYearError,
   type ContributionYearRepository,
 } from "../domain/contribution-year";
 
@@ -71,7 +72,9 @@ export function describeContributionYearRepository(
 
       try {
         await repository.save(year({}));
-        await expect(repository.save(year({}))).rejects.toThrow();
+        await expect(
+          repository.save(year({})),
+        ).rejects.toThrow(DuplicateContributionYearError);
       } finally {
         await close();
       }

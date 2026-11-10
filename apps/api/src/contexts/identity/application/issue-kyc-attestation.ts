@@ -8,7 +8,11 @@ import { unexpected } from "../../../shared/errors";
 import type { IdGenerator } from "../../../shared/id-generator";
 import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
 import type { IssuerDirectory } from "../domain/issuer";
-import { KycAttestation, type IdentityError } from "../domain/kyc-attestation";
+import {
+  DuplicateActiveAttestationError,
+  KycAttestation,
+  type IdentityError,
+} from "../domain/kyc-attestation";
 import type { IdentityWriteScope } from "./write-scope";
 
 export type IssueKycAttestationCommand = {
@@ -73,6 +77,9 @@ export class IssueKycAttestation {
         });
       });
     } catch (cause) {
+      if (cause instanceof DuplicateActiveAttestationError) {
+        return err({ code: "ATTESTATION_ALREADY_ACTIVE" });
+      }
       return err(unexpected(cause));
     }
 

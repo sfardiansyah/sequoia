@@ -1,7 +1,9 @@
 import type { MemberClass } from "@sequoia/shared";
 import { eq } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { postgresError } from "../../../../shared/persistence/adapters/postgres/error";
 import {
+  DuplicateOwnerPkhError,
   Member,
   type MemberRepository,
   type MemberStatus,
@@ -68,9 +70,17 @@ export class DrizzleMemberRepository implements MemberRepository {
 
   async save(member: Member): Promise<void> {
     const row = toRow(member);
-    await this.db
-      .insert(members)
-      .values(row)
-      .onConflictDoUpdate({ target: members.id, set: row });
+    try {
+      await this.db
+        .insert(members)
+        .values(row)
+        .onConflictDoUpdate({ target: members.id, set: row });
+    } catch (cause) {
+      const { code, constraint } = postgresError(cause);
+      if (code === "23505" && constraint === "members_owner_pkh_key") {
+        throw new DuplicateOwnerPkhError();
+      }
+      throw cause;
+    }
   }
 }

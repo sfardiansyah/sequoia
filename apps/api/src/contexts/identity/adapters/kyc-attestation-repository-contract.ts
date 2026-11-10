@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DuplicateActiveAttestationError,
   KycAttestation,
   type KycAttestationRepository,
 } from "../domain/kyc-attestation";
@@ -69,7 +70,7 @@ export function describeKycAttestationRepository(
         await repository.save(attestation({ id: "kyc-1" }));
         await expect(
           repository.save(attestation({ id: "kyc-2" })),
-        ).rejects.toThrow();
+        ).rejects.toThrow(DuplicateActiveAttestationError);
       } finally {
         await close();
       }

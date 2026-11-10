@@ -8,6 +8,7 @@ import { unexpected } from "../../../shared/errors";
 import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
 import {
   ContributionYear,
+  DuplicateContributionYearError,
   type ContributionYearError,
 } from "../domain/contribution-year";
 import type { CapitalWriteScope } from "./write-scope";
@@ -56,6 +57,9 @@ export class ConfigureContributionYear {
         return ok(year.value);
       });
     } catch (cause) {
+      if (cause instanceof DuplicateContributionYearError) {
+        return err({ code: "YEAR_ALREADY_CONFIGURED" });
+      }
       return err(unexpected(cause));
     }
   }

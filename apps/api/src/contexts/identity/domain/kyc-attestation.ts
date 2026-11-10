@@ -25,6 +25,13 @@ export function parseKycRevokeReason(value: string): KycRevokeReason | null {
     : null;
 }
 
+export class DuplicateActiveAttestationError extends Error {
+  constructor() {
+    super("An active attestation already exists for this subject");
+    this.name = "DuplicateActiveAttestationError";
+  }
+}
+
 export type IdentityError =
   | { readonly code: "INVALID_SUBJECT" }
   | { readonly code: "INVALID_EVIDENCE" }
@@ -33,6 +40,7 @@ export type IdentityError =
   | { readonly code: "ISSUER_NOT_FOUND" }
   | { readonly code: "ISSUER_INACTIVE" }
   | { readonly code: "ATTESTATION_NOT_FOUND" }
+  | { readonly code: "ATTESTATION_ALREADY_ACTIVE" }
   | { readonly code: "ATTESTATION_NOT_ACTIVE" }
   | { readonly code: "INVALID_REVOKE_REASON" }
   | { readonly code: "INVALID_ACTOR" }

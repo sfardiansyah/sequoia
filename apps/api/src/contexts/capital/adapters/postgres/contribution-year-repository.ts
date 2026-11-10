@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { postgresError } from "../../../../shared/persistence/adapters/postgres/error";
 import {
   ContributionYear,
+  DuplicateContributionYearError,
   type ContributionYearRepository,
 } from "../../domain/contribution-year";
 import * as schema from "./schema";
@@ -62,6 +64,14 @@ export class DrizzleContributionYearRepository
   }
 
   async save(year: ContributionYear): Promise<void> {
-    await this.db.insert(contributionYears).values(toRow(year));
+    try {
+      await this.db.insert(contributionYears).values(toRow(year));
+    } catch (cause) {
+      const { code, constraint } = postgresError(cause);
+      if (code === "23505" && constraint === "contribution_years_pkey") {
+        throw new DuplicateContributionYearError();
+      }
+      throw cause;
+    }
   }
 }

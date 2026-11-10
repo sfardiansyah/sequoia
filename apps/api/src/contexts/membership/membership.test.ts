@@ -6,6 +6,7 @@ import type { Result } from "@sequoia/shared";
 import { InMemoryMemberRepository, InMemoryKycEligibility } from "./adapters/in-memory";
 import { AdmitMember } from "./application/admit-member";
 import {
+  DuplicateOwnerPkhError,
   Member,
   MemberStatus,
   type MemberRepository,
@@ -260,6 +261,16 @@ describe("AdmitMember", () => {
       }),
       "ALREADY_MEMBER",
     );
+  });
+
+  test("maps a concurrent duplicate owner to ALREADY_MEMBER", async () => {
+    const { admit, members } = setup();
+    members.findByOwnerPkh = async () => null;
+    members.save = async () => {
+      throw new DuplicateOwnerPkhError();
+    };
+
+    expectError(await admit.execute(base), "ALREADY_MEMBER");
   });
 
   test("returns UNEXPECTED when the KYC lookup fails", async () => {

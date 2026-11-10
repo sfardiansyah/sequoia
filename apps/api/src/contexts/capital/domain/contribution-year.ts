@@ -16,6 +16,13 @@ import type { UnexpectedError } from "../../../shared/errors";
 
 const PILOT_SPLIT = DEFAULT_SPLITS[MemberClass.Standard];
 
+export class DuplicateContributionYearError extends Error {
+  constructor() {
+    super("Contribution year already configured");
+    this.name = "DuplicateContributionYearError";
+  }
+}
+
 export type ContributionYearError =
   | { readonly code: "INVALID_YEAR" }
   | { readonly code: "INVALID_APPROVAL_REF" }

@@ -12,6 +12,13 @@ export const MemberStatus = {
 
 export type MemberStatus = (typeof MemberStatus)[keyof typeof MemberStatus];
 
+export class DuplicateOwnerPkhError extends Error {
+  constructor() {
+    super("Owner public key hash already has a member");
+    this.name = "DuplicateOwnerPkhError";
+  }
+}
+
 export type MembershipError =
   | { readonly code: "INVALID_OWNER" }
   | { readonly code: "INVALID_KYC_ATTESTATION" }

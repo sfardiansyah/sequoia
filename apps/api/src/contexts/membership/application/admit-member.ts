@@ -8,6 +8,7 @@ import { unexpected } from "../../../shared/errors";
 import type { IdGenerator } from "../../../shared/id-generator";
 import type { UnitOfWork } from "../../../shared/persistence/unit-of-work";
 import {
+  DuplicateOwnerPkhError,
   Member,
   type MemberRepository,
   type MembershipError,
@@ -108,6 +109,9 @@ export class AdmitMember {
         });
       });
     } catch (cause) {
+      if (cause instanceof DuplicateOwnerPkhError) {
+        return err({ code: "ALREADY_MEMBER" });
+      }
       return err(unexpected(cause));
     }
 

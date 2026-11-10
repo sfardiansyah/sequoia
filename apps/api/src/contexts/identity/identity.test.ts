@@ -12,6 +12,7 @@ import { IssueKycAttestation } from "./application/issue-kyc-attestation";
 import { ListKycAttestations } from "./application/list-kyc-attestations";
 import { RevokeKycAttestation } from "./application/revoke-kyc-attestation";
 import {
+  DuplicateActiveAttestationError,
   KycAttestation,
   parseKycRevokeReason,
   type IdentityError,
@@ -208,6 +209,18 @@ describe("IssueKycAttestation", () => {
     expect(attestation.issuerId).toBe(issuerId);
     expect((await attestations.findById(attestation.id))?.subjectPkh.value).toBe(
       subject,
+    );
+  });
+
+  test("maps a concurrent issue to ATTESTATION_ALREADY_ACTIVE", async () => {
+    const { issue, attestations } = setup();
+    attestations.saveIssued = async () => {
+      throw new DuplicateActiveAttestationError();
+    };
+
+    expectError(
+      await issue.execute(issueCommand),
+      "ATTESTATION_ALREADY_ACTIVE",
     );
   });
 

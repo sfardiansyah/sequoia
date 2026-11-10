@@ -10,9 +10,10 @@ import {
   type Contribution,
   type ContributionRepository,
 } from "../domain/contribution";
-import type {
-  ContributionYear,
-  ContributionYearRepository,
+import {
+  DuplicateContributionYearError,
+  type ContributionYear,
+  type ContributionYearRepository,
 } from "../domain/contribution-year";
 
 export class InMemoryContributionYearRepository
@@ -26,7 +27,7 @@ export class InMemoryContributionYearRepository
 
   async save(year: ContributionYear): Promise<void> {
     if (this.byYear.has(year.year)) {
-      throw new Error(`Duplicate contribution year: ${year.year}`);
+      throw new DuplicateContributionYearError();
     }
 
     this.byYear.set(year.year, year);

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DuplicateOwnerPkhError,
   Member,
   MemberStatus,
   type MemberRepository,
@@ -62,7 +63,9 @@ export function describeMemberRepository(
 
       try {
         await repository.save(admitted("member-1"));
-        await expect(repository.save(admitted("member-2"))).rejects.toThrow();
+        await expect(
+          repository.save(admitted("member-2")),
+        ).rejects.toThrow(DuplicateOwnerPkhError);
       } finally {
         await close();
       }

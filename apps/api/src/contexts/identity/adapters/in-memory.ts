@@ -1,5 +1,6 @@
 import type { Issuer, IssuerDirectory } from "../domain/issuer";
 import {
+  DuplicateActiveAttestationError,
   KycAttestation,
   type KycAttestationRepository,
 } from "../domain/kyc-attestation";
@@ -22,9 +23,7 @@ export class InMemoryKycAttestationRepository
         existing.status === "ACTIVE" &&
         attestation.status === "ACTIVE"
       ) {
-        throw new Error(
-          `Duplicate active attestation: ${attestation.subjectPkh.value}`,
-        );
+        throw new DuplicateActiveAttestationError();
       }
     }
 

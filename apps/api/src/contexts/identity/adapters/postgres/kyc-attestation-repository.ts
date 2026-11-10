@@ -1,7 +1,9 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { postgresError } from "../../../../shared/persistence/adapters/postgres/error";
 import type { Issuer, IssuerDirectory } from "../../domain/issuer";
 import {
+  DuplicateActiveAttestationError,
   KycAttestation,
   parseKycRevokeReason,
   type KycAttestationFilter,
@@ -75,26 +77,42 @@ export class DrizzleKycAttestationRepository
 
   async save(attestation: KycAttestation): Promise<void> {
     const row = toRow(attestation);
-    await this.db
-      .insert(kycAttestations)
-      .values(row)
-      .onConflictDoUpdate({ target: kycAttestations.id, set: row });
+    try {
+      await this.db
+        .insert(kycAttestations)
+        .values(row)
+        .onConflictDoUpdate({ target: kycAttestations.id, set: row });
+    } catch (cause) {
+      const { code, constraint } = postgresError(cause);
+      if (code === "23505" && constraint === "kyc_attestations_one_active") {
+        throw new DuplicateActiveAttestationError();
+      }
+      throw cause;
+    }
   }
 
   async saveIssued(attestation: KycAttestation): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      await tx
-        .update(kycAttestations)
-        .set({ status: "SUPERSEDED" })
-        .where(
-          and(
-            eq(kycAttestations.subjectPkh, attestation.subjectPkh.value),
-            eq(kycAttestations.status, "ACTIVE"),
-          ),
-        );
+    try {
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(kycAttestations)
+          .set({ status: "SUPERSEDED" })
+          .where(
+            and(
+              eq(kycAttestations.subjectPkh, attestation.subjectPkh.value),
+              eq(kycAttestations.status, "ACTIVE"),
+            ),
+          );
 
-      await tx.insert(kycAttestations).values(toRow(attestation));
-    });
+        await tx.insert(kycAttestations).values(toRow(attestation));
+      });
+    } catch (cause) {
+      const { code, constraint } = postgresError(cause);
+      if (code === "23505" && constraint === "kyc_attestations_one_active") {
+        throw new DuplicateActiveAttestationError();
+      }
+      throw cause;
+    }
   }
 
   async list(filter: KycAttestationFilter = {}): Promise<KycAttestation[]> {

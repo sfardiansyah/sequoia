@@ -1,4 +1,8 @@
-import type { Member, MemberRepository } from "../domain/member";
+import {
+  DuplicateOwnerPkhError,
+  type Member,
+  type MemberRepository,
+} from "../domain/member";
 import type { OwnerPkh } from "../domain/owner-pkh";
 import type {
   KycEligibility,
@@ -20,7 +24,7 @@ export class InMemoryMemberRepository implements MemberRepository {
   async save(member: Member): Promise<void> {
     const existing = this.byOwner.get(member.ownerPkh.value);
     if (existing && existing.id !== member.id) {
-      throw new Error(`Duplicate owner pkh: ${member.ownerPkh.value}`);
+      throw new DuplicateOwnerPkhError();
     }
 
     this.byId.set(member.id, member);
