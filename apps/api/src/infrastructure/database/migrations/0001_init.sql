@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS kyc_issuers (
 
 INSERT INTO kyc_issuers (id, name, active) VALUES
   ('MANUAL', 'Manual', true),
-  ('INTERNAL', 'Internal', true);
+  ('INTERNAL', 'Internal', true)
+ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS kyc_attestations (
   id text PRIMARY KEY,
