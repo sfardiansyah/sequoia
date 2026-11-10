@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { ensureMigrated } from "../../../../infrastructure/database/testing";
+import {
+  assertTestDatabase,
+  ensureMigrated,
+} from "../../../../infrastructure/database/testing";
 import { DrizzleAuditLog } from "../../../../shared/audit/adapters/postgres/audit-log";
 import { SequentialIdGenerator } from "../../../../shared/id-generator";
 import { createDrizzleUnitOfWork } from "../../../../shared/persistence/adapters/postgres/unit-of-work";
@@ -47,6 +50,7 @@ async function setup() {
 }
 
 if (runIntegration && databaseUrl) {
+  assertTestDatabase(databaseUrl);
   describeMemberRepository("DrizzleMemberRepository (Postgres)", setup);
 
   describe("PostgresMemberProfileReader", () => {

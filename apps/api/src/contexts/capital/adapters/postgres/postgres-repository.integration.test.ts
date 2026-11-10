@@ -1,6 +1,9 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { ensureMigrated } from "../../../../infrastructure/database/testing";
+import {
+  assertTestDatabase,
+  ensureMigrated,
+} from "../../../../infrastructure/database/testing";
 import { describeBankAttestationRepository } from "../bank-attestation-repository-contract";
 import {
   CONTRACT_MEMBER_ID,
@@ -74,6 +77,7 @@ async function setup() {
 }
 
 if (runIntegration && databaseUrl) {
+  assertTestDatabase(databaseUrl);
   describeContributionRepository(
     "DrizzleContributionRepository (Postgres)",
     async () => {

@@ -1,6 +1,9 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { ensureMigrated } from "../../../../infrastructure/database/testing";
+import {
+  assertTestDatabase,
+  ensureMigrated,
+} from "../../../../infrastructure/database/testing";
 import { describeAuditLog } from "../audit-log-contract";
 import { DrizzleAuditLog } from "./audit-log";
 import * as schema from "./schema";
@@ -25,5 +28,6 @@ async function setup() {
 }
 
 if (runIntegration && databaseUrl) {
+  assertTestDatabase(databaseUrl);
   describeAuditLog("DrizzleAuditLog (Postgres)", setup);
 }

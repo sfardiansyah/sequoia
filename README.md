@@ -113,7 +113,9 @@ TEST_DATABASE_URL=postgres://sequoia:sequoia@localhost:5432/sequoia_test bun run
 ```
 
 The target database must already exist. The Compose test service creates
-`sequoia_test` automatically on a fresh volume.
+`sequoia_test` automatically on a fresh volume. `TEST_DATABASE_URL` must name a
+database ending in `_test`, and it must not be the database `DATABASE_URL`
+names; the harness refuses to run otherwise, before it truncates anything.
 
 ## Auth configuration
 

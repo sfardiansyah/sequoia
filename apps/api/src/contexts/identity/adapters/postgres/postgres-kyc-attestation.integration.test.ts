@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { ensureMigrated } from "../../../../infrastructure/database/testing";
+import {
+  assertTestDatabase,
+  ensureMigrated,
+} from "../../../../infrastructure/database/testing";
 import { describeKycAttestationRepository } from "../kyc-attestation-repository-contract";
 import { DrizzleKycAttestationRepository } from "./kyc-attestation-repository";
 import * as schema from "./schema";
@@ -27,6 +30,7 @@ async function setup() {
 }
 
 if (runIntegration && databaseUrl) {
+  assertTestDatabase(databaseUrl);
   describeKycAttestationRepository(
     "DrizzleKycAttestationRepository (Postgres)",
     setup,

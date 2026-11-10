@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import postgres from "postgres";
-import { ensureMigrated } from "../../../infrastructure/database/testing";
+import {
+  assertTestDatabase,
+  ensureMigrated,
+} from "../../../infrastructure/database/testing";
 import { describeNonceStore } from "./nonce-store-contract";
 import { PostgresNonceStore } from "./postgres-nonce-store";
 
@@ -21,6 +24,7 @@ async function setup() {
 }
 
 if (runIntegration && databaseUrl) {
+  assertTestDatabase(databaseUrl);
   describeNonceStore("PostgresNonceStore (Postgres)", setup);
 
   describe("PostgresNonceStore purge", () => {

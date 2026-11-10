@@ -1,9 +1,18 @@
+import { assertTestDatabase } from "../apps/api/src/infrastructure/database/testing";
+
 const databaseUrl = process.env.TEST_DATABASE_URL;
 
 if (!databaseUrl) {
   console.error(
     "TEST_DATABASE_URL is required, e.g. postgres://sequoia:sequoia@localhost:5432/sequoia_test",
   );
+  process.exit(1);
+}
+
+try {
+  assertTestDatabase(databaseUrl);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
 
