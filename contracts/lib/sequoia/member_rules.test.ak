@@ -6,8 +6,8 @@ use cardano/transaction.{
 }
 use sequoia/member_rules
 use sequoia/types.{
-  Active, ConfigDatum, Founder, Inactive, KycDatum, MemberDatum, Standard,
-  capital_participation_asset_name, member_capital_asset_name,
+  Active, BankProofDatum, ConfigDatum, Founder, Inactive, KycDatum, MemberDatum,
+  Standard, capital_participation_asset_name, member_capital_asset_name,
 }
 
 const kyc_policy_id: ByteArray =
@@ -45,6 +45,10 @@ const member_too_long: ByteArray =
   #"000000000000000000000000000000000000000000000000000000000000000000"
 
 const joined_at: Int = 1_000
+
+const nonce_a: ByteArray = #"0a0b"
+
+const nonce_b: ByteArray = #"0c0d"
 
 const member_ref: OutputReference =
   OutputReference { transaction_id: tx_id, output_index: 10 }
@@ -634,6 +638,524 @@ test transfer_rejects_a_box_at_a_wallet() fail {
         ),
       ],
       extra_signatories: [owner_a],
+    },
+  )
+}
+
+// ## Contribute
+
+fn proof_datum(
+  member: ByteArray,
+  year: Int,
+  amount: Int,
+  nonce: ByteArray,
+) -> BankProofDatum {
+  BankProofDatum {
+    issuer: owner_b,
+    member_id: member,
+    contribution_year: year,
+    amount,
+    bank_ref_hash: #"cc",
+    nonce,
+    issued_at: joined_at,
+  }
+}
+
+fn proof_input_with(
+  member: ByteArray,
+  year: Int,
+  amount: Int,
+  nonce: ByteArray,
+) -> Input {
+  Input {
+    output_reference: ref(20),
+    output: Output {
+      address: from_script(bank_policy_id),
+      value: assets.from_asset(membership_policy_id, nonce, 1),
+      datum: InlineDatum(proof_datum(member, year, amount, nonce)),
+      reference_script: None,
+    },
+  }
+}
+
+fn proof_input(member: ByteArray) -> Input {
+  proof_input_with(member, 2026, 1_000_000, nonce_a)
+}
+
+fn contribution_mint(
+  nonce: ByteArray,
+  member_capital: Int,
+  participation: Int,
+) -> assets.Assets {
+  assets.from_asset_list(
+    [
+      Pair(
+        membership_policy_id,
+        [
+          Pair(nonce, -1),
+          Pair(member_capital_asset_name, member_capital),
+          Pair(capital_participation_asset_name, participation),
+        ],
+      ),
+    ],
+  )
+}
+
+fn contribution_tx(
+  old_datum: MemberDatum,
+  new_datum: MemberDatum,
+  proof: Input,
+  member_capital: Int,
+  participation: Int,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [member_input(member_a, old_datum, 0, 0), proof],
+    reference_inputs: [kyc_input(member_a)],
+    validity_range: interval.between(joined_at, 2_000),
+    outputs: [member_output(member_a, new_datum, member_capital, participation)],
+    extra_signatories: [owner_a],
+    mint: contribution_mint(nonce_a, member_capital, participation),
+  }
+}
+
+fn contributed(old_datum: MemberDatum) -> MemberDatum {
+  MemberDatum { ..old_datum, last_contribution_year: Some(2026) }
+}
+
+fn standard_contribution() -> Transaction {
+  let old = member_datum(member_a, owner_a, joined_at)
+  contribution_tx(
+    old,
+    contributed(old),
+    proof_input(member_a),
+    700_000,
+    300_000,
+  )
+}
+
+fn leaked_output(participation: Int) -> Output {
+  Output {
+    address: from_verification_key(owner_b),
+    value: assets.from_asset(
+      membership_policy_id,
+      capital_participation_asset_name,
+      participation,
+    ),
+    datum: NoDatum,
+    reference_script: None,
+  }
+}
+
+test contribution_accepts_a_matching_proof() {
+  let tx = standard_contribution()
+  member_rules.contribute_mint(config(), membership_policy_id, tx) && member_rules.contribute_spend(
+    config(),
+    member_ref,
+    tx,
+  )
+}
+
+test contribution_floors_member_capital() {
+  let config = ConfigDatum { ..config(), annual_amount: 1_000_001 }
+  let old = member_datum(member_a, owner_a, joined_at)
+  let tx = contribution_tx(
+    old,
+    contributed(old),
+    proof_input_with(member_a, 2026, 1_000_001, nonce_a),
+    700_000,
+    300_001,
+  )
+  member_rules.contribute_mint(config, membership_policy_id, tx)
+}
+
+test contribution_rejects_a_standard_split_over_the_cap() fail {
+  let config = ConfigDatum {
+    ..config(),
+    member_capital_bps: 4_000,
+    capital_participation_bps: 6_000,
+  }
+  let old = member_datum(member_a, owner_a, joined_at)
+  member_rules.contribute_mint(
+    config,
+    membership_policy_id,
+    contribution_tx(
+      old,
+      contributed(old),
+      proof_input(member_a),
+      400_000,
+      600_000,
+    ),
+  )
+}
+
+test contribution_accepts_a_founder_split_over_the_cap() {
+  let config = ConfigDatum {
+    ..config(),
+    member_capital_bps: 4_000,
+    capital_participation_bps: 6_000,
+  }
+  let old = MemberDatum {
+    ..member_datum(member_a, owner_a, joined_at),
+    class: Founder,
+  }
+  member_rules.contribute_mint(
+    config,
+    membership_policy_id,
+    contribution_tx(
+      old,
+      contributed(old),
+      proof_input(member_a),
+      400_000,
+      600_000,
+    ),
+  )
+}
+
+test contribution_rejects_a_wrong_year() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(
+      old,
+      contributed(old),
+      proof_input_with(member_a, 2025, 1_000_000, nonce_a),
+      700_000,
+      300_000,
+    ),
+  )
+}
+
+test contribution_rejects_a_wrong_amount() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(
+      old,
+      contributed(old),
+      proof_input_with(member_a, 2026, 999_999, nonce_a),
+      700_000,
+      300_000,
+    ),
+  )
+}
+
+test contribution_rejects_a_second_contribution() fail {
+  let old = MemberDatum {
+    ..member_datum(member_a, owner_a, joined_at),
+    last_contribution_year: Some(2026),
+  }
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, old, proof_input(member_a), 700_000, 300_000),
+  )
+}
+
+test contribution_rejects_an_inactive_member() fail {
+  let old = MemberDatum {
+    ..member_datum(member_a, owner_a, joined_at),
+    status: Inactive,
+  }
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(
+      old,
+      contributed(old),
+      proof_input(member_a),
+      700_000,
+      300_000,
+    ),
+  )
+}
+
+test contribution_rejects_a_missing_owner_signature() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction { ..standard_contribution(), extra_signatories: [owner_b] },
+  )
+}
+
+test contribution_rejects_a_missing_proof() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      inputs: [
+        member_input(member_a, member_datum(member_a, owner_a, joined_at), 0, 0),
+      ],
+    },
+  )
+}
+
+test contribution_rejects_a_missing_burn() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      mint: assets.from_asset_list(
+        [
+          Pair(
+            membership_policy_id,
+            [
+              Pair(member_capital_asset_name, 700_000),
+              Pair(capital_participation_asset_name, 300_000),
+            ],
+          ),
+        ],
+      ),
+    },
+  )
+}
+
+test contribution_rejects_a_foreign_burn() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      mint: assets.from_asset_list(
+        [
+          Pair(
+            membership_policy_id,
+            [
+              Pair(nonce_b, -1),
+              Pair(member_capital_asset_name, 700_000),
+              Pair(capital_participation_asset_name, 300_000),
+            ],
+          ),
+        ],
+      ),
+    },
+  )
+}
+
+test contribution_rejects_an_extra_mint() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      mint: assets.from_asset_list(
+        [
+          Pair(
+            membership_policy_id,
+            [
+              Pair(member_b, 1),
+              Pair(nonce_a, -1),
+              Pair(member_capital_asset_name, 700_000),
+              Pair(capital_participation_asset_name, 300_000),
+            ],
+          ),
+        ],
+      ),
+    },
+  )
+}
+
+test contribution_rejects_a_split_mismatch() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(
+      old,
+      contributed(old),
+      proof_input(member_a),
+      700_001,
+      300_000,
+    ),
+  )
+}
+
+test contribution_rejects_an_expired_kyc() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      reference_inputs: [kyc_input_at(1, member_a, 1, joined_at)],
+    },
+  )
+}
+
+test contribution_rejects_a_kyc_member_id_mismatch() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      reference_inputs: [kyc_input(member_b)],
+    },
+  )
+}
+
+test contribution_rejects_a_changed_owner() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  let new = MemberDatum { ..contributed(old), owner: owner_b }
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, new, proof_input(member_a), 700_000, 300_000),
+  )
+}
+
+test contribution_rejects_a_changed_class() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  let new = MemberDatum { ..contributed(old), class: Founder }
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, new, proof_input(member_a), 700_000, 300_000),
+  )
+}
+
+test contribution_rejects_a_changed_status() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  let new = MemberDatum { ..contributed(old), status: Inactive }
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, new, proof_input(member_a), 700_000, 300_000),
+  )
+}
+
+test contribution_rejects_a_changed_join_time() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  let new = MemberDatum { ..contributed(old), joined_at: 999 }
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, new, proof_input(member_a), 700_000, 300_000),
+  )
+}
+
+test contribution_rejects_a_changed_last_vote() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  let new = MemberDatum { ..contributed(old), last_voted_proposal: Some(1) }
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, new, proof_input(member_a), 700_000, 300_000),
+  )
+}
+
+test contribution_rejects_a_missing_year_update() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, old, proof_input(member_a), 700_000, 300_000),
+  )
+}
+
+test contribution_rejects_lost_participation() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(old, contributed(old), proof_input(member_a), 700_000, 0),
+  )
+}
+
+test contribution_rejects_tokens_in_another_output() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      outputs: [
+        member_output(
+          member_a,
+          contributed(member_datum(member_a, owner_a, joined_at)),
+          700_000,
+          0,
+        ),
+        leaked_output(300_000),
+      ],
+    },
+  )
+}
+
+test contribution_rejects_a_member_id_nonce() fail {
+  let old = member_datum(member_a, owner_a, joined_at)
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    contribution_tx(
+      old,
+      contributed(old),
+      proof_input_with(member_a, 2026, 1_000_000, member_a),
+      700_000,
+      300_000,
+    ),
+  )
+}
+
+test contribution_rejects_a_reserved_nonce() fail {
+  let tx = contribution_tx(
+    member_datum(member_a, owner_a, joined_at),
+    contributed(member_datum(member_a, owner_a, joined_at)),
+    proof_input_with(member_a, 2026, 1_000_000, member_capital_asset_name),
+    700_000,
+    300_000,
+  )
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..tx,
+      mint: assets.from_asset(
+        membership_policy_id,
+        member_capital_asset_name,
+        -1,
+      ),
+    },
+  )
+}
+
+test contribution_spend_rejects_a_foreign_box() fail {
+  member_rules.contribute_spend(config(), ref(99), standard_contribution())
+}
+
+test contribution_spend_rejects_another_members_proof() fail {
+  member_rules.contribute_spend(
+    config(),
+    member_ref,
+    Transaction {
+      ..standard_contribution(),
+      inputs: [
+        member_input(member_a, member_datum(member_a, owner_a, joined_at), 0, 0),
+        proof_input(member_b),
+      ],
+    },
+  )
+}
+
+test contribution_rejects_a_proof_at_a_wallet() fail {
+  member_rules.contribute_mint(
+    config(),
+    membership_policy_id,
+    Transaction {
+      ..standard_contribution(),
+      inputs: [
+        member_input(member_a, member_datum(member_a, owner_a, joined_at), 0, 0),
+        Input {
+          output_reference: ref(20),
+          output: Output {
+            address: from_verification_key(owner_b),
+            value: assets.from_asset(membership_policy_id, nonce_a, 1),
+            datum: InlineDatum(proof_datum(member_a, 2026, 1_000_000, nonce_a)),
+            reference_script: None,
+          },
+        },
+      ],
     },
   )
 }

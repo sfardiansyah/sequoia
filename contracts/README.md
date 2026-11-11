@@ -56,8 +56,8 @@ scripts take the state NFT policy ID, which is derived from it.
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
 - `lib/sequoia/kyc_rules.ak` — issue, renew, and revoke checks.
 - `lib/sequoia/bank_rules.ak` — bank-proof issue, cancel, and guard checks.
-- `lib/sequoia/member_rules.ak` — join, and the spend invariant every member
-  action reuses.
+- `lib/sequoia/member_rules.ak` — join, contribution, and the spend invariant
+  every member action reuses.
 - `lib/sequoia/split.ak` — the contribution split, mirroring `@sequoia/shared`.
 - `lib/sequoia/vesting.ak` — the founder vesting schedule.
 - `lib/sequoia/vectors.ak` — generated from the shared JSON; do not edit.
@@ -99,9 +99,13 @@ is the transaction validity lower bound, and a member id may not be `MCAP` or
 `Transfer` is the only spend action in M1. It requires the owner's signature,
 one output at the script, and all `MEMBER`/`MCAP`/`PROJ` units returned to that
 output with zero in every other output; the other datum fields are unchanged.
-Contribution (#25) reuses the same invariant. Board accounts are emulator
-accounts generated from a private key, so the tests can co-sign with
-`sign.withPrivateKey`.
+Contribution (#25) is a mint and a spend in one transaction: it spends the
+member box and the bank proof, mints the config split, and burns the proof NFT.
+The `Contribute` checks run from both purposes, so the spend cannot record a year
+without the burn and the mint cannot run without the member box. The proof nonce
+may not be `MCAP` or `PROJ`; those names share the policy's asset-name
+namespace. Board accounts are emulator accounts generated from a private key, so
+the tests can co-sign with `sign.withPrivateKey`.
 
 ## Emulator support (answered 2026-11-07)
 

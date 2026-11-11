@@ -8,7 +8,7 @@ use cardano/transaction.{
   placeholder,
 }
 use sequoia/bank_rules
-use sequoia/types.{BankProofDatum, ConfigDatum}
+use sequoia/types.{BankProofDatum, ConfigDatum, member_capital_asset_name}
 
 const state_policy_id: ByteArray =
   #"11111111111111111111111111111111111111111111111111111111"
@@ -211,6 +211,23 @@ test issue_rejects_a_nonce_mismatch() fail {
     issue_tx(
       nonce_a,
       proof_datum(member_a, 2026, 1_000_000, nonce_b, issued_at),
+    ),
+  )
+}
+
+test issue_rejects_a_reserved_nonce() fail {
+  bank_rules.issue(
+    config(),
+    membership_policy_id,
+    issue_tx(
+      member_capital_asset_name,
+      proof_datum(
+        member_a,
+        2026,
+        1_000_000,
+        member_capital_asset_name,
+        issued_at,
+      ),
     ),
   )
 }
