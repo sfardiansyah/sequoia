@@ -9,8 +9,9 @@ because a same-name mint and burn nets to zero. Bank-proof issuance and
 treasurer cancellation are implemented; the parameterless bank guard requires
 the proof NFT to be burned whenever its box is spent. Amended 2026-11-11:
 membership join and non-transferability are implemented; a plain spend is the
-`Transfer` action, and `MCAP`/`PROJ` are reserved asset names, so a member id
-may not take either.
+`Transfer` action, and `MCAP`/`PROJ` are reserved asset names, so a member id or
+bank-proof nonce may not take either. Contribution is implemented; its checks
+run from both the mint and the spend purpose, so neither half can pass alone.
 
 ## Context
 
@@ -87,7 +88,8 @@ One membership policy, four asset names:
 `MCAP` and `PROJ` are fungible; the balance is the quantity in the member box.
 `MEMBER` and `BANK` are NFTs: unique asset names, quantity 1. A `member_id`
 shares the policy's asset-name namespace with the other three names, so join
-rejects `MCAP` and `PROJ` as a member id.
+rejects `MCAP` and `PROJ` as a member id; bank-proof issuance rejects them as a
+nonce.
 
 Renewal is not a mint action. It moves the `member_id` token to a replacement
 box at the same script, so the mint field stays empty. Expressing it as a burn
@@ -219,8 +221,11 @@ actions that own them. Contribution (#25) reuses the same invariant and changes
   member, its `contribution_year` matches the config year, and its `amount`
   matches the config annual amount; `last_contribution_year` is not the config
   year; the split from config is applied with the plan's floor rule;
-  `MCAP + PROJ` minted equals `annual_amount`; the bank proof NFT is burned;
-  token conservation holds.
+  `MCAP + PROJ` minted equals `annual_amount`; a standard member's split stays
+  under `standard_capital_participation_max_bps`; the bank proof nonce is not a
+  reserved name; the bank proof NFT is burned; token conservation holds. The
+  same checks run in the mint and spend handlers, bound to the spent box, so a
+  mixed redeemer pair cannot split them.
 
 **Issue bank proof (membership mint).**
 

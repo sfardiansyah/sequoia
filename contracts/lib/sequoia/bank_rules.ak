@@ -5,7 +5,10 @@ use cardano/address.{Script}
 use cardano/assets.{PolicyId, flatten, quantity_of, tokens, without_lovelace}
 use cardano/transaction.{Output, OutputReference, Transaction}
 use sequoia/tx.{inline_datum, lower_bound, one_token_output, require_key_signer}
-use sequoia/types.{BankProofDatum, ConfigDatum}
+use sequoia/types.{
+  BankProofDatum, ConfigDatum, capital_participation_asset_name,
+  member_capital_asset_name,
+}
 
 // Bank proof rules (ADR 0008 §3, §5, §6). The proof NFT is minted under the
 // membership policy and locked at the parameterless bank guard, which requires
@@ -30,6 +33,8 @@ pub fn issue(
     let datum = datum_of(output)
     if nonce == #"" {
       fail @"bank_rules: nonce must not be empty"
+    } else if nonce == member_capital_asset_name || nonce == capital_participation_asset_name {
+      fail @"bank_rules: nonce is a reserved asset name"
     } else if datum.nonce != nonce {
       fail @"bank_rules: datum nonce must match the token name"
     } else if datum.issuer != issuer {

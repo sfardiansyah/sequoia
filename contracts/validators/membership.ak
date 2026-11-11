@@ -4,7 +4,7 @@ use sequoia/bank_rules
 use sequoia/config_ref
 use sequoia/member_rules
 use sequoia/types.{
-  BurnBankProof, IssueBankProof, Join, MembershipRedeemer, Transfer,
+  BurnBankProof, Contribute, IssueBankProof, Join, MembershipRedeemer, Transfer,
 }
 
 /// The member record and its tokens. One script mints and burns `MEMBER`,
@@ -19,6 +19,7 @@ validator membership(state_nft_policy: PolicyId) {
       BurnBankProof -> bank_rules.cancel(config, policy_id, self)
       Join -> member_rules.join(config, policy_id, self)
       Transfer -> fail @"membership: transfer is a spend action"
+      Contribute -> member_rules.contribute_mint(config, policy_id, self)
     }
   }
 
@@ -31,6 +32,10 @@ validator membership(state_nft_policy: PolicyId) {
     expect action: MembershipRedeemer = redeemer
     when action is {
       Transfer -> member_rules.transfer(own_ref, self)
+      Contribute -> {
+        let config = config_ref.find(state_nft_policy, self)
+        member_rules.contribute_spend(config, own_ref, self)
+      }
       _ -> fail @"membership: action is not a spend action"
     }
   }

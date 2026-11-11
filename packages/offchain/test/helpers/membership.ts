@@ -19,6 +19,15 @@ import {
 // Constructor order of `MembershipRedeemer` in `contracts/lib/sequoia/types.ak`.
 export const JOIN = 2;
 export const TRANSFER = 3;
+export const CONTRIBUTE = 4;
+
+/** The M1 test config's 70/30 split of the 1,000,000 annual amount. */
+export const CONTRIBUTION_MEMBER_CAPITAL = 700_000n;
+export const CONTRIBUTION_PARTICIPATION = 300_000n;
+export const CONTRIBUTION_YEAR = 2026n;
+
+const MEMBER_CAPITAL_ASSET_NAME = Buffer.from("MCAP").toString("hex");
+const CAPITAL_PARTICIPATION_ASSET_NAME = Buffer.from("PROJ").toString("hex");
 
 export type MemberClass = "Standard" | "Founder";
 
@@ -98,6 +107,74 @@ export async function joinMember(
   await submitWithBoard(built, ledger, boardSigners);
   ledger.emulator.awaitBlock(1);
   return ledger.lucid.utxoByUnit(unit);
+}
+
+/** The member datum with only the contribution year updated. */
+function withContributionYear(datum: string, year: bigint): string {
+  const old = Data.from(datum, memberDatumSchema) as Record<string, unknown>;
+  return encode({ ...old, last_contribution_year: year }, memberDatumSchema);
+}
+
+/**
+ * Contribution spends the member box and the bank proof, mints the split, and
+ * burns the proof NFT in one transaction (ADR 0008 §5). The same script is
+ * attached as both the minting policy and the spending validator.
+ */
+export async function contributeMember(
+  ledger: M1Ledger,
+  m1: Genesis,
+  box: UTxO,
+  proof: UTxO,
+  kyc: UTxO,
+  memberId: string,
+  memberCapital = CONTRIBUTION_MEMBER_CAPITAL,
+  participation = CONTRIBUTION_PARTICIPATION,
+): Promise<UTxO> {
+  const now = scriptTime(ledger, ledger.emulator.now());
+  const memberCapitalUnit = m1.membershipPolicy + MEMBER_CAPITAL_ASSET_NAME;
+  const participationUnit =
+    m1.membershipPolicy + CAPITAL_PARTICIPATION_ASSET_NAME;
+  const proofUnit = Object.keys(proof.assets).find(
+    (unit) => unit !== "lovelace",
+  );
+  if (proofUnit === undefined) throw new Error("proof box holds no BANK token");
+
+  const tx = await ledger.lucid
+    .newTx()
+    .addSigner(ledger.actors.member.address)
+    .readFrom([m1.configUtxo, kyc])
+    .collectFrom([box], membershipRedeemer(CONTRIBUTE))
+    .collectFrom([proof], Data.void())
+    .attach.SpendingValidator(m1.membershipValidator)
+    .attach.SpendingValidator(m1.bankValidator)
+    .attach.MintingPolicy(m1.membershipValidator)
+    .validFrom(now)
+    .mintAssets(
+      {
+        [memberCapitalUnit]: memberCapital,
+        [participationUnit]: participation,
+        [proofUnit]: -1n,
+      },
+      membershipRedeemer(CONTRIBUTE),
+    )
+    .pay.ToContract(
+      m1.membershipAddress,
+      {
+        kind: "inline",
+        value: withContributionYear(box.datum!, CONTRIBUTION_YEAR),
+      },
+      {
+        ...box.assets,
+        [memberCapitalUnit]: memberCapital,
+        [participationUnit]: participation,
+      },
+    )
+    .complete();
+  await submitTx(tx);
+  ledger.emulator.awaitBlock(1);
+  return ledger.lucid.utxoByUnit(
+    memberUnit(m1.membershipPolicy, memberId),
+  );
 }
 
 /** A plain spend keeps the record intact; the member pays the fee. */

@@ -62,13 +62,14 @@ pub type KycRedeemer {
 }
 
 /// Membership actions. `Transfer` is the spend-only action that keeps the
-/// member box intact; `Contribute` arrives with #25. Actions append so these
-/// indices stay stable.
+/// member box intact; `Contribute` is a mint and a spend in one transaction.
+/// Actions append so these indices stay stable.
 pub type MembershipRedeemer {
   IssueBankProof
   BurnBankProof
   Join
   Transfer
+  Contribute
 }
 
 pub type KycDatum {
