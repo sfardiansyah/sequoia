@@ -81,8 +81,9 @@ exception).
 **Next milestone:** M2 — governance (ADR 0004). M1 is complete: the GitHub
 milestone `M1: Config + Membership` (issues #17–#26) delivered the state NFT,
 config, KYC attestations, bank proofs, membership join/transfer/contribution,
-and one Lucid emulator suite for the whole slice. The M2 design session is next;
-no M2 code exists yet.
+and one Lucid emulator suite for the whole slice. The M2 spec is
+`docs/plan/m2-governance.md`; its tickets are in the `M2: Governance` milestone.
+No M2 code exists yet.
 M1 ran on preprod only: no real IDR, no real personal data, and no preprod
 deployment in the milestone itself.
 
@@ -370,7 +371,7 @@ As of 19 October 2026:
 | `PROJ` | `Capital Participation`; at-risk; book value fluctuates | Non-transferable |
 | `STATE` | Config/treasury singleton | Protocol-controlled |
 | `PROPOSAL` | Proposal identity | Protocol-controlled |
-| `VOTE` | Vote receipt | Protocol-controlled |
+| `VOTE` | Ballot nullifier; one per member per proposal | Protocol-controlled |
 | `CLAIM` | Deferred exit/founder/redemption claim | Non-transferable |
 
 All member tokens are locked in the member’s on-chain record. The membership validator forbids sending them to a wallet, DEX, or third party. `MCAP` is an equity record, not a deposit receipt.
@@ -483,10 +484,11 @@ At month 60:
 - Project spending: >50% of votes cast.
 - Structural changes, split changes, board changes, and bylaws: two-thirds of votes cast with 50% quorum.
 - 7-day timelock for structural and parameter changes.
-- Proposal bond: returnable if quorum is reached; forfeited to the treasury if spam.
+- Proposal bond: deferred to M3, when a treasury exists to receive a forfeited bond.
 - Voting is not implemented in the pilot harness. On-chain votes are secret per
-  ADR 0007: a member commits to a choice and reveals it at tally, or is tallied
-  without revealing it. Quorum and counts stay public; individual ballots do not.
+  ADR 0007. M2 uses commit-reveal over a board-attested eligible root; see
+  `docs/plan/m2-governance.md`. Quorum and counts stay public; individual ballots
+  do not.
 - Delegation is out of scope for v1.
 
 ### 3.10 Board and operations
@@ -572,6 +574,8 @@ quorum_bps:                                5000
 project_threshold_bps:                     5001
 structural_threshold_bps:                  6667
 timelock_days:                             7
+voting_days:                               7
+reveal_days:                               3
 exit_window_days:                          30
 opex_reserve_months:                       6-12
 surplus_endowment_bps:                     2000
@@ -607,17 +611,16 @@ surplus_capital_bps:                       2500
 6. Contract mints the split tokens.
 7. Double contribution, prepayment, and wrong amount are rejected.
 
-### 4.3 Project proposal and vote
+### 4.3 Proposal and vote
 
-1. Member or board creates a proposal with metadata on IPFS.
-2. Proposal bond is locked.
-3. Proposal NFT and UTxO are created.
-4. Voting opens at `start` and closes at `end`.
-5. Each member votes once; a vote receipt NFT proves participation only. The ballot carries a nullifier and a choice commitment, never the member id or the choice (ADR 0007).
-6. After `end`, anyone can tally in batches.
-7. If quorum and threshold are met, status becomes `Passed`.
-8. Execution creates/updates the project UTxO.
-9. If rejected, bond returns if quorum was reached; otherwise forfeited.
+1. An active member with live KYC creates a proposal; the board signs the eligible root, count, and snapshot at creation.
+2. The `PROPOSAL` NFT, UTxO, windows, and proposed config are recorded. No bond in M2; a bond waits for the treasury (M3).
+3. Members cast sealed ballots with a nullifier against the eligible root during the voting window.
+4. After the voting window, ballots are revealed; the chain checks each choice against its seal.
+5. Anyone tallies revealed ballots in batches. Unrevealed ballots are discarded after the reveal deadline and do not count.
+6. When every cast ballot is tallied or discarded, anyone finalizes: 50% quorum of the eligible count and the threshold decide `Passed` or `Rejected`.
+7. A passed config change waits for the 7-day timelock, then anyone executes it. Project proposals wait for M3, where execution creates or updates the project UTxO.
+8. No receipt NFT in M2; a receipt would relink the member to the ballot.
 
 ### 4.4 Project execution and spending
 
@@ -863,7 +866,7 @@ The chain cannot verify the bank balance or prevent a fraudulent transfer. The t
 |---|---|
 | `config` | State NFT; annual amount, `Member Capital`/`Capital Participation` split, founder extra capital, surplus allocation incl. education, redemption reserve policy, quorum, windows, board keys, KYC issuer, token policies |
 | `membership` | Member records; `MEMBER`, `MCAP`, `PROJ` mint/burn; contribution; voting record; founder lock/vesting; conversion; exit request |
-| `governance` | Proposals, bonds, one-member-one-vote, quorum, batched tally, execution |
+| `governance` | Proposals, eligible root, one-member-one-vote via nullifiers, quorum, batched tally, execution (bonds deferred to M3) |
 | `treasury` | Project pool budgets, tranches, spending, cancel/return |
 | `attestation` | KYC, bank contribution, reserve, and project spending attestations |
 | `distribution` | Surplus split across education, patronage, and capital; Merkle root; claims; double-claim prevention |
@@ -875,10 +878,11 @@ The chain cannot verify the bank balance or prevent a fraudulent transfer. The t
 ```text
 Config UTxO          — state NFT, parameters
 MemberRecord UTxO    — one per member; holds MEMBER + MCAP + PROJ
-Proposal UTxO        — one per proposal; PROPOSAL NFT
-Vote UTxO            — one per member per proposal at the ballot script;
-                       nullifier + commitment, no member id or choice
-Vote receipt NFT     — proves participation only; no link to the choice
+Proposal UTxO        — one per proposal; PROPOSAL NFT; eligible root, proposed
+                       config, nullifier list, counters, status
+Ballot UTxO          — one per member per proposal at the ballot script; VOTE
+                       NFT (the nullifier) + choice commitment, no member id
+                       until reveal; no receipt NFT (it would relink the member)
 Project UTxO         — one per approved project; budget/spent
 Distribution UTxO    — one per surplus distribution; Merkle root over both weight
                        classes; holds the distributable 77.5% only
@@ -893,6 +897,10 @@ PatronageAttestation UTxO — per-fiscal-year patronage figures; no per-transact
 Use CIP-31 reference inputs for config and CIP-33 reference scripts to stay under transaction size limits.
 
 ### 6.3 Datum schemas
+
+The authoritative shapes are ADR 0008 for M1 and `docs/plan/m2-governance.md`
+for M2. The sketch below is the original plan and is superseded where they
+disagree.
 
 ```aiken
 pub type ConfigDatum {
@@ -933,7 +941,6 @@ pub type MemberDatum {
   member_capital: Int,
   capital_participation: Int,
   last_contribution_year: Int,
-  last_voted_proposal: Option<Int>,
   founder_lock_until: Option<Int>,
   release_schedule: List<(Int, Int)>,
   status: MemberStatus,
@@ -941,32 +948,9 @@ pub type MemberDatum {
   kyc_expiry: Int,
 }
 
-pub type ProposalDatum {
-  id: Int,
-  proposer: VerificationKeyHash,
-  kind: ProposalKind,
-  title_hash: ByteArray,
-  metadata_uri: ByteArray,
-  amount: Int,
-  recipient: Address,
-  milestones: List<Milestone>,
-  start: Int,
-  end: Int,
-  snapshot: Int,
-  eligible_count: Int,
-  yes: Int,
-  no: Int,
-  abstain: Int,
-  status: ProposalStatus,
-  bond: Int,
-}
-
-pub type VoteDatum {
-  proposal_id: Int,
-  nullifier: ByteArray,
-  choice_commitment: ByteArray,
-  receipt_nft: AssetName,
-}
+// M2 governance datums: see docs/plan/m2-governance.md §5. The pre-M2 sketch
+// (public vote boxes, receipt NFT, bond) is superseded by ADR 0007 and the M2
+// spec.
 
 pub type ProjectDatum {
   proposal_id: Int,
@@ -1026,9 +1010,9 @@ pub type KycDatum {
 ### 6.4 Redeemers/actions
 
 ```text
-Config:     UpdateParams | RotateBoard | Migrate
-Membership: Join | Contribute | Vote | RequestExit | CompleteExit | ConvertFounder | RotateOwner
-Governance: CreateProposal | CastVote | TallyBatch | FinalizeTally | Execute | Cancel
+Config:     Execute (M2; UpdateParams/RotateBoard/Migrate arrive with later versions)
+Membership: Join | Contribute | RequestExit | CompleteExit | ConvertFounder | RotateOwner
+Governance: CreateProposal | Cast | Reveal | Discard | Tally | Finalize | Execute
 Treasury:   CreateProject | SpendTranche | CancelProject | CloseProject
 Attestation: KycIssue | KycRevoke | BankContribution | ReserveAttest | SpendAttest | PatronageAttest
 Distribution: CreateDistribution | Claim | CloseDistribution
@@ -1039,8 +1023,8 @@ Exit:       RequestExit | RedeemMemberCapital | SettleCapitalParticipation | Def
 ### 6.5 Transaction flows
 
 1. **Join/contribution:** config reference input + KYC attestation + bank attestation + member record → mint tokens.
-2. **Vote:** spend member record → update `last_voted_proposal` → mint vote receipt → create vote UTxO.
-3. **Tally:** consume batches of vote UTxOs → update proposal counters → finalize.
+2. **Vote:** cast against the eligible root → mint the VOTE NFT (nullifier) → create the ballot UTxO with a sealed choice. Later, reveal the choice and salt against the seal; the member record is never touched.
+3. **Tally:** consume batches of revealed ballot UTxOs → update proposal counters → finalize when every cast ballot is tallied or discarded.
 4. **Execute:** proposal + treasury → create project UTxO or update config.
 5. **Spend tranche:** project + proposal + board signatures + bank attestation → update project.
 6. **Distribution:** audit, patronage, and capital-weight attestations + proposal →

@@ -141,6 +141,21 @@ thing: a provisional database row, not a chain record.
 | **Issuer** | The authority that signs KYC attestations. | "KYC provider" (that is the vendor) |
 | **Treasurer** | The authority that issues bank proofs. | "bank", "payment provider" |
 
+## On-chain (M2 governance)
+
+| Term | Meaning | Avoid |
+|---|---|---|
+| **Proposal** | The on-chain box for one decision: eligible root and count, a proposed config, windows, counters, and status. The `PROPOSAL` NFT name is its id. | "poll", "vote" for the proposal box |
+| **Eligible Root** | The board-signed fingerprint of the eligible voter commitments at the snapshot. A ballot proves membership against it without naming the member. | "voter list" (that is the off-chain input to the root) |
+| **Vote Secret** | The 32-byte secret a member registers privately with the co-op; the eligible leaf and the nullifier derive from it. | "private key" |
+| **Nullifier** | The one-time ballot id: `hash(vote_secret, proposal_id)`. It is the `VOTE` NFT name, so a second ballot is a duplicate token. | "ballot id" when the nullifier is meant |
+| **Ballot** | The vote box at the ballot script: nullifier NFT, choice commitment, and (after reveal) the choice. | "vote" for the box |
+| **Commit / Reveal** | Casting posts a sealed choice; revealing posts the choice and salt, and the chain checks the seal. Unrevealed ballots are not counted. | "encrypt" |
+| **Quorum** | The minimum share of the board-attested eligible count that must vote for a result to count. | "turnout" when the rule is meant |
+| **Tally** | Counting revealed ballots in batches and updating the proposal counters. Permissionless. | "count" for the box |
+| **Timelock** | The forced wait between finalizing a passed config change and executing it. | "delay" |
+| **Execute** | Spending the passed proposal and the config box to write the proposed config. Permissionless after the timelock. | "apply", "deploy" |
+
 ## Money
 
 | Term | Meaning |

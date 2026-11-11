@@ -360,7 +360,9 @@ production migration from M1 is owed.
 - Three token policies collapse into `membership_policy`.
 - `MemberDatum` loses `member_capital`, `capital_participation`,
   `kyc_credential`, `kyc_expiry`, `founder_lock_until`, and `release_schedule`.
-- `MemberDatum` keeps `last_voted_proposal` as a reserved M2 field.
+- `MemberDatum` keeps `last_voted_proposal` as a reserved M2 field. M2 removes
+  it and the vote receipt NFT: `docs/plan/m2-governance.md` uses commit-reveal
+  over a board-attested eligible root.
 - `ConfigDatum` keeps the board keys and threshold, adds `network`, and adds the
   three script policy IDs. The state NFT policy is the script parameter; the
   `STATE` asset name is a constant.
