@@ -127,3 +127,7 @@ provider adapter. Yaci DevKit stays the last resort.
 
 The emulator exposes submitted outputs only after a block is produced, so the
 tests call `emulator.awaitBlock(1)` after each submit.
+
+`bun run test:contracts` runs the focused suites plus `test/end-to-end.test.ts`,
+which walks one ledger through genesis, KYC, bank proof, join, and contribution
+and exercises the ADR 0008 §11 failure cases.

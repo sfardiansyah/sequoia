@@ -63,14 +63,14 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-11-06
+### Current implementation handoff — 2026-11-11
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken (M1)  
 **Test command:** `bun run check`  
-**Current status:** 241 unit tests pass, typecheck clean, 43 Postgres integration tests green  
+**Current status:** 291 tests pass, typecheck clean, 43 Postgres integration tests green  
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
@@ -78,10 +78,12 @@ The co-op is a member-owned organization that:
 PostgreSQL rows are provisional, not the co-op ledger (ADR 0004's pilot
 exception).
 
-**Next milestone:** M1 — Aiken `config` and `membership` (ADR 0008). The
-GitHub milestone is `M1: Config + Membership`; the tickets are issues #17–#26.
-Tickets #17–#21 are done; #22–#26 remain.
-M1 is preprod only: no real IDR, no real personal data, and no preprod
+**Next milestone:** M2 — governance (ADR 0004). M1 is complete: the GitHub
+milestone `M1: Config + Membership` (issues #17–#26) delivered the state NFT,
+config, KYC attestations, bank proofs, membership join/transfer/contribution,
+and one Lucid emulator suite for the whole slice. The M2 design session is next;
+no M2 code exists yet.
+M1 ran on preprod only: no real IDR, no real personal data, and no preprod
 deployment in the milestone itself.
 
 #### Completed milestones
@@ -106,6 +108,7 @@ deployment in the milestone itself.
 18. Audit transaction scope: a `UnitOfWork` port gives a write command transaction-bound repositories and audit log, so the domain write and its audit row commit together and an audit failure fails the command; identity is wired, membership and capital adopt it with their audit rows.
 19. Pilot harness MVP (tickets 03–10): KYC revocation reason codes and `retain_until`, board-approved admission with a standard-only pilot policy, contribution-year approval and a domain-pinned 70/30 split, mock bank attestations, bank-attestation-gated contribution snapshots with `PILOT` provenance, `/members/me` contribution summaries, one end-to-end PGlite/Postgres flow, and docs/legal alignment.
 20. M1 on-chain foundation (tickets #17–#21): Aiken toolchain pinned to v1.1.24, shared split/vesting primitives with cross-language vectors, ADR 0008, the one-shot `state_nft` policy and the immutable `config` validator, and an emulator genesis test (seed, one `STATE`, config box, and its negative cases).
+21. M1 config and membership (tickets #22–#26): KYC attestation issue/renew/revoke, bank-proof issue/cancel and the burn guard, membership join and non-transferability, contribution with the config split and standard cap, and one end-to-end Lucid emulator suite. `contracts/plutus.json` is the only off-chain interface.
 
 #### Current auth decisions
 
@@ -207,9 +210,10 @@ This rule exists because security and architecture stabilization must not be com
 - `retain_until` is stored but no deletion job or retention schedule runs.
 - Associate membership is not offered; membership is Indonesian natural
   persons only.
-- Aiken `state_nft` and `config` are built and tested in the emulator; KYC, bank
-  proof, membership, the full capital/governance contexts, and the frontend are
-  not built yet.
+- M1 contracts (state NFT, config, KYC, bank proof, membership
+  join/transfer/contribution) are built and emulator-tested. Governance,
+  treasury, distribution/exit, the API/DB projections, and the frontend are not
+  built yet.
 
 #### Resume checklist
 
