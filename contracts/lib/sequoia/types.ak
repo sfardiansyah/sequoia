@@ -8,6 +8,12 @@ use cardano/assets.{AssetName, PolicyId}
 /// Asset name of the one-shot state token under the state NFT policy.
 pub const state_asset_name: AssetName = "STATE"
 
+/// Asset names of the fungible tokens under the membership policy. A member id
+/// may not take either name: they share the policy's asset-name namespace.
+pub const member_capital_asset_name: AssetName = "MCAP"
+
+pub const capital_participation_asset_name: AssetName = "PROJ"
+
 pub type ConfigDatum {
   contribution_year: Int,
   annual_amount: Int,
@@ -55,11 +61,14 @@ pub type KycRedeemer {
   Revoke
 }
 
-/// Membership actions. `Join`, `Contribute`, and the spend-only transfer action
-/// arrive with #24/#25; they append so these indices stay stable.
+/// Membership actions. `Transfer` is the spend-only action that keeps the
+/// member box intact; `Contribute` arrives with #25. Actions append so these
+/// indices stay stable.
 pub type MembershipRedeemer {
   IssueBankProof
   BurnBankProof
+  Join
+  Transfer
 }
 
 pub type KycDatum {

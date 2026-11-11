@@ -7,7 +7,10 @@ the plan §6.3 sketch wherever the two disagree. Amended 2026-11-10: KYC
 issuance, renewal, and revocation are implemented; renewal is spend-validated
 because a same-name mint and burn nets to zero. Bank-proof issuance and
 treasurer cancellation are implemented; the parameterless bank guard requires
-the proof NFT to be burned whenever its box is spent.
+the proof NFT to be burned whenever its box is spent. Amended 2026-11-11:
+membership join and non-transferability are implemented; a plain spend is the
+`Transfer` action, and `MCAP`/`PROJ` are reserved asset names, so a member id
+may not take either.
 
 ## Context
 
@@ -82,7 +85,9 @@ One membership policy, four asset names:
 | `nonce` (≤ 32 bytes) | 1 | The `BANK` proof NFT |
 
 `MCAP` and `PROJ` are fungible; the balance is the quantity in the member box.
-`MEMBER` and `BANK` are NFTs: unique asset names, quantity 1.
+`MEMBER` and `BANK` are NFTs: unique asset names, quantity 1. A `member_id`
+shares the policy's asset-name namespace with the other three names, so join
+rejects `MCAP` and `PROJ` as a member id.
 
 Renewal is not a mint action. It moves the `member_id` token to a replacement
 box at the same script, so the mint field stays empty. Expressing it as a burn
@@ -193,6 +198,14 @@ manifest, which is outside M1.
   `member_id` equals the new member id; `class` is `Standard` or `Founder`;
   `status = Active`; `joined_at` taken from the transaction validity range; no
   existing member box for that `member_id` (see the trust boundary in §6).
+- The member box holds only the one `MEMBER` unit; a join cannot also mint
+  `MCAP`, `PROJ`, or `BANK`.
+
+**Transfer (membership spend).** The only spend action in M1: it enforces §6.1
+and requires the rest of the datum to be unchanged, so `status`,
+`last_contribution_year`, and `last_voted_proposal` move only through the
+actions that own them. Contribution (#25) reuses the same invariant and changes
+`last_contribution_year` itself.
 
 **Contribute (membership mint + spend).**
 
@@ -271,9 +284,10 @@ manifest, which is outside M1.
 
 1. **Non-transferability.** The membership `spend` handler requires the owner's
    signature, exactly one output at the membership script, the same `owner`,
-   `member_id`, and `class`, and all `MEMBER`/`MCAP`/`PROJ` quantities returned
-   to that output. Quantities in any other output must be zero. M4 adds the
-   burn branch for exit.
+   `member_id`, `class`, and `joined_at`, and all `MEMBER`/`MCAP`/`PROJ`
+   quantities returned to that output. Quantities in any other output must be
+   zero, and a plain `Transfer` leaves the other datum fields unchanged. M4 adds
+   the burn branch for exit.
 2. **One member per admitted member.** The KYC issuer assigns one `member_id`
    per person; the board approves one admission per `member_id`; the join check
    binds the KYC box to the new member id. The ledger enforces one live KYC box
