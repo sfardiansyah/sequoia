@@ -1,9 +1,11 @@
 import {
+  Constr,
   Data,
   Emulator,
   Lucid,
   applyParamsToScript,
   generateEmulatorAccount,
+  generateEmulatorAccountFromPrivateKey,
   getAddressDetails,
   slotToBeginUnixTime,
   unixTimeToEnclosingSlot,
@@ -26,18 +28,21 @@ import { compiledValidator } from "../../src/blueprint";
 export const STATE_ASSET_NAME = "STATE";
 export const CONFIG_MIN_LOVELACE = 5_000_000n;
 export const KYC_MIN_LOVELACE = 3_000_000n;
+export const MEMBER_MIN_LOVELACE = 3_000_000n;
 const SEED_LOVELACE = 12_345_678n;
 
 export type M1Actors = {
   deployer: EmulatorAccount;
   kycIssuer: EmulatorAccount;
   bankIssuer: EmulatorAccount;
+  member: EmulatorAccount;
 };
 
 export type M1Ledger = {
   emulator: Emulator;
   lucid: LucidEvolution;
   actors: M1Actors;
+  board: EmulatorAccount[];
   roles: M1Roles;
   slotConfig: SlotConfig;
 };
@@ -70,7 +75,8 @@ export type TestConfig = {
   network: bigint;
 };
 
-const keyHash = (address: string): string => getAddressDetails(address).paymentCredential!.hash;
+export const keyHash = (address: string): string =>
+  getAddressDetails(address).paymentCredential!.hash;
 
 /**
  * Lucid's schema typings cannot infer the value from the schema (`Exact<T>` is
@@ -82,12 +88,12 @@ export const castTo = (value: unknown, schema: unknown): PlutusDataArg =>
 export const encode = (value: unknown, schema: unknown): string =>
   (Data.to as unknown as (v: unknown, s: unknown) => string)(value, schema);
 
-export function m1Roles(actors: M1Actors): M1Roles {
-  const board = [0, 1, 2].map(() =>
-    keyHash(generateEmulatorAccount({ lovelace: 0n }).address),
-  );
+export function m1Roles(
+  actors: M1Actors,
+  board: EmulatorAccount[],
+): M1Roles {
   return {
-    boardKeys: board,
+    boardKeys: board.map((account) => keyHash(account.address)),
     kycIssuer: keyHash(actors.kycIssuer.address),
     bankIssuer: keyHash(actors.bankIssuer.address),
   };
@@ -98,13 +104,19 @@ export async function m1Ledger(): Promise<M1Ledger> {
   const deployer = generateEmulatorAccount({ lovelace: 1_000_000_000n });
   const kycIssuer = generateEmulatorAccount({ lovelace: 100_000_000n });
   const bankIssuer = generateEmulatorAccount({ lovelace: 100_000_000n });
-  const emulator = new Emulator([deployer, kycIssuer, bankIssuer]);
+  const member = generateEmulatorAccount({ lovelace: 100_000_000n });
+  // Board accounts only co-sign, but Lucid signs by private key, which a
+  // seed-phrase account does not expose.
+  const board = [0, 1, 2].map(() =>
+    generateEmulatorAccountFromPrivateKey({ lovelace: 100_000_000n }),
+  );
+  const emulator = new Emulator([deployer, kycIssuer, bankIssuer, member, ...board]);
   const lucid = await Lucid(emulator, "Custom");
   lucid.selectWallet.fromSeed(deployer.seedPhrase);
-  const actors = { deployer, kycIssuer, bankIssuer };
+  const actors = { deployer, kycIssuer, bankIssuer, member };
   // The emulator-derived slot mapping is fixed when Lucid is constructed.
   const slotConfig = lucid.newTx().rawConfig().lucidConfig.slotConfig;
-  return { emulator, lucid, actors, roles: m1Roles(actors), slotConfig };
+  return { emulator, lucid, actors, board, roles: m1Roles(actors, board), slotConfig };
 }
 
 export function selectActor(ledger: M1Ledger, actor: keyof M1Actors): void {
@@ -254,6 +266,7 @@ export type Genesis = {
   configAddress: string;
   membershipValidator: Script;
   membershipPolicy: string;
+  membershipAddress: string;
   kycValidator: Script;
   kycPolicy: string;
   kycAddress: string;
@@ -280,6 +293,7 @@ export async function genesis(
   const configAddress = validatorToAddress("Custom", configValidator);
   const membershipValidator = membershipScript(stateNftPolicy);
   const membershipPolicy = validatorToScriptHash(membershipValidator);
+  const membershipAddress = validatorToAddress("Custom", membershipValidator);
   const kycValidator = kycScript(stateNftPolicy);
   const kycPolicy = validatorToScriptHash(kycValidator);
   const kycAddress = validatorToAddress("Custom", kycValidator);
@@ -316,6 +330,7 @@ export async function genesis(
     configAddress,
     membershipValidator,
     membershipPolicy,
+    membershipAddress,
     kycValidator,
     kycPolicy,
     kycAddress,
@@ -330,6 +345,25 @@ export async function genesis(
 export async function submitTx(tx: TxSignBuilder): Promise<string> {
   return (await tx.sign.withWallet().complete()).submit();
 }
+
+/// The selected wallet signs, plus the first `boardSigners` board accounts.
+export async function submitWithBoard(
+  tx: TxSignBuilder,
+  ledger: M1Ledger,
+  boardSigners: number,
+): Promise<string> {
+  const signed = ledger.board
+    .slice(0, boardSigners)
+    .reduce(
+      (builder, account) => builder.sign.withPrivateKey(account.privateKey),
+      tx.sign.withWallet(),
+    );
+  return (await signed.complete()).submit();
+}
+
+// Constructor order of `MembershipRedeemer` in `contracts/lib/sequoia/types.ak`.
+export const membershipRedeemer = (index: number) =>
+  Data.to(new Constr(index, []));
 
 /** Runs a transaction builder and returns the rejection, or fails the test. */
 export async function expectRejected(build: () => Promise<unknown>): Promise<unknown> {

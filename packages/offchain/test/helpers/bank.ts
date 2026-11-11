@@ -1,6 +1,7 @@
-import { Constr, Data, type UTxO } from "@lucid-evolution/lucid";
+import { Data, type UTxO } from "@lucid-evolution/lucid";
 import {
   encode,
+  membershipRedeemer,
   scriptTime,
   submitTx,
   type Genesis,
@@ -17,9 +18,6 @@ export const BANK_MIN_LOVELACE = 3_000_000n;
 // Constructor order of `MembershipRedeemer` in `contracts/lib/sequoia/types.ak`.
 export const ISSUE_BANK_PROOF = 0;
 export const BURN_BANK_PROOF = 1;
-
-export const membershipRedeemer = (index: number) =>
-  Data.to(new Constr(index, []));
 
 export type BankTerms = {
   memberId: string; // hex; not the token name

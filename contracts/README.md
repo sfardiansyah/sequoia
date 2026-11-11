@@ -48,13 +48,16 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/state_nft.ak` — one-shot `STATE` mint, parameterized by the seed output.
 - `validators/config.ak` — the config box; M1 has no spend path.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
-- `validators/membership.ak` — the membership policy; bank-proof actions in #23.
+- `validators/membership.ak` — the membership policy; bank proofs (#23), join
+  and transfer (#24).
 - `validators/bank_attestation.ak` — parameterless bank proof guard.
 - `lib/sequoia/types.ak` — the ADR 0008 datums and enums.
 - `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
 - `lib/sequoia/kyc_rules.ak` — issue, renew, and revoke checks.
 - `lib/sequoia/bank_rules.ak` — bank-proof issue, cancel, and guard checks.
+- `lib/sequoia/member_rules.ak` — join, and the spend invariant every member
+  action reuses.
 - `lib/sequoia/split.ak` — the contribution split, mirroring `@sequoia/shared`.
 - `lib/sequoia/vesting.ak` — the founder vesting schedule.
 - `lib/sequoia/vectors.ak` — generated from the shared JSON; do not edit.
@@ -84,6 +87,21 @@ being destroyed. Issuing is the treasurer's (`IssueBankProof`); cancelling a
 stale proof is the same key (`BurnBankProof`); #25's contribution burns it when
 the member pays. `nonce` is the asset name and `bank_ref_hash` is a hash, never
 the raw bank reference; duplicate checks stay off-chain.
+
+## Membership
+
+`Join` is a mint paid by the member: `board_threshold` board keys and the new
+owner sign, the KYC box is read as a reference input, and the one `MEMBER` unit
+is locked at the membership script in a box holding nothing else. `joined_at`
+is the transaction validity lower bound, and a member id may not be `MCAP` or
+`PROJ` because those names share the policy's asset-name namespace.
+
+`Transfer` is the only spend action in M1. It requires the owner's signature,
+one output at the script, and all `MEMBER`/`MCAP`/`PROJ` units returned to that
+output with zero in every other output; the other datum fields are unchanged.
+Contribution (#25) reuses the same invariant. Board accounts are emulator
+accounts generated from a private key, so the tests can co-sign with
+`sign.withPrivateKey`.
 
 ## Emulator support (answered 2026-11-07)
 

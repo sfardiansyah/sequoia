@@ -5,6 +5,7 @@ import {
   genesis,
   m1Ledger,
   m1TestConfig,
+  membershipRedeemer,
   scriptTime,
   selectActor,
   submitTx,
@@ -18,7 +19,6 @@ import {
   bankUnit,
   cancelBankProof,
   issueBankProof,
-  membershipRedeemer,
 } from "./helpers/bank";
 
 const config = m1TestConfig();
