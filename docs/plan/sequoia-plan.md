@@ -68,7 +68,7 @@ The co-op is a member-owned organization that:
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
-**Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken (M1)  
+**Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken  
 **Test command:** `bun run check`  
 **Current status:** 291 tests pass, typecheck clean, 43 Postgres integration tests green  
 
@@ -233,8 +233,8 @@ bun run sequoia kyc list
 bun run sequoia audit list
 ```
 
-Read this handoff section first, then continue with M1 (ADR 0008). The ADR
-0004 order supersedes the off-chain-first reading of the priority list below.
+Read this handoff section first, then continue with M2 (ADR 0004). The ADR 0004
+order supersedes the off-chain-first reading of the priority list below.
 
 ---
 

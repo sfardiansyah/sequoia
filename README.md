@@ -8,8 +8,8 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-Pilot harness MVP (tickets 03–10). Next: **M1 — Aiken config and membership**
-(ADR 0008, GitHub milestone `M1: Config + Membership`).
+M1 — Aiken config and membership — is complete (ADR 0008, GitHub milestone
+`M1: Config + Membership`). Next: **M2 — governance** (ADR 0004).
 
 Implemented:
 
@@ -38,10 +38,14 @@ Implemented:
 - one end-to-end pilot flow on PGlite and Postgres: KYC issue → board-approved
   admission → contribution year → mock bank attestation → contribution →
   `/members/me`;
+- M1 on-chain config and membership (ADR 0008): the one-shot `STATE` NFT and
+  immutable config, KYC attestation issue/renew/revoke, bank-proof issue/cancel
+  with a burn guard, membership join and non-transferability, and contribution
+  with the config split, tested with Aiken and one Lucid emulator suite;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Test suite: 237 unit tests (`bun run check`, PGlite included) and 43 Postgres
-integration tests (`bun run test:integration`).
+Test suite: 291 tests (`bun run check`, PGlite and the Aiken emulator suites
+included) and 43 Postgres integration tests (`bun run test:integration`).
 
 The pilot is synthetic and preprod: no real IDR, no chain, and no real personal
 data. Its rows are provisional, not the co-op ledger. See

@@ -1,6 +1,7 @@
 # Aiken project structure in public repositories
 
-**Status:** Research note for M1 (`config` + `membership`)  
+**Status:** Research note that informed M1 (`config` + `membership`); M1 is
+implemented in `contracts/` per ADR 0008. Kept as the survey behind it.  
 **Date:** 2026-11-06  
 **Question:** How do public Aiken projects lay out validators, shared code, tests, and the off-chain boundary, and what layout should Sequoia use for `contracts/`?
 
@@ -152,19 +153,17 @@ Rationale:
 - **`contracts/` stays out of `package.json` workspaces.** Aiken is not a Bun
   package; CI invokes `aiken` directly.
 
-## Open questions for the toolchain ticket
+## Open questions for the toolchain ticket (answered in M1)
 
-- Pin Aiken v1.1.24, or the newest version Lucid Evolution supports? Check
-  Lucid's stated compatibility before pinning.
-- Does the Lucid emulator support CIP-31 reference inputs and CIP-33 reference
-  scripts with Plutus V3? If not, M1's end-to-end proof needs Yaci DevKit, which
-  is a larger ticket.
-- `aiken blueprint apply` versus Lucid-side parameter application for the
-  one-shot state NFT policy ID: pick one and document it before the deploy
-  script exists.
-- Do we want `aiken-lang/fuzz` in M1, or only unit tests plus the emulator?
-  Property tests are cheap for the split math and conservation rules; add the
-  dependency only when the first property is written.
+- Aiken is pinned to **v1.1.24** in `contracts/aiken.toml`.
+- The Lucid emulator supports **CIP-31 reference inputs and CIP-33 reference
+  scripts** with Plutus V3; the M1 probe verified both, so no Yaci DevKit
+  fallback was needed.
+- Parameters are applied **Lucid-side** with `applyParamsToScript`, never with
+  `aiken blueprint apply`, because the state NFT policy depends on a seed that
+  only exists at transaction-build time.
+- `aiken-lang/fuzz` is in M1 for the split and vesting property tests; the
+  shared vectors remain the cross-language source of truth.
 
 ## Sources
 

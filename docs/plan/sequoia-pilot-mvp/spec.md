@@ -1,6 +1,6 @@
 # Sequoia pilot harness MVP
 
-**Status:** Implemented (tickets 03–10). Next: M1 (ADR 0008)  
+**Status:** Implemented (tickets 03–10). M1 is complete; next: M2 (ADR 0004)  
 **Scope:** Preprod synthetic pilot, not the co-op ledger  
 **Current repo state:** 233 unit tests and 43 Postgres integration tests, `bun run check` clean  
 **Source:** Analysis of code vs `docs/plan/sequoia-plan.md`, ADRs 0001–0007, `GLOSSARY.md`, and `docs/legal/*`

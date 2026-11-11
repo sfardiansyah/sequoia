@@ -1,7 +1,7 @@
 # Sequoia contracts
 
 Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`) is
-specified by `docs/adr/0008-m1-config-and-membership.md`.
+implemented per `docs/adr/0008-m1-config-and-membership.md`.
 
 ## Toolchain
 
