@@ -701,10 +701,21 @@ fn contribution_mint(
   )
 }
 
-fn contribution_tx(
+fn proof_nonce(proof: Input) -> ByteArray {
+  when proof.output.datum is {
+    InlineDatum(raw) -> {
+      expect datum: BankProofDatum = raw
+      datum.nonce
+    }
+    _ -> fail @"test: proof datum must be inline"
+  }
+}
+
+fn contribution_tx_with(
   old_datum: MemberDatum,
   new_datum: MemberDatum,
   proof: Input,
+  mint: assets.Assets,
   member_capital: Int,
   participation: Int,
 ) -> Transaction {
@@ -715,8 +726,25 @@ fn contribution_tx(
     validity_range: interval.between(joined_at, 2_000),
     outputs: [member_output(member_a, new_datum, member_capital, participation)],
     extra_signatories: [owner_a],
-    mint: contribution_mint(nonce_a, member_capital, participation),
+    mint,
   }
+}
+
+fn contribution_tx(
+  old_datum: MemberDatum,
+  new_datum: MemberDatum,
+  proof: Input,
+  member_capital: Int,
+  participation: Int,
+) -> Transaction {
+  contribution_tx_with(
+    old_datum,
+    new_datum,
+    proof,
+    contribution_mint(proof_nonce(proof), member_capital, participation),
+    member_capital,
+    participation,
+  )
 }
 
 fn contributed(old_datum: MemberDatum) -> MemberDatum {
@@ -1099,24 +1127,18 @@ test contribution_rejects_a_member_id_nonce() fail {
 }
 
 test contribution_rejects_a_reserved_nonce() fail {
-  let tx = contribution_tx(
-    member_datum(member_a, owner_a, joined_at),
-    contributed(member_datum(member_a, owner_a, joined_at)),
-    proof_input_with(member_a, 2026, 1_000_000, member_capital_asset_name),
-    700_000,
-    300_000,
-  )
+  let old = member_datum(member_a, owner_a, joined_at)
   member_rules.contribute_mint(
     config(),
     membership_policy_id,
-    Transaction {
-      ..tx,
-      mint: assets.from_asset(
-        membership_policy_id,
-        member_capital_asset_name,
-        -1,
-      ),
-    },
+    contribution_tx_with(
+      old,
+      contributed(old),
+      proof_input_with(member_a, 2026, 1_000_000, member_capital_asset_name),
+      assets.from_asset(membership_policy_id, member_capital_asset_name, -1),
+      700_000,
+      300_000,
+    ),
   )
 }
 

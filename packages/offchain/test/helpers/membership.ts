@@ -5,11 +5,14 @@ import {
   keyHash,
   membershipRedeemer,
   scriptTime,
+  selectActor,
   submitTx,
   submitWithBoard,
   type Genesis,
   type M1Ledger,
 } from "./m1";
+import { issueKyc, kycTerms } from "./kyc";
+import { bankTerms, issueBankProof } from "./bank";
 
 /**
  * Member record transactions (ADR 0008 §5, §6). Joining is a mint paid by the
@@ -24,10 +27,10 @@ export const CONTRIBUTE = 4;
 /** The M1 test config's 70/30 split of the 1,000,000 annual amount. */
 export const CONTRIBUTION_MEMBER_CAPITAL = 700_000n;
 export const CONTRIBUTION_PARTICIPATION = 300_000n;
-export const CONTRIBUTION_YEAR = 2026n;
+const CONTRIBUTION_YEAR = 2026n;
 
-const MEMBER_CAPITAL_ASSET_NAME = Buffer.from("MCAP").toString("hex");
-const CAPITAL_PARTICIPATION_ASSET_NAME = Buffer.from("PROJ").toString("hex");
+export const MEMBER_CAPITAL_ASSET_NAME = Buffer.from("MCAP").toString("hex");
+export const CAPITAL_PARTICIPATION_ASSET_NAME = Buffer.from("PROJ").toString("hex");
 
 export type MemberClass = "Standard" | "Founder";
 
@@ -79,6 +82,52 @@ export function memberUnit(membershipPolicy: string, memberId: string): string {
   return membershipPolicy + memberId;
 }
 
+export type DecodedDatum = { index: number; fields: unknown[] };
+
+export function decodeDatum(box: UTxO): DecodedDatum {
+  return Data.from(box.datum!) as DecodedDatum;
+}
+
+export function asConstr(value: unknown): DecodedDatum {
+  return value as DecodedDatum;
+}
+
+export function expiryFrom(ledger: M1Ledger, ms: number): bigint {
+  return BigInt(scriptTime(ledger, ledger.emulator.now())) + BigInt(ms);
+}
+
+export async function memberBoxes(
+  ledger: M1Ledger,
+  m1: Genesis,
+  memberId: string,
+): Promise<UTxO[]> {
+  return (await ledger.lucid.utxosAt(m1.membershipAddress)).filter(
+    (utxo) => utxo.assets[memberUnit(m1.membershipPolicy, memberId)] === 1n,
+  );
+}
+
+/** Issue KYC and leave the KYC issuer selected. */
+export async function kycFor(
+  ledger: M1Ledger,
+  m1: Genesis,
+  memberId: string,
+  kycMs = 600_000,
+): Promise<UTxO> {
+  selectActor(ledger, "kycIssuer");
+  return issueKyc(ledger, m1, kycTerms(memberId, expiryFrom(ledger, kycMs)));
+}
+
+/** Issue a bank proof and leave the bank issuer selected. */
+export async function proofFor(
+  ledger: M1Ledger,
+  m1: Genesis,
+  memberId: string,
+  nonce: string,
+): Promise<UTxO> {
+  selectActor(ledger, "bankIssuer");
+  return issueBankProof(ledger, m1, bankTerms(memberId, nonce));
+}
+
 export async function joinMember(
   ledger: M1Ledger,
   m1: Genesis,
@@ -127,9 +176,9 @@ export async function contributeMember(
   proof: UTxO,
   kyc: UTxO,
   memberId: string,
-  memberCapital = CONTRIBUTION_MEMBER_CAPITAL,
-  participation = CONTRIBUTION_PARTICIPATION,
 ): Promise<UTxO> {
+  const memberCapital = CONTRIBUTION_MEMBER_CAPITAL;
+  const participation = CONTRIBUTION_PARTICIPATION;
   const now = scriptTime(ledger, ledger.emulator.now());
   const memberCapitalUnit = m1.membershipPolicy + MEMBER_CAPITAL_ASSET_NAME;
   const participationUnit =
@@ -175,6 +224,24 @@ export async function contributeMember(
   return ledger.lucid.utxoByUnit(
     memberUnit(m1.membershipPolicy, memberId),
   );
+}
+
+/** Issue KYC, join, and leave the member wallet selected. */
+export async function joinedMember(
+  ledger: M1Ledger,
+  m1: Genesis,
+  memberId: string,
+  options: { founder?: boolean; kycMs?: number } = {},
+): Promise<{ kyc: UTxO; box: UTxO }> {
+  const kyc = await kycFor(ledger, m1, memberId, options.kycMs);
+  selectActor(ledger, "member");
+  const box = await joinMember(
+    ledger,
+    m1,
+    { memberId, class: options.founder ? "Founder" : "Standard" },
+    kyc,
+  );
+  return { kyc, box };
 }
 
 /** A plain spend keeps the record intact; the member pays the fee. */

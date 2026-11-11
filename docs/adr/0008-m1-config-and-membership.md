@@ -203,7 +203,7 @@ manifest, which is outside M1.
 - The member box holds only the one `MEMBER` unit; a join cannot also mint
   `MCAP`, `PROJ`, or `BANK`.
 
-**Transfer (membership spend).** The only spend action in M1: it enforces §6.1
+**Transfer (membership spend).** The plain spend action in M1: it enforces §6.1
 and requires the rest of the datum to be unchanged, so `status`,
 `last_contribution_year`, and `last_voted_proposal` move only through the
 actions that own them. Contribution (#25) reuses the same invariant and changes
@@ -223,7 +223,8 @@ actions that own them. Contribution (#25) reuses the same invariant and changes
   year; the split from config is applied with the plan's floor rule;
   `MCAP + PROJ` minted equals `annual_amount`; a standard member's split stays
   under `standard_capital_participation_max_bps`; the bank proof nonce is not a
-  reserved name; the bank proof NFT is burned; token conservation holds. The
+  reserved name or the member id; the bank proof NFT is burned; token
+  conservation holds. The
   same checks run in the mint and spend handlers, bound to the spent box, so a
   mixed redeemer pair cannot split them.
 

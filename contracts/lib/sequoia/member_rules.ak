@@ -11,7 +11,7 @@ use sequoia/tx.{inline_datum, lower_bound, one_token_output}
 use sequoia/types.{
   Active, BankProofDatum, ConfigDatum, Founder, KycDatum, MemberClass,
   MemberDatum, Standard, capital_participation_asset_name,
-  member_capital_asset_name,
+  member_capital_asset_name, reserved_asset_name,
 }
 
 // Member record rules (ADR 0008 §5, §6). `Join` creates the record; every spend
@@ -26,10 +26,6 @@ fn datum_of(output: Output) -> MemberDatum {
 fn proof_datum_of(output: Output) -> BankProofDatum {
   expect datum: BankProofDatum = inline_datum(output)
   datum
-}
-
-fn reserved(asset_name: AssetName) -> Bool {
-  asset_name == member_capital_asset_name || asset_name == capital_participation_asset_name
 }
 
 fn signed(self: Transaction, key: ByteArray) -> Bool {
@@ -78,7 +74,7 @@ pub fn join(config: ConfigDatum, policy_id: PolicyId, self: Transaction) -> Bool
       fail @"member_rules: member id must not be empty"
     } else if bytearray.length(member_id) > 32 {
       fail @"member_rules: member id must be at most 32 bytes"
-    } else if reserved(member_id) {
+    } else if reserved_asset_name(member_id) {
       fail @"member_rules: member id is a reserved asset name"
     } else {
       let kyc = live_kyc(config, member_id, self)
@@ -177,10 +173,10 @@ fn conserved(
   policy_id: PolicyId,
   old_datum: MemberDatum,
   output: Output,
-  added_member_capital: Int,
-  added_participation: Int,
+  added: (Int, Int),
   self: Transaction,
 ) -> Bool {
+  let (added_member_capital, added_participation) = added
   let expected_member = total_in(self, policy_id, old_datum.member_id)
   let expected_member_capital = total_in(
     self,
@@ -227,7 +223,7 @@ pub fn keep(
   let new_datum = datum_of(output)
   if !signed(self, old_datum.owner) {
     fail @"member_rules: owner must sign"
-  } else if !conserved(script_hash, old_datum, output, 0, 0, self) {
+  } else if !conserved(script_hash, old_datum, output, (0, 0), self) {
     fail @"member_rules: member tokens must be conserved"
   } else if new_datum.owner != old_datum.owner {
     fail @"member_rules: owner must not change"
@@ -296,6 +292,8 @@ fn member_input(
   }
 }
 
+// The split is a config value, so this is a config-level cap check; floor
+// rounding can add at most one smallest unit of participation above it.
 fn cap_exceeded(config: ConfigDatum, class: MemberClass) -> Bool {
   when class is {
     Standard ->
@@ -311,10 +309,10 @@ fn contribution(
   policy_id: PolicyId,
   member: Input,
   proof_input: Input,
+  proof: BankProofDatum,
   self: Transaction,
 ) -> Bool {
   let old_datum = datum_of(member.output)
-  let proof = proof_datum_of(proof_input.output)
   let year = config.contribution_year
   let (member_capital, participation) = split.split(
     proof.amount,
@@ -342,7 +340,7 @@ fn contribution(
     fail @"member_rules: bank proof amount must match the annual amount"
   } else if old_datum.last_contribution_year == Some(year) {
     fail @"member_rules: contribution already recorded for this year"
-  } else if reserved(proof.nonce) {
+  } else if reserved_asset_name(proof.nonce) {
     fail @"member_rules: bank proof nonce is a reserved asset name"
   } else if proof.nonce == old_datum.member_id {
     fail @"member_rules: bank proof nonce must not be the member id"
@@ -379,7 +377,13 @@ fn contribution(
   } else if new_datum.last_voted_proposal != old_datum.last_voted_proposal {
     fail @"member_rules: the last vote must not change"
   } else {
-    conserved(policy_id, old_datum, output, member_capital, participation, self)
+    conserved(
+      policy_id,
+      old_datum,
+      output,
+      (member_capital, participation),
+      self,
+    )
   }
 }
 
@@ -394,7 +398,7 @@ pub fn contribute_mint(
   } else {
     let (proof_input, proof) = spent_proof(config, self)
     let member = member_input(policy_id, proof.member_id, self)
-    contribution(config, policy_id, member, proof_input, self)
+    contribution(config, policy_id, member, proof_input, proof, self)
   }
 }
 
@@ -413,7 +417,7 @@ pub fn contribute_spend(
     if proof.member_id != old_datum.member_id {
       fail @"member_rules: bank proof member id must match"
     } else {
-      contribution(config, script_hash, member, proof_input, self)
+      contribution(config, script_hash, member, proof_input, proof, self)
     }
   }
 }

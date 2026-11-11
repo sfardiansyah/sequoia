@@ -1,5 +1,5 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { Data, type UTxO } from "@lucid-evolution/lucid";
+import { beforeAll, describe, expect, test } from "bun:test";
+import type { UTxO } from "@lucid-evolution/lucid";
 import {
   CONFIG_MIN_LOVELACE,
   MEMBER_MIN_LOVELACE,
@@ -9,27 +9,32 @@ import {
   m1Ledger,
   m1TestConfig,
   membershipRedeemer,
-  scriptTime,
   selectActor,
   stateUnit,
   submitTx,
   type Genesis,
   type M1Ledger,
 } from "./helpers/m1";
-import { issueKyc, kycTerms, revokeKyc } from "./helpers/kyc";
+import { revokeKyc } from "./helpers/kyc";
 import { bankTerms, bankUnit, issueBankProof } from "./helpers/bank";
 import {
+  CAPITAL_PARTICIPATION_ASSET_NAME,
   CONTRIBUTION_MEMBER_CAPITAL,
   CONTRIBUTION_PARTICIPATION,
+  MEMBER_CAPITAL_ASSET_NAME,
   TRANSFER,
+  asConstr,
   contributeMember,
+  decodeDatum,
   joinMember,
+  joinedMember,
+  kycFor,
+  memberBoxes,
   memberUnit,
+  proofFor,
 } from "./helpers/membership";
 
 const config = m1TestConfig();
-const MEMBER_CAPITAL_UNIT = Buffer.from("MCAP").toString("hex");
-const CAPITAL_PARTICIPATION_UNIT = Buffer.from("PROJ").toString("hex");
 
 /**
  * One ledger for the whole M1 slice (ADR 0008 §11): genesis, KYC, bank proof,
@@ -45,64 +50,27 @@ describe("M1 end to end", () => {
     m1 = await genesis(ledger, config);
   });
 
-  beforeEach(() => selectActor(ledger, "kycIssuer"));
-
-  const expiry = (ms: number) =>
-    BigInt(scriptTime(ledger, ledger.emulator.now())) + BigInt(ms);
-
-  const decode = (box: UTxO) =>
-    Data.from(box.datum!) as { index: number; fields: unknown[] };
-
-  const constr = (value: unknown) =>
-    value as { index: number; fields: unknown[] };
-
-  const memberBoxes = async (memberId: string) =>
-    (await ledger.lucid.utxosAt(m1.membershipAddress)).filter(
-      (utxo) => utxo.assets[memberUnit(m1.membershipPolicy, memberId)] === 1n,
-    );
-
   const contributedAssets = (memberId: string) => ({
     lovelace: MEMBER_MIN_LOVELACE,
     [memberUnit(m1.membershipPolicy, memberId)]: 1n,
-    [m1.membershipPolicy + MEMBER_CAPITAL_UNIT]: CONTRIBUTION_MEMBER_CAPITAL,
-    [m1.membershipPolicy + CAPITAL_PARTICIPATION_UNIT]:
+    [m1.membershipPolicy + MEMBER_CAPITAL_ASSET_NAME]:
+      CONTRIBUTION_MEMBER_CAPITAL,
+    [m1.membershipPolicy + CAPITAL_PARTICIPATION_ASSET_NAME]:
       CONTRIBUTION_PARTICIPATION,
   });
 
-  const proofBoxes = async (nonce: string) =>
+  const proofBoxes = async (nonce: string): Promise<UTxO[]> =>
     (await ledger.lucid.utxosAt(m1.bankAddress)).filter(
       (utxo) => utxo.assets[bankUnit(m1.membershipPolicy, nonce)] === 1n,
     );
 
-  async function kycFor(memberId: string, kycMs = 600_000) {
-    selectActor(ledger, "kycIssuer");
-    return issueKyc(ledger, m1, kycTerms(memberId, expiry(kycMs)));
-  }
-
-  async function proofFor(memberId: string, nonce: string) {
-    selectActor(ledger, "bankIssuer");
-    return issueBankProof(ledger, m1, bankTerms(memberId, nonce));
-  }
-
-  async function joinedMember(memberId: string, founder = false) {
-    const kyc = await kycFor(memberId);
-    selectActor(ledger, "member");
-    const box = await joinMember(
-      ledger,
-      m1,
-      { memberId, class: founder ? "Founder" : "Standard" },
-      kyc,
-    );
-    return { kyc, box };
-  }
-
   test("genesis → KYC → bank proof → join → contribute", async () => {
     const standard = "41";
     const founder = "42";
-    const standardKyc = await kycFor(standard);
-    const founderKyc = await kycFor(founder);
-    const standardProof = await proofFor(standard, "2a01");
-    const founderProof = await proofFor(founder, "2a02");
+    const standardKyc = await kycFor(ledger, m1, standard);
+    const founderKyc = await kycFor(ledger, m1, founder);
+    const standardProof = await proofFor(ledger, m1, standard, "2a01");
+    const founderProof = await proofFor(ledger, m1, founder, "2a02");
 
     selectActor(ledger, "member");
     const standardBox = await joinMember(
@@ -122,7 +90,7 @@ describe("M1 end to end", () => {
       lovelace: MEMBER_MIN_LOVELACE,
       [memberUnit(m1.membershipPolicy, standard)]: 1n,
     });
-    expect(constr(decode(founderBox).fields[2])).toEqual({
+    expect(asConstr(decodeDatum(founderBox).fields[2])).toEqual({
       index: 1,
       fields: [],
     });
@@ -146,29 +114,29 @@ describe("M1 end to end", () => {
 
     expect(standardAfter.assets).toEqual(contributedAssets(standard));
     expect(founderAfter.assets).toEqual(contributedAssets(founder));
-    expect(decode(standardAfter).fields[0]).toBe(
+    expect(decodeDatum(standardAfter).fields[0]).toBe(
       keyHash(ledger.actors.member.address),
     );
-    expect(decode(standardAfter).fields[1]).toBe(standard);
-    expect(constr(decode(standardAfter).fields[3])).toEqual({
+    expect(decodeDatum(standardAfter).fields[1]).toBe(standard);
+    expect(asConstr(decodeDatum(standardAfter).fields[3])).toEqual({
       index: 0,
       fields: [],
     });
-    expect(constr(decode(standardAfter).fields[5])).toEqual({
+    expect(asConstr(decodeDatum(standardAfter).fields[5])).toEqual({
       index: 0,
       fields: [2026n],
     });
-    expect(constr(decode(founderAfter).fields[2])).toEqual({
+    expect(asConstr(decodeDatum(founderAfter).fields[2])).toEqual({
       index: 1,
       fields: [],
     });
-    expect(constr(decode(founderAfter).fields[5])).toEqual({
+    expect(asConstr(decodeDatum(founderAfter).fields[5])).toEqual({
       index: 0,
       fields: [2026n],
     });
 
-    expect(await memberBoxes(standard)).toHaveLength(1);
-    expect(await memberBoxes(founder)).toHaveLength(1);
+    expect(await memberBoxes(ledger, m1, standard)).toHaveLength(1);
+    expect(await memberBoxes(ledger, m1, founder)).toHaveLength(1);
     expect(await proofBoxes("2a01")).toHaveLength(0);
     expect(await proofBoxes("2a02")).toHaveLength(0);
 
@@ -183,7 +151,7 @@ describe("M1 end to end", () => {
 
   test("a non-board signer cannot join", async () => {
     const memberId = "43";
-    const kyc = await kycFor(memberId);
+    const kyc = await kycFor(ledger, m1, memberId);
     selectActor(ledger, "member");
 
     const failure = await expectRejected(() =>
@@ -195,7 +163,7 @@ describe("M1 end to end", () => {
 
   test("a join with expired KYC fails", async () => {
     const memberId = "44";
-    const kyc = await kycFor(memberId, 10_000);
+    const kyc = await kycFor(ledger, m1, memberId, 10_000);
     selectActor(ledger, "member");
 
     const failure = await expectRejected(() =>
@@ -207,7 +175,7 @@ describe("M1 end to end", () => {
 
   test("a join with revoked KYC fails", async () => {
     const memberId = "45";
-    const kyc = await kycFor(memberId);
+    const kyc = await kycFor(ledger, m1, memberId);
     selectActor(ledger, "kycIssuer");
     await revokeKyc(ledger, m1, kyc, memberId);
     selectActor(ledger, "member");
@@ -235,8 +203,8 @@ describe("M1 end to end", () => {
 
   test("a spent proof cannot be reused", async () => {
     const memberId = "48";
-    const { kyc, box } = await joinedMember(memberId);
-    const proof = await proofFor(memberId, "2a05");
+    const { kyc, box } = await joinedMember(ledger, m1, memberId);
+    const proof = await proofFor(ledger, m1, memberId, "2a05");
     selectActor(ledger, "member");
     const contributed = await contributeMember(
       ledger,
@@ -256,9 +224,9 @@ describe("M1 end to end", () => {
 
   test("a second contribution in the same year fails", async () => {
     const memberId = "49";
-    const { kyc, box } = await joinedMember(memberId);
-    const firstProof = await proofFor(memberId, "2a06");
-    const secondProof = await proofFor(memberId, "2a07");
+    const { kyc, box } = await joinedMember(ledger, m1, memberId);
+    const firstProof = await proofFor(ledger, m1, memberId, "2a06");
+    const secondProof = await proofFor(ledger, m1, memberId, "2a07");
     selectActor(ledger, "member");
     const contributed = await contributeMember(
       ledger,
@@ -278,7 +246,7 @@ describe("M1 end to end", () => {
 
   test("sending MEMBER to a wallet fails", async () => {
     const memberId = "4a";
-    const { box } = await joinedMember(memberId);
+    const { box } = await joinedMember(ledger, m1, memberId);
     selectActor(ledger, "member");
 
     const failure = await expectRejected(async () => {

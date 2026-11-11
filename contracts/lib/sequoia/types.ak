@@ -14,6 +14,12 @@ pub const member_capital_asset_name: AssetName = "MCAP"
 
 pub const capital_participation_asset_name: AssetName = "PROJ"
 
+/// `MCAP`/`PROJ` share the membership policy's asset-name namespace with member
+/// ids and bank-proof nonces, so neither may take those names.
+pub fn reserved_asset_name(asset_name: AssetName) -> Bool {
+  asset_name == member_capital_asset_name || asset_name == capital_participation_asset_name
+}
+
 pub type ConfigDatum {
   contribution_year: Int,
   annual_amount: Int,
