@@ -49,7 +49,7 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/config.ak` — the config box; M1 has no spend path.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
 - `validators/membership.ak` — the membership policy; bank proofs (#23), join
-  and transfer (#24).
+  and transfer (#24), contribution (#25).
 - `validators/bank_attestation.ak` — parameterless bank proof guard.
 - `lib/sequoia/types.ak` — the ADR 0008 datums and enums.
 - `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
@@ -96,7 +96,7 @@ is locked at the membership script in a box holding nothing else. `joined_at`
 is the transaction validity lower bound, and a member id may not be `MCAP` or
 `PROJ` because those names share the policy's asset-name namespace.
 
-`Transfer` is the only spend action in M1. It requires the owner's signature,
+`Transfer` is the plain spend action in M1. It requires the owner's signature,
 one output at the script, and all `MEMBER`/`MCAP`/`PROJ` units returned to that
 output with zero in every other output; the other datum fields are unchanged.
 Contribution (#25) is a mint and a spend in one transaction: it spends the
@@ -127,3 +127,7 @@ provider adapter. Yaci DevKit stays the last resort.
 
 The emulator exposes submitted outputs only after a block is produced, so the
 tests call `emulator.awaitBlock(1)` after each submit.
+
+`bun run test:contracts` runs the focused suites plus `test/end-to-end.test.ts`,
+which walks one ledger through genesis, KYC, bank proof, join, and contribution
+and exercises the ADR 0008 §11 failure cases.
