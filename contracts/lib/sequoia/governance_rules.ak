@@ -12,13 +12,13 @@ use sequoia/tx.{
   inline_datum, lower_bound, one_token_output, signed, spent_input, upper_bound,
 }
 use sequoia/types.{
-  Active, Config, ConfigDatum, MemberDatum, Open, Passed, ProposalDatum,
-  Rejected, VoteDatum,
+  Active, Config, ConfigDatum, Executed, MemberDatum, Open, Passed,
+  ProposalDatum, Rejected, VoteDatum, state_asset_name,
 }
 use sequoia/voting
 
-/// Governance proposal rules (ADR 0009 §1, §2, §4, §6). Creation, cast, and
-/// discard are #29–#30; tally and finalize are #31; execute is #32.
+/// Governance proposal rules (ADR 0009 §1, §2, §4, §6). Creation, cast,
+/// discard, tally, finalize, and execute.
 fn datum_of(output: Output) -> ProposalDatum {
   expect datum: ProposalDatum = inline_datum(output)
   datum
@@ -358,6 +358,74 @@ pub fn finalize(
     fail @"governance_rules: finalize status must follow quorum and threshold"
   } else if new.finalized_at != Some(upper) {
     fail @"governance_rules: finalized_at must be the validity upper bound"
+  } else {
+    True
+  }
+}
+
+fn config_spent_input(state_nft_policy: PolicyId, self: Transaction) -> Input {
+  let configs = list.filter(
+    self.inputs,
+    fn(input) {
+      quantity_of(input.output.value, state_nft_policy, state_asset_name) == 1
+    },
+  )
+  when configs is {
+    [input] -> input
+    _ -> fail @"governance_rules: execute spends exactly one config box"
+  }
+}
+
+fn executed_config(
+  state_nft_policy: PolicyId,
+  config_input: Input,
+  self: Transaction,
+) -> ConfigDatum {
+  let returned = list.filter(
+    self.outputs,
+    fn(output) {
+      and {
+        output.address == config_input.output.address,
+        quantity_of(output.value, state_nft_policy, state_asset_name) == 1,
+      }
+    },
+  )
+  when returned is {
+    [output] -> {
+      expect config: ConfigDatum = inline_datum(output)
+      config
+    }
+    _ -> fail @"governance_rules: execute returns exactly one config box"
+  }
+}
+
+/// `Execute` consumes a passed `Config` proposal and the config box it writes
+/// (ADR 0009 §1, §6). The config box is spent, not referenced, so the live
+/// config comes from that input. The config validator owns the write gate —
+/// timelock, immutable fields, invariants — so governance only requires that
+/// the write happened and records the status change.
+pub fn execute(
+  state_nft_policy: PolicyId,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let old = datum_of(spent_input(own_ref, self).output)
+  let config_input = config_spent_input(state_nft_policy, self)
+  expect config: ConfigDatum = inline_datum(config_input.output)
+  let new = returned_proposal(config, old.id, self)
+  let written = executed_config(state_nft_policy, config_input, self)
+  if old.status != Passed {
+    fail @"governance_rules: execute requires a passed proposal"
+  } else if !keep_proposal(old, new) {
+    fail @"governance_rules: execute must preserve the proposal identity"
+  } else if !counters_unchanged(old, new) {
+    fail @"governance_rules: execute must not touch the vote counters"
+  } else if new.finalized_at != old.finalized_at {
+    fail @"governance_rules: execute must not touch the finalize time"
+  } else if new.status != Executed {
+    fail @"governance_rules: execute must mark the proposal executed"
+  } else if written != old.proposed_config {
+    fail @"governance_rules: execute must write the proposed config"
   } else {
     True
   }

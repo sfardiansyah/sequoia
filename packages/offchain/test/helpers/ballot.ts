@@ -9,6 +9,7 @@ import {
 import {
   encode,
   scriptTime,
+  stateUnit,
   submitTx,
   type Genesis,
   type M1Ledger,
@@ -17,7 +18,9 @@ import {
 import {
   decodeProposalDatum,
   proposalUnit,
+  proposedConfigDatum,
   withDiscarded,
+  withExecuted,
   withFinalized,
   withNullifier,
   withTally,
@@ -50,6 +53,7 @@ export const GOVERNANCE_CAST = 0;
 export const GOVERNANCE_DISCARD = 1;
 export const GOVERNANCE_TALLY = 2;
 export const GOVERNANCE_FINALIZE = 3;
+export const GOVERNANCE_EXECUTE = 4;
 
 const choiceSchema = Data.Enum([
   Data.Literal("Yes"),
@@ -117,6 +121,7 @@ export const governanceDiscard = Data.to(new Constr(GOVERNANCE_DISCARD, []));
 export const governanceTally = Data.to(new Constr(GOVERNANCE_TALLY, []));
 
 export const governanceFinalize = Data.to(new Constr(GOVERNANCE_FINALIZE, []));
+export const governanceExecute = Data.to(new Constr(GOVERNANCE_EXECUTE, []));
 
 export function voteUnit(ballotPolicy: string, voteNullifier: string): string {
   return ballotPolicy + voteNullifier;
@@ -376,4 +381,60 @@ export async function finalizeProposal(
   await submitTx(tx);
   ledger.emulator.awaitBlock(1);
   return ledger.lucid.utxoByUnit(proposalUnit(m1.governancePolicy, fields.id));
+}
+
+export type ExecuteOptions = {
+  validFrom?: number;
+  validTo?: number;
+  /** Negative tests only: write a different proposal or config datum. */
+  proposalDatum?: string;
+  configDatum?: string;
+};
+
+/**
+ * Execute a passed proposal: spend it and the config box, write the proposed
+ * config, and mark the proposal `Executed`. Permissionless after the timelock.
+ */
+export async function executeProposal(
+  ledger: M1Ledger,
+  m1: Genesis,
+  configBox: UTxO,
+  proposalBox: UTxO,
+  options: ExecuteOptions = {},
+): Promise<{ proposal: UTxO; config: UTxO }> {
+  const id = decodeProposalDatum(proposalBox.datum!).id;
+  const now = scriptTime(ledger, ledger.emulator.now());
+  const tx = await ledger.lucid
+    .newTx()
+    .collectFrom([proposalBox], governanceExecute)
+    .collectFrom([configBox], Data.void())
+    .attach.SpendingValidator(m1.governanceValidator)
+    .attach.SpendingValidator(m1.configValidator)
+    .validFrom(options.validFrom ?? now)
+    .validTo(options.validTo ?? now + 60_000)
+    .pay.ToContract(
+      m1.governanceAddress,
+      {
+        kind: "inline",
+        value: options.proposalDatum ?? withExecuted(proposalBox.datum!),
+      },
+      proposalBox.assets,
+    )
+    .pay.ToContract(
+      m1.configAddress,
+      {
+        kind: "inline",
+        value: options.configDatum ?? proposedConfigDatum(proposalBox.datum!),
+      },
+      configBox.assets,
+    )
+    .complete();
+  await submitTx(tx);
+  ledger.emulator.awaitBlock(1);
+  return {
+    proposal: await ledger.lucid.utxoByUnit(
+      proposalUnit(m1.governancePolicy, id),
+    ),
+    config: await ledger.lucid.utxoByUnit(stateUnit(m1.stateNftPolicy)),
+  };
 }

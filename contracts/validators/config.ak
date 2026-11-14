@@ -1,21 +1,23 @@
 use cardano/assets.{PolicyId}
 use cardano/transaction.{OutputReference, Transaction}
+use sequoia/config_rules
 use sequoia/types.{ConfigDatum}
 
-/// The config box holds one contribution year's rulebook. M1 has no update path
-/// (ADR 0008 §1, §6.7); M2 deploys a fresh genesis with a governance-gated spend
-/// handler. `state_nft_policy` is the parameter M2 uses to find the State NFT.
+/// The config box holds one contribution year's rulebook. Its only spend is a
+/// governance execution: a passed `Config` proposal writes `proposed_config`
+/// after the timelock (ADR 0009 §6, §8). `state_nft_policy` locates the State
+/// NFT. Genesis is deployer-trusted and does not run these checks.
 validator config(state_nft_policy: PolicyId) {
   spend(
     _datum: Option<ConfigDatum>,
     _redeemer: Data,
-    _own_ref: OutputReference,
-    _self: Transaction,
+    own_ref: OutputReference,
+    self: Transaction,
   ) {
-    fail @"config: immutable in M1"
+    config_rules.execute(state_nft_policy, own_ref, self)
   }
 
   else(_) {
-    fail @"config: immutable in M1"
+    fail @"config: only a governance execution may spend the config box"
   }
 }

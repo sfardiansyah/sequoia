@@ -195,6 +195,19 @@ export function withFinalized(
   return reencodeProposal(constr, fields);
 }
 
+/** The proposal datum after execute; only status changes. */
+export function withExecuted(datum: string): string {
+  const constr = proposalConstr(datum);
+  const fields = [...constr.fields];
+  fields[14] = new Constr(STATUS_INDEX.Executed, []);
+  return reencodeProposal(constr, fields);
+}
+
+/** The proposed config datum, re-encoded for the config output at execute. */
+export function proposedConfigDatum(datum: string): string {
+  return Data.to(proposalConstr(datum).fields[3] as never);
+}
+
 /** The proposer's wallet must be selected; the board co-signs. */
 export async function createProposal(
   ledger: M1Ledger,

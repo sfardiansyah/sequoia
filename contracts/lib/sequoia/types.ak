@@ -162,4 +162,5 @@ pub type GovernanceRedeemer {
   Discard
   Tally
   Finalize
+  Execute
 }

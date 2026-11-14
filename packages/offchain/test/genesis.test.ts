@@ -126,12 +126,17 @@ describe("state NFT and config genesis", () => {
     expect(failure).toBeInstanceOf(Error);
   });
 
-  test("spending the config box fails", async () => {
+  test("a config spend with no passed proposal fails", async () => {
     const failure = await expectRejected(async () => {
       const tx = await ledger.lucid
         .newTx()
         .collectFrom([m1.configUtxo], Data.void())
         .attach.SpendingValidator(m1.configValidator)
+        .pay.ToContract(
+          m1.configAddress,
+          { kind: "inline", value: m1.datum },
+          m1.configUtxo.assets,
+        )
         .complete();
       await submitTx(tx);
     });

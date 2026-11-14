@@ -7,8 +7,8 @@ use cardano/transaction.{
 }
 use sequoia/governance_rules
 use sequoia/types.{
-  Active, Config, ConfigDatum, Inactive, KycDatum, MemberDatum, No, Open, Passed,
-  ProposalDatum, Rejected, Standard, VoteDatum, Yes,
+  Active, Config, ConfigDatum, Executed, Inactive, KycDatum, MemberDatum, No,
+  Open, Passed, ProposalDatum, Rejected, Standard, VoteDatum, Yes,
 }
 use sequoia/voting
 
@@ -1154,5 +1154,198 @@ test finalize_uses_the_live_config_not_the_proposed_config() {
     config(),
     ref(3),
     finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+const config_policy_id: ByteArray =
+  #"5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+
+fn passed_proposal() -> ProposalDatum {
+  let datum = proposal_datum()
+  ProposalDatum {
+    ..datum,
+    proposed_config: ConfigDatum {
+      ..config(),
+      contribution_year: 2027,
+      annual_amount: 2_000_000,
+    },
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 2,
+    status: Passed,
+    finalized_at: Some(datum.reveal_end + 1_000),
+  }
+}
+
+fn config_spent_input() -> Input {
+  Input {
+    output_reference: ref(6),
+    output: Output {
+      address: from_script(config_policy_id),
+      value: assets.from_asset(state_policy_id, "STATE", 1),
+      datum: InlineDatum(config()),
+      reference_script: None,
+    },
+  }
+}
+
+fn config_output(datum: ConfigDatum) -> Output {
+  Output {
+    address: from_script(config_policy_id),
+    value: assets.from_asset(state_policy_id, "STATE", 1),
+    datum: InlineDatum(datum),
+    reference_script: None,
+  }
+}
+
+fn execute_tx(
+  old: ProposalDatum,
+  new: ProposalDatum,
+  configs: List<Input>,
+  outputs: List<Output>,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(old), ..configs],
+    validity_range: interval.between(old.reveal_end, old.reveal_end + 1_000),
+    outputs: [proposal_output(new), ..outputs],
+  }
+}
+
+fn execute_outputs(old: ProposalDatum) -> List<Output> {
+  [config_output(old.proposed_config)]
+}
+
+test execute_accepts_a_passed_proposal() {
+  let old = passed_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
+  )
+}
+
+test execute_rejects_an_open_proposal() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
+  )
+}
+
+test execute_rejects_a_rejected_proposal() fail {
+  let old = ProposalDatum { ..passed_proposal(), status: Rejected }
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
+  )
+}
+
+test execute_rejects_a_missing_config_box() fail {
+  let old = passed_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [], execute_outputs(old)),
+  )
+}
+
+test execute_rejects_two_config_boxes() fail {
+  let old = passed_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [config_spent_input(), config_spent_input()], []),
+  )
+}
+
+test execute_rejects_a_config_that_is_not_the_proposed_one() fail {
+  let old = passed_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(
+      old,
+      new,
+      [config_spent_input()],
+      [config_output(ConfigDatum { ..config(), annual_amount: 9_000_000 })],
+    ),
+  )
+}
+
+test execute_rejects_a_config_output_at_another_address() fail {
+  let old = passed_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(
+      old,
+      new,
+      [config_spent_input()],
+      [
+        Output {
+          address: from_script(governance_policy_id),
+          value: assets.from_asset(state_policy_id, "STATE", 1),
+          datum: InlineDatum(old.proposed_config),
+          reference_script: None,
+        },
+      ],
+    ),
+  )
+}
+
+test execute_rejects_a_changed_counter() fail {
+  let old = passed_proposal()
+  let new = ProposalDatum { ..old, status: Executed, yes: old.yes + 1 }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
+  )
+}
+
+test execute_rejects_a_changed_finalize_time() fail {
+  let old = passed_proposal()
+  let new = ProposalDatum {
+    ..old,
+    status: Executed,
+    finalized_at: Some(old.reveal_end),
+  }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
+  )
+}
+
+test execute_rejects_a_changed_proposed_config() fail {
+  let old = passed_proposal()
+  let new = ProposalDatum {
+    ..old,
+    status: Executed,
+    proposed_config: ConfigDatum { ..config(), annual_amount: 4_000_000 },
+  }
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
+  )
+}
+
+test execute_rejects_a_proposal_that_stays_passed() fail {
+  let old = passed_proposal()
+  governance_rules.execute(
+    state_policy_id,
+    ref(3),
+    execute_tx(old, old, [config_spent_input()], execute_outputs(old)),
   )
 }
