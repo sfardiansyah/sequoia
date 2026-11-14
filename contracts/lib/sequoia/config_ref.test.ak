@@ -31,6 +31,14 @@ fn config() -> ConfigDatum {
     membership_policy: other_policy_id,
     kyc_policy: other_policy_id,
     bank_policy: other_policy_id,
+    governance_policy: other_policy_id,
+    ballot_policy: other_policy_id,
+    quorum_bps: 5_000,
+    project_threshold_bps: 5_001,
+    structural_threshold_bps: 6_667,
+    timelock_days: 7,
+    voting_days: 7,
+    reveal_days: 3,
   }
 }
 

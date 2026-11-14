@@ -38,23 +38,33 @@ describe("state NFT and config genesis", () => {
     expect(box.datum?.replace(/^0x/, "")).toBe(m1.datum);
   });
 
-  test("the config datum follows the ADR 0008 field order", async () => {
+  test("the config datum follows the ADR 0009 config v2 field order", async () => {
     const box = (await ledger.lucid.utxosAt(m1.configAddress))[0]!;
     const constr = (value: unknown) => value as { index: number; fields: unknown[] };
     const datum = constr(Data.from(box.datum!));
 
     expect(datum.index).toBe(0);
-    expect(datum.fields).toHaveLength(13);
+    expect(datum.fields).toHaveLength(21);
     expect(datum.fields.slice(0, 5)).toEqual([2026n, 1_000_000n, 7_000n, 3_000n, 5_000n]);
     expect(datum.fields[5]).toEqual(ledger.roles.boardKeys);
     expect(datum.fields[6]).toBe(2n);
     expect(constr(datum.fields[7])).toEqual({ index: 0, fields: [ledger.roles.kycIssuer] });
     expect(constr(datum.fields[8])).toEqual({ index: 0, fields: [ledger.roles.bankIssuer] });
-    expect(datum.fields.slice(9)).toEqual([
+    expect(datum.fields.slice(9, 13)).toEqual([
       0n,
       m1.membershipPolicy,
       m1.kycPolicy,
       m1.bankPolicy,
+    ]);
+    expect(datum.fields.slice(13)).toEqual([
+      "00".repeat(28),
+      "00".repeat(28),
+      5_000n,
+      5_001n,
+      6_667n,
+      7n,
+      7n,
+      3n,
     ]);
   });
 

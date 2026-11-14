@@ -102,8 +102,6 @@ pub fn join(config: ConfigDatum, policy_id: PolicyId, self: Transaction) -> Bool
         fail @"member_rules: joined_at must equal the validity lower bound"
       } else if datum.last_contribution_year != None {
         fail @"member_rules: joined member has no contribution year"
-      } else if datum.last_voted_proposal != None {
-        fail @"member_rules: joined member has no vote"
       } else if flatten(without_lovelace(output.value)) != [
         (policy_id, member_id, 1),
       ] {
@@ -248,8 +246,6 @@ pub fn transfer(own_ref: OutputReference, self: Transaction) -> Bool {
     fail @"member_rules: transfer cannot change status"
   } else if new_datum.last_contribution_year != old_datum.last_contribution_year {
     fail @"member_rules: transfer cannot change the contribution year"
-  } else if new_datum.last_voted_proposal != old_datum.last_voted_proposal {
-    fail @"member_rules: transfer cannot change the last vote"
   } else {
     True
   }
@@ -374,8 +370,6 @@ fn contribution(
     fail @"member_rules: status must not change"
   } else if new_datum.last_contribution_year != Some(year) {
     fail @"member_rules: last contribution year must be the config year"
-  } else if new_datum.last_voted_proposal != old_datum.last_voted_proposal {
-    fail @"member_rules: the last vote must not change"
   } else {
     conserved(
       policy_id,

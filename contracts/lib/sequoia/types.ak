@@ -2,8 +2,9 @@ use aiken/crypto.{VerificationKeyHash}
 use cardano/address.{Credential}
 use cardano/assets.{AssetName, PolicyId}
 
-// ADR 0008 datums. Balances live in the UTxO value, KYC facts live in the KYC
-// box, and vesting is a pure function of `joined_at`; none are duplicated here.
+// ADR 0008 datums, extended by ADR 0009 §8 for M2. Balances live in the UTxO
+// value, KYC facts live in the KYC box, and vesting is a pure function of
+// `joined_at`; none are duplicated here.
 
 /// Asset name of the one-shot state token under the state NFT policy.
 pub const state_asset_name: AssetName = "STATE"
@@ -34,6 +35,14 @@ pub type ConfigDatum {
   membership_policy: PolicyId,
   kyc_policy: PolicyId,
   bank_policy: PolicyId,
+  governance_policy: PolicyId,
+  ballot_policy: PolicyId,
+  quorum_bps: Int,
+  project_threshold_bps: Int,
+  structural_threshold_bps: Int,
+  timelock_days: Int,
+  voting_days: Int,
+  reveal_days: Int,
 }
 
 pub type MemberClass {
@@ -55,7 +64,6 @@ pub type MemberDatum {
   status: MemberStatus,
   joined_at: Int,
   last_contribution_year: Option<Int>,
-  last_voted_proposal: Option<Int>,
 }
 
 /// KYC actions. `Renew` is spend-only: the token moves to a replacement box at

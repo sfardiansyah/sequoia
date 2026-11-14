@@ -72,6 +72,14 @@ fn config() -> ConfigDatum {
     membership_policy: membership_policy_id,
     kyc_policy: kyc_policy_id,
     bank_policy: bank_policy_id,
+    governance_policy: bank_policy_id,
+    ballot_policy: kyc_policy_id,
+    quorum_bps: 5_000,
+    project_threshold_bps: 5_001,
+    structural_threshold_bps: 6_667,
+    timelock_days: 7,
+    voting_days: 7,
+    reveal_days: 3,
   }
 }
 
@@ -87,7 +95,6 @@ fn member_datum(
     status: Active,
     joined_at,
     last_contribution_year: None,
-    last_voted_proposal: None,
   }
 }
 
@@ -447,14 +454,6 @@ test join_rejects_a_contribution_year() fail {
   member_rules.join(config(), membership_policy_id, join_tx(member_a, datum))
 }
 
-test join_rejects_a_recorded_vote() fail {
-  let datum = MemberDatum {
-    ..member_datum(member_a, owner_a, joined_at),
-    last_voted_proposal: Some(1),
-  }
-  member_rules.join(config(), membership_policy_id, join_tx(member_a, datum))
-}
-
 test join_rejects_a_missing_lower_bound() fail {
   member_rules.join(
     config(),
@@ -516,12 +515,6 @@ test transfer_rejects_a_changed_status() fail {
 test transfer_rejects_a_changed_contribution_year() fail {
   let old = member_datum(member_a, owner_a, joined_at)
   let new = MemberDatum { ..old, last_contribution_year: Some(2026) }
-  member_rules.transfer(member_ref, transfer_tx(old, new, 5, 2, 5, 2))
-}
-
-test transfer_rejects_a_changed_last_vote() fail {
-  let old = member_datum(member_a, owner_a, joined_at)
-  let new = MemberDatum { ..old, last_voted_proposal: Some(1) }
   member_rules.transfer(member_ref, transfer_tx(old, new, 5, 2, 5, 2))
 }
 
@@ -1057,16 +1050,6 @@ test contribution_rejects_a_changed_status() fail {
 test contribution_rejects_a_changed_join_time() fail {
   let old = member_datum(member_a, owner_a, joined_at)
   let new = MemberDatum { ..contributed(old), joined_at: 999 }
-  member_rules.contribute_mint(
-    config(),
-    membership_policy_id,
-    contribution_tx(old, new, proof_input(member_a), 700_000, 300_000),
-  )
-}
-
-test contribution_rejects_a_changed_last_vote() fail {
-  let old = member_datum(member_a, owner_a, joined_at)
-  let new = MemberDatum { ..contributed(old), last_voted_proposal: Some(1) }
   member_rules.contribute_mint(
     config(),
     membership_policy_id,

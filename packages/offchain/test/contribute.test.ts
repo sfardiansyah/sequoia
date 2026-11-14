@@ -72,7 +72,6 @@ describe("membership contribution", () => {
       index: 0,
       fields: [2026n],
     });
-    expect(asConstr(datum.fields[6])).toEqual({ index: 1, fields: [] });
 
     const proofs = (await ledger.lucid.utxosAt(m1.bankAddress)).filter(
       (utxo) => utxo.assets[bankUnit(m1.membershipPolicy, "1a01")] === 1n,

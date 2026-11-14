@@ -12,6 +12,9 @@ membership join and non-transferability are implemented; a plain spend is the
 `Transfer` action, and `MCAP`/`PROJ` are reserved asset names, so a member id or
 bank-proof nonce may not take either. Contribution is implemented; its checks
 run from both the mint and the spend purpose, so neither half can pass alone.
+Amended 2026-11-14: M2 extends `ConfigDatum` with the governance fields
+(ADR 0009 §8) and removes `MemberDatum.last_voted_proposal`
+(`docs/plan/m2-governance.md` §5, MemberDatum v2).
 
 ## Context
 

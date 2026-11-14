@@ -83,8 +83,9 @@ milestone `M1: Config + Membership` (issues #17–#26) delivered the state NFT,
 config, KYC attestations, bank proofs, membership join/transfer/contribution,
 and one Lucid emulator suite for the whole slice. The M2 spec is
 `docs/plan/m2-governance.md`; its tickets are in the `M2: Governance` milestone.
-M2 has started: ADR 0009 and the shared voting primitives are in (ticket #27);
-the validators are #28–#33.
+M2 has started: ADR 0009, the shared voting primitives (#27), and the config v2
+datum plus its invariant library (#28) are in; the governance validators are
+#29–#33.
 M1 ran on preprod only: no real IDR, no real personal data, and no preprod
 deployment in the milestone itself.
 

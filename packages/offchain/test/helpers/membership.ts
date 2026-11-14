@@ -55,7 +55,6 @@ const memberDatumSchema = Data.Object({
   status: memberStatus,
   joined_at: Data.Integer(),
   last_contribution_year: Data.Nullable(Data.Integer()),
-  last_voted_proposal: Data.Nullable(Data.Integer()),
 });
 
 /** Field order mirrors `contracts/lib/sequoia/types.ak`. */
@@ -72,7 +71,6 @@ export function memberDatum(
       status: "Active",
       joined_at: joinedAt,
       last_contribution_year: null,
-      last_voted_proposal: null,
     },
     memberDatumSchema,
   );

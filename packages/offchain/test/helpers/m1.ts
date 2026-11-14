@@ -21,8 +21,9 @@ import {
 import { compiledValidator } from "../../src/blueprint";
 
 /**
- * M1 genesis helpers (ADR 0008 §5). The state NFT policy is compiled against a
- * seed output reference, so the seed must exist before any script hash is known.
+ * Emulator genesis helpers for the current script set (M1 scripts with the M2
+ * config v2 datum, ADR 0009 §8). The state NFT policy is compiled against a seed
+ * output reference, so the seed must exist before any script hash is known.
  */
 
 export const STATE_ASSET_NAME = "STATE";
@@ -30,6 +31,9 @@ export const CONFIG_MIN_LOVELACE = 5_000_000n;
 export const KYC_MIN_LOVELACE = 3_000_000n;
 export const MEMBER_MIN_LOVELACE = 3_000_000n;
 const SEED_LOVELACE = 12_345_678n;
+
+/** Governance and ballot scripts land in #29/#30; zero ids until then. */
+export const ZERO_POLICY_ID = "00".repeat(28);
 
 export type M1Actors = {
   deployer: EmulatorAccount;
@@ -62,6 +66,12 @@ export function m1TestConfig(): TestConfig {
     standardCapitalParticipationMaxBps: 5_000n,
     boardThreshold: 2n,
     network: 0n,
+    quorumBps: 5_000n,
+    projectThresholdBps: 5_001n,
+    structuralThresholdBps: 6_667n,
+    timelockDays: 7n,
+    votingDays: 7n,
+    revealDays: 3n,
   };
 }
 
@@ -73,6 +83,12 @@ export type TestConfig = {
   standardCapitalParticipationMaxBps: bigint;
   boardThreshold: bigint;
   network: bigint;
+  quorumBps: bigint;
+  projectThresholdBps: bigint;
+  structuralThresholdBps: bigint;
+  timelockDays: bigint;
+  votingDays: bigint;
+  revealDays: bigint;
 };
 
 export const keyHash = (address: string): string =>
@@ -207,10 +223,24 @@ const configDatumSchema = Data.Object({
   membership_policy: Data.Bytes(),
   kyc_policy: Data.Bytes(),
   bank_policy: Data.Bytes(),
+  governance_policy: Data.Bytes(),
+  ballot_policy: Data.Bytes(),
+  quorum_bps: Data.Integer(),
+  project_threshold_bps: Data.Integer(),
+  structural_threshold_bps: Data.Integer(),
+  timelock_days: Data.Integer(),
+  voting_days: Data.Integer(),
+  reveal_days: Data.Integer(),
 });
 
 /** Field order mirrors `contracts/lib/sequoia/types.ak`. */
-export type PolicyHashes = { membership: string; kyc: string; bank: string };
+export type PolicyHashes = {
+  membership: string;
+  kyc: string;
+  bank: string;
+  governance: string;
+  ballot: string;
+};
 
 export function configDatum(
   roles: M1Roles,
@@ -232,6 +262,14 @@ export function configDatum(
       membership_policy: policies.membership,
       kyc_policy: policies.kyc,
       bank_policy: policies.bank,
+      governance_policy: policies.governance,
+      ballot_policy: policies.ballot,
+      quorum_bps: config.quorumBps,
+      project_threshold_bps: config.projectThresholdBps,
+      structural_threshold_bps: config.structuralThresholdBps,
+      timelock_days: config.timelockDays,
+      voting_days: config.votingDays,
+      reveal_days: config.revealDays,
     },
     configDatumSchema,
   );
@@ -258,6 +296,11 @@ export async function createSeed(ledger: M1Ledger): Promise<UTxO> {
   return seed;
 }
 
+export type GenesisPolicies = {
+  governance: string;
+  ballot: string;
+};
+
 export type Genesis = {
   seed: UTxO;
   stateNft: Script;
@@ -273,6 +316,8 @@ export type Genesis = {
   bankValidator: Script;
   bankPolicy: string;
   bankAddress: string;
+  governancePolicy: string;
+  ballotPolicy: string;
   datum: string;
   configUtxo: UTxO;
 };
@@ -284,6 +329,10 @@ export type Genesis = {
 export async function genesis(
   ledger: M1Ledger,
   config: TestConfig,
+  policies: GenesisPolicies = {
+    governance: ZERO_POLICY_ID,
+    ballot: ZERO_POLICY_ID,
+  },
 ): Promise<Genesis> {
   const { lucid, emulator, roles } = ledger;
   const seed = await createSeed(ledger);
@@ -304,6 +353,8 @@ export async function genesis(
     membership: membershipPolicy,
     kyc: kycPolicy,
     bank: bankPolicy,
+    governance: policies.governance,
+    ballot: policies.ballot,
   });
   const unit = stateUnit(stateNftPolicy);
 
@@ -337,6 +388,8 @@ export async function genesis(
     bankValidator,
     bankPolicy,
     bankAddress,
+    governancePolicy: policies.governance,
+    ballotPolicy: policies.ballot,
     datum,
     configUtxo,
   };

@@ -67,14 +67,13 @@ describe("membership join and non-transferability", () => {
 
     const datum = decode(boxes[0]!);
     expect(datum.index).toBe(0);
-    expect(datum.fields).toHaveLength(7);
+    expect(datum.fields).toHaveLength(6);
     expect(datum.fields[0]).toBe(owner);
     expect(datum.fields[1]).toBe(memberId);
     expect(constr(datum.fields[2])).toEqual({ index: 0, fields: [] });
     expect(constr(datum.fields[3])).toEqual({ index: 0, fields: [] });
     expect(datum.fields[4]).toBe(joinedAt);
     expect(constr(datum.fields[5])).toEqual({ index: 1, fields: [] });
-    expect(constr(datum.fields[6])).toEqual({ index: 1, fields: [] });
   });
 
   test("a founder join is accepted and labelled", async () => {

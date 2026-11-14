@@ -1,7 +1,8 @@
 # Sequoia contracts
 
-Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`) is
-implemented per `docs/adr/0008-m1-config-and-membership.md`.
+Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`)
+is implemented per `docs/adr/0008-m1-config-and-membership.md`; the M2 config v2
+datum follows `docs/adr/0009-m2-secret-ballot-governance.md` §8.
 
 ## Toolchain
 
@@ -52,8 +53,10 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/membership.ak` — the membership policy; bank proofs (#23), join
   and transfer (#24), contribution (#25).
 - `validators/bank_attestation.ak` — parameterless bank proof guard.
-- `lib/sequoia/types.ak` — the ADR 0008 datums and enums.
+- `lib/sequoia/types.ak` — the ADR 0008 and ADR 0009 datums and enums.
 - `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
+- `lib/sequoia/config_rules.ak` — the config v2 immutable fields and structural
+  invariants (ADR 0009 §8).
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
 - `lib/sequoia/kyc_rules.ak` — issue, renew, and revoke checks.
 - `lib/sequoia/bank_rules.ak` — bank-proof issue, cancel, and guard checks.
