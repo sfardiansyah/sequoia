@@ -289,6 +289,17 @@ export function configDatumFields(
   };
 }
 
+/** The policy ids a genesis run fixed, in datum field order. */
+export function policyHashes(m1: Genesis): PolicyHashes {
+  return {
+    membership: m1.membershipPolicy,
+    kyc: m1.kycPolicy,
+    bank: m1.bankPolicy,
+    governance: m1.governancePolicy,
+    ballot: m1.ballotPolicy,
+  };
+}
+
 export function configDatum(
   roles: Roles,
   config: TestConfig,

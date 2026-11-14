@@ -4,6 +4,7 @@ import {
   configDatumFields,
   configDatumSchema,
   encode,
+  policyHashes,
   submitWithBoard,
   type Genesis,
   type Ledger,
@@ -222,13 +223,7 @@ export async function createProposal(
   const datum = proposalDatum(
     ledger.roles,
     config,
-    {
-      membership: m1.membershipPolicy,
-      kyc: m1.kycPolicy,
-      bank: m1.bankPolicy,
-      governance: m1.governancePolicy,
-      ballot: m1.ballotPolicy,
-    },
+    policyHashes(m1),
     terms,
   );
 

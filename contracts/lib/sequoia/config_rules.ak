@@ -8,7 +8,7 @@ use sequoia/tx.{inline_datum, lower_bound, signed, spent_input}
 use sequoia/types.{Config, ConfigDatum, Passed, ProposalDatum, state_asset_name}
 use sequoia/voting
 
-/// Config rules for M2 (ADR 0009 §6, §8). Creation and execution of a config
+/// Config rules for M2 (ADR 0009 §4, §8). Creation and execution of a config
 /// proposal call these; genesis is deployer-trusted and does not.
 /// The fields governance can never change, whatever the vote says. The policy
 /// ids are immutable so a governance script cannot be swapped out from under
@@ -25,8 +25,9 @@ pub fn immutable_unchanged(old: ConfigDatum, new: ConfigDatum) -> Bool {
 }
 
 /// The one output that recreates the config box: the same address as the input
-/// it replaces, holding exactly one STATE.
-fn returned_config(
+/// it replaces, holding exactly one STATE. Governance calls this too, to prove
+/// the executed proposal wrote a config box.
+pub fn returned_config(
   state_nft_policy: PolicyId,
   old_input: Input,
   self: Transaction,
@@ -70,7 +71,7 @@ fn passed_proposal(config: ConfigDatum, self: Transaction) -> ProposalDatum {
 }
 
 /// The config box's only spend: a passed `Config` proposal, after the timelock,
-/// writes its `proposed_config` (ADR 0009 §4, §6, §8). The governance validator
+/// writes its `proposed_config` (ADR 0009 §4, §8). The governance validator
 /// records the status change and requires this write; the timelock, immutability,
 /// and invariant checks live here, where the config is written.
 pub fn execute(

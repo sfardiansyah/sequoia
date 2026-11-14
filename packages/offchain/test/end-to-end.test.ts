@@ -17,6 +17,7 @@ import {
   expectRejected,
   genesis,
   keyHash,
+  policyHashes,
   testLedger,
   testConfig,
   membershipRedeemer,
@@ -599,12 +600,18 @@ describe("M2 end to end", () => {
     const finalizedAt = Number(fields.finalizedAt);
     const timelockEnd = finalizedAt + Number(config.timelockDays) * MS_PER_DAY;
 
+    // Move past finalize but stay inside the timelock, so the config gate is
+    // what rejects the attempt.
+    advanceTo(ledger, finalizedAt + MS_PER_DAY);
     const early = await expectRejected(() =>
       executeProposal(ledger, m1, m1.configUtxo, passed, {
         validFrom: finalizedAt + MS_PER_DAY,
       }),
     );
     expect(early).toBeInstanceOf(Error);
+
+    // Past the timelock, so the tamper and immutability checks are what reject.
+    advanceTo(ledger, timelockEnd);
 
     const tampered = withExecuted(
       withFinalized(
@@ -623,13 +630,7 @@ describe("M2 end to end", () => {
     const changed = configDatum(
       ledger.roles,
       { ...nextConfig, network: 1n },
-      {
-        membership: m1.membershipPolicy,
-        kyc: m1.kycPolicy,
-        bank: m1.bankPolicy,
-        governance: m1.governancePolicy,
-        ballot: m1.ballotPolicy,
-      },
+      policyHashes(m1),
     );
     const immutable = await expectRejected(() =>
       executeProposal(ledger, m1, m1.configUtxo, passed, {
@@ -638,7 +639,6 @@ describe("M2 end to end", () => {
     );
     expect(immutable).toBeInstanceOf(Error);
 
-    advanceTo(ledger, timelockEnd);
     const executed = await executeProposal(ledger, m1, m1.configUtxo, passed);
 
     const written = Data.from(executed.config.datum!) as {

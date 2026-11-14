@@ -376,29 +376,6 @@ fn config_spent_input(state_nft_policy: PolicyId, self: Transaction) -> Input {
   }
 }
 
-fn executed_config(
-  state_nft_policy: PolicyId,
-  config_input: Input,
-  self: Transaction,
-) -> ConfigDatum {
-  let returned = list.filter(
-    self.outputs,
-    fn(output) {
-      and {
-        output.address == config_input.output.address,
-        quantity_of(output.value, state_nft_policy, state_asset_name) == 1,
-      }
-    },
-  )
-  when returned is {
-    [output] -> {
-      expect config: ConfigDatum = inline_datum(output)
-      config
-    }
-    _ -> fail @"governance_rules: execute returns exactly one config box"
-  }
-}
-
 /// `Execute` consumes a passed `Config` proposal and the config box it writes
 /// (ADR 0009 §1, §6). The config box is spent, not referenced, so the live
 /// config comes from that input. The config validator owns the write gate —
@@ -413,7 +390,11 @@ pub fn execute(
   let config_input = config_spent_input(state_nft_policy, self)
   expect config: ConfigDatum = inline_datum(config_input.output)
   let new = returned_proposal(config, old.id, self)
-  let written = executed_config(state_nft_policy, config_input, self)
+  let written = config_rules.returned_config(
+    state_nft_policy,
+    config_input,
+    self,
+  )
   if old.status != Passed {
     fail @"governance_rules: execute requires a passed proposal"
   } else if !keep_proposal(old, new) {

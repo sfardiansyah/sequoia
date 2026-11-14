@@ -478,3 +478,17 @@ test execute_rejects_two_proposals() fail {
   }
   config_rules.execute(state_policy_id, ref(0), tx)
 }
+
+test execute_rejects_a_passed_proposal_without_a_finalize_time() fail {
+  let proposal = ProposalDatum { ..passed_proposal(), finalized_at: None }
+  config_rules.execute(
+    state_policy_id,
+    ref(0),
+    execute_tx(
+      proposed_config(),
+      proposal,
+      timelock_end(),
+      timelock_end() + 1_000,
+    ),
+  )
+}

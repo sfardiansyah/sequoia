@@ -3,8 +3,9 @@ use cardano/assets.{PolicyId, quantity_of}
 use cardano/transaction.{InlineDatum, Transaction}
 use sequoia/types.{ConfigDatum, state_asset_name}
 
-/// The config box is read, never spent: exactly one reference input must hold
-/// the STATE token, with an inline ConfigDatum (ADR 0008 §1, §5).
+/// Read actions find the config box among reference inputs: exactly one must
+/// hold the STATE token, with an inline ConfigDatum (ADR 0008 §1, §5). Execute
+/// spends the box instead and reads it from its input.
 pub fn find(state_nft_policy: PolicyId, self: Transaction) -> ConfigDatum {
   let configs = list.filter(
     self.reference_inputs,

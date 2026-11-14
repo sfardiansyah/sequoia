@@ -311,7 +311,10 @@ KYC, bank, governance, and ballot scripts. M1 test-wallet boxes are abandoned
   ineligible leaf, duplicate nullifier, a late cast with a stale lower bound, a
   late reveal, unrevealed tally, missing quorum, below threshold (2-of-3 at
   6667), early execute, a data tamper between actions, and an immutable-field
-  change. `ballot.test.ts` covers the early/late window-boundary cases.
+  change. `ballot.test.ts` covers the late cast with a stale lower bound and
+  both reveal boundaries; the early-cast guard is Aiken-only
+  (`cast_rejects_a_ballot_before_start`), because the emulator clock never runs
+  behind a proposal's `start`.
 - `bun run check`, `bun run check:contracts`, and `bun run check:vectors`.
 
 ### Assertion → test

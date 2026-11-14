@@ -155,7 +155,9 @@ the gate so neither action can complete alone:
 
 The config box is spent, not referenced, so execute reads the live config from
 that input; the other governance actions read it as a reference input. A second
-execution fails because the proposal is no longer `Passed`.
+execution fails because the proposal is no longer `Passed`. Governance finds the
+spent config box by the one-shot `STATE` token, so `Execute` cannot be recorded
+against anything but the real config.
 
 ### Live-config quorum and threshold
 

@@ -15,6 +15,7 @@ import {
   expectRejected,
   genesis,
   keyHash,
+  policyHashes,
   testLedger,
   testConfig,
   scriptTime,
@@ -161,13 +162,7 @@ describe("config execution after the timelock", () => {
     const changed = configDatum(
       ledger.roles,
       { ...nextConfig, network: 1n },
-      {
-        membership: m1.membershipPolicy,
-        kyc: m1.kycPolicy,
-        bank: m1.bankPolicy,
-        governance: m1.governancePolicy,
-        ballot: m1.ballotPolicy,
-      },
+      policyHashes(m1),
     );
 
     const failure = await expectRejected(() =>
@@ -183,13 +178,7 @@ describe("config execution after the timelock", () => {
     const changed = configDatum(
       ledger.roles,
       { ...nextConfig, annualAmount: 3_000_000n },
-      {
-        membership: m1.membershipPolicy,
-        kyc: m1.kycPolicy,
-        bank: m1.bankPolicy,
-        governance: m1.governancePolicy,
-        ballot: m1.ballotPolicy,
-      },
+      policyHashes(m1),
     );
 
     const failure = await expectRejected(() =>
