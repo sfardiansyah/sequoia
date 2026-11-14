@@ -104,3 +104,36 @@ pub type BankProofDatum {
   nonce: ByteArray,
   issued_at: Int,
 }
+
+// M2 governance (ADR 0009 §1, §5, §6). The VOTE datum, `Choice`, and the
+// remaining redeemers land with the ballot actions (#30–#32).
+
+pub type ProposalKind {
+  Config
+}
+
+pub type ProposalStatus {
+  Open
+  Passed
+  Rejected
+  Executed
+}
+
+pub type ProposalDatum {
+  id: AssetName,
+  proposer: VerificationKeyHash,
+  kind: ProposalKind,
+  proposed_config: ConfigDatum,
+  eligible_leaves: List<ByteArray>,
+  start: Int,
+  end: Int,
+  reveal_end: Int,
+  nullifiers: List<ByteArray>,
+  discarded: Int,
+  tallied: Int,
+  yes: Int,
+  no: Int,
+  abstain: Int,
+  status: ProposalStatus,
+  finalized_at: Option<Int>,
+}

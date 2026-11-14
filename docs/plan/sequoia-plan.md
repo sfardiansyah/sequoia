@@ -70,7 +70,7 @@ The co-op is a member-owned organization that:
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken  
 **Test command:** `bun run check`  
-**Current status:** 302 tests pass, typecheck clean, 43 Postgres integration tests green  
+**Current status:** 303 tests pass, typecheck clean, 43 Postgres integration tests green  
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
@@ -83,9 +83,10 @@ milestone `M1: Config + Membership` (issues #17–#26) delivered the state NFT,
 config, KYC attestations, bank proofs, membership join/transfer/contribution,
 and one Lucid emulator suite for the whole slice. The M2 spec is
 `docs/plan/m2-governance.md`; its tickets are in the `M2: Governance` milestone.
-M2 has started: ADR 0009, the shared voting primitives (#27), and the config v2
-datum plus its invariant library (#28) are in; the governance validators are
-#29–#33.
+M2 has started: ADR 0009, the shared voting primitives (#27), the config v2
+datum plus its invariant library (#28), and governance proposal creation (#29)
+are in; ballots are #30, tally and finalize #31, execution #32, and the
+end-to-end suite plus docs #33.
 M1 ran on preprod only: no real IDR, no real personal data, and no preprod
 deployment in the milestone itself.
 

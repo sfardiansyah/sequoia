@@ -57,7 +57,7 @@ describe("state NFT and config genesis", () => {
       m1.bankPolicy,
     ]);
     expect(datum.fields.slice(13)).toEqual([
-      "00".repeat(28),
+      m1.governancePolicy,
       "00".repeat(28),
       5_000n,
       5_001n,
@@ -75,8 +75,14 @@ describe("state NFT and config genesis", () => {
     expect(validatorToScriptHash(m1.membershipValidator)).toBe(m1.membershipPolicy);
     expect(validatorToScriptHash(m1.kycValidator)).toBe(m1.kycPolicy);
     expect(validatorToScriptHash(m1.bankValidator)).toBe(m1.bankPolicy);
+    expect(validatorToScriptHash(m1.governanceValidator)).toBe(
+      m1.governancePolicy,
+    );
     expect(getAddressDetails(m1.kycAddress).paymentCredential?.hash).toBe(m1.kycPolicy);
     expect(getAddressDetails(m1.bankAddress).paymentCredential?.hash).toBe(m1.bankPolicy);
+    expect(getAddressDetails(m1.governanceAddress).paymentCredential?.hash).toBe(
+      m1.governancePolicy,
+    );
   });
 
   test("the seed is spent by genesis", async () => {

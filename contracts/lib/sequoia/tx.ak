@@ -24,10 +24,22 @@ pub fn require_key_signer(
   }
 }
 
+/// A required signer, as the transaction body declares it (not a witness).
+pub fn signed(self: Transaction, key: ByteArray) -> Bool {
+  list.any(self.extra_signatories, fn(signer) { signer == key })
+}
+
 pub fn lower_bound(self: Transaction) -> Int {
   when self.validity_range.lower_bound.bound_type is {
     Finite(time) -> time
     _ -> fail @"tx: transaction needs a validity lower bound"
+  }
+}
+
+pub fn upper_bound(self: Transaction) -> Int {
+  when self.validity_range.upper_bound.bound_type is {
+    Finite(time) -> time
+    _ -> fail @"tx: transaction needs a validity upper bound"
   }
 }
 

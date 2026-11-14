@@ -6,12 +6,14 @@ use cardano/assets.{
   AssetName, Assets, PolicyId, flatten, quantity_of, tokens, without_lovelace,
 }
 use cardano/transaction.{Input, Output, OutputReference, Transaction}
+use sequoia/config_rules
+use sequoia/kyc_rules
 use sequoia/split
-use sequoia/tx.{inline_datum, lower_bound, one_token_output}
+use sequoia/tx.{inline_datum, lower_bound, one_token_output, signed}
 use sequoia/types.{
-  Active, BankProofDatum, ConfigDatum, Founder, KycDatum, MemberClass,
-  MemberDatum, Standard, capital_participation_asset_name,
-  member_capital_asset_name, reserved_asset_name,
+  Active, BankProofDatum, ConfigDatum, Founder, MemberClass, MemberDatum,
+  Standard, capital_participation_asset_name, member_capital_asset_name,
+  reserved_asset_name,
 }
 
 // Member record rules (ADR 0008 §5, §6). `Join` creates the record; every spend
@@ -26,40 +28,6 @@ fn datum_of(output: Output) -> MemberDatum {
 fn proof_datum_of(output: Output) -> BankProofDatum {
   expect datum: BankProofDatum = inline_datum(output)
   datum
-}
-
-fn signed(self: Transaction, key: ByteArray) -> Bool {
-  list.any(self.extra_signatories, fn(signer) { signer == key })
-}
-
-/// The live KYC attestation for `member_id`: exactly one reference input at the
-/// KYC script holding the id token, with an inline datum (ADR 0008 §5, §6).
-fn live_kyc(
-  config: ConfigDatum,
-  member_id: AssetName,
-  self: Transaction,
-) -> KycDatum {
-  let found = list.filter(
-    self.reference_inputs,
-    fn(input) {
-      quantity_of(input.output.value, config.kyc_policy, member_id) == 1
-    },
-  )
-  when found is {
-    [input] ->
-      if input.output.address.payment_credential != Script(config.kyc_policy) {
-        fail @"member_rules: KYC box must stay at the KYC script"
-      } else {
-        expect datum: KycDatum = inline_datum(input.output)
-        datum
-      }
-    _ -> fail @"member_rules: exactly one live KYC box required"
-  }
-}
-
-/// Board admission: `board_threshold` distinct board keys are required signers.
-fn board_signers(config: ConfigDatum, self: Transaction) -> Int {
-  list.count(config.board_keys, fn(key) { signed(self, key) })
 }
 
 /// Join is a mint-only admission: one `MEMBER` NFT in a box holding nothing
@@ -77,11 +45,11 @@ pub fn join(config: ConfigDatum, policy_id: PolicyId, self: Transaction) -> Bool
     } else if reserved_asset_name(member_id) {
       fail @"member_rules: member id is a reserved asset name"
     } else {
-      let kyc = live_kyc(config, member_id, self)
+      let kyc = kyc_rules.live_kyc(config, member_id, self)
       let output = one_token_output(policy_id, member_id, policy_id, self)
       let datum = datum_of(output)
       let joined_at = lower_bound(self)
-      let board = board_signers(config, self)
+      let board = config_rules.board_signers(config, self)
       if config.board_threshold < 1 {
         fail @"member_rules: board threshold must be at least 1"
       } else if board < config.board_threshold {
@@ -317,7 +285,7 @@ fn contribution(
   )
   let output = returned_member(policy_id, old_datum.member_id, self)
   let new_datum = datum_of(output)
-  let kyc = live_kyc(config, old_datum.member_id, self)
+  let kyc = kyc_rules.live_kyc(config, old_datum.member_id, self)
   let extra_mints = list.filter(
     dict.to_pairs(tokens(self.mint, policy_id)),
     fn(Pair(asset_name, _)) {

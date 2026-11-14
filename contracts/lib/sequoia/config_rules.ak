@@ -1,6 +1,8 @@
 use aiken/collection/list
 use aiken/crypto.{VerificationKeyHash}
+use cardano/transaction.{Transaction}
 use sequoia/split
+use sequoia/tx.{signed}
 use sequoia/types.{ConfigDatum}
 
 /// Config rules for M2 (ADR 0009 §8). Creation and execution of a config
@@ -29,6 +31,11 @@ fn is_threshold_bps(value: Int) -> Bool {
 
 fn distinct_board_keys(keys: List<VerificationKeyHash>) -> Bool {
   list.length(list.unique(keys)) == list.length(keys)
+}
+
+/// Board approval: `board_threshold` distinct board keys are required signers.
+pub fn board_signers(config: ConfigDatum, self: Transaction) -> Int {
+  list.count(config.board_keys, fn(key) { signed(self, key) })
 }
 
 /// Structural invariants: a vote may choose any policy inside these ranges, but

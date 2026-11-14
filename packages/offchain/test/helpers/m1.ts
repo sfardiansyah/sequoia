@@ -32,7 +32,7 @@ export const KYC_MIN_LOVELACE = 3_000_000n;
 export const MEMBER_MIN_LOVELACE = 3_000_000n;
 const SEED_LOVELACE = 12_345_678n;
 
-/** Governance and ballot scripts land in #29/#30; zero ids until then. */
+/** The ballot script lands in #30; its policy id stays zero until then. */
 export const ZERO_POLICY_ID = "00".repeat(28);
 
 export type M1Actors = {
@@ -203,13 +203,23 @@ export function kycScript(stateNftPolicy: string): Script {
   };
 }
 
+export function governanceScript(stateNftPolicy: string): Script {
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(
+      compiledValidator("governance.governance.mint").compiledCode,
+      [castTo(stateNftPolicy, Data.Bytes())],
+    ),
+  };
+}
+
 export function stateUnit(stateNftPolicy: string): string {
   return stateNftPolicy + Buffer.from(STATE_ASSET_NAME).toString("hex");
 }
 
 const credential = Data.Object({ VerificationKey: Data.Bytes() });
 
-const configDatumSchema = Data.Object({
+export const configDatumSchema = Data.Object({
   contribution_year: Data.Integer(),
   annual_amount: Data.Integer(),
   member_capital_bps: Data.Integer(),
@@ -242,37 +252,42 @@ export type PolicyHashes = {
   ballot: string;
 };
 
+export function configDatumFields(
+  roles: M1Roles,
+  config: TestConfig,
+  policies: PolicyHashes,
+) {
+  return {
+    contribution_year: config.contributionYear,
+    annual_amount: config.annualAmount,
+    member_capital_bps: config.memberCapitalBps,
+    capital_participation_bps: config.capitalParticipationBps,
+    standard_capital_participation_max_bps: config.standardCapitalParticipationMaxBps,
+    board_keys: roles.boardKeys,
+    board_threshold: config.boardThreshold,
+    kyc_issuer: { VerificationKey: roles.kycIssuer },
+    bank_issuer: { VerificationKey: roles.bankIssuer },
+    network: config.network,
+    membership_policy: policies.membership,
+    kyc_policy: policies.kyc,
+    bank_policy: policies.bank,
+    governance_policy: policies.governance,
+    ballot_policy: policies.ballot,
+    quorum_bps: config.quorumBps,
+    project_threshold_bps: config.projectThresholdBps,
+    structural_threshold_bps: config.structuralThresholdBps,
+    timelock_days: config.timelockDays,
+    voting_days: config.votingDays,
+    reveal_days: config.revealDays,
+  };
+}
+
 export function configDatum(
   roles: M1Roles,
   config: TestConfig,
   policies: PolicyHashes,
 ) {
-  return encode(
-    {
-      contribution_year: config.contributionYear,
-      annual_amount: config.annualAmount,
-      member_capital_bps: config.memberCapitalBps,
-      capital_participation_bps: config.capitalParticipationBps,
-      standard_capital_participation_max_bps: config.standardCapitalParticipationMaxBps,
-      board_keys: roles.boardKeys,
-      board_threshold: config.boardThreshold,
-      kyc_issuer: { VerificationKey: roles.kycIssuer },
-      bank_issuer: { VerificationKey: roles.bankIssuer },
-      network: config.network,
-      membership_policy: policies.membership,
-      kyc_policy: policies.kyc,
-      bank_policy: policies.bank,
-      governance_policy: policies.governance,
-      ballot_policy: policies.ballot,
-      quorum_bps: config.quorumBps,
-      project_threshold_bps: config.projectThresholdBps,
-      structural_threshold_bps: config.structuralThresholdBps,
-      timelock_days: config.timelockDays,
-      voting_days: config.votingDays,
-      reveal_days: config.revealDays,
-    },
-    configDatumSchema,
-  );
+  return encode(configDatumFields(roles, config, policies), configDatumSchema);
 }
 
 /**
@@ -296,11 +311,6 @@ export async function createSeed(ledger: M1Ledger): Promise<UTxO> {
   return seed;
 }
 
-export type GenesisPolicies = {
-  governance: string;
-  ballot: string;
-};
-
 export type Genesis = {
   seed: UTxO;
   stateNft: Script;
@@ -316,7 +326,9 @@ export type Genesis = {
   bankValidator: Script;
   bankPolicy: string;
   bankAddress: string;
+  governanceValidator: Script;
   governancePolicy: string;
+  governanceAddress: string;
   ballotPolicy: string;
   datum: string;
   configUtxo: UTxO;
@@ -324,15 +336,11 @@ export type Genesis = {
 
 /**
  * One transaction: spend the seed, mint one STATE, create the config box.
- * Not a board action — genesis is deployer-trusted in M1 (ADR 0008).
+ * Not a board action — genesis is deployer-trusted (ADR 0008 §5).
  */
 export async function genesis(
   ledger: M1Ledger,
   config: TestConfig,
-  policies: GenesisPolicies = {
-    governance: ZERO_POLICY_ID,
-    ballot: ZERO_POLICY_ID,
-  },
 ): Promise<Genesis> {
   const { lucid, emulator, roles } = ledger;
   const seed = await createSeed(ledger);
@@ -349,12 +357,15 @@ export async function genesis(
   const bankValidator = bankScript();
   const bankPolicy = validatorToScriptHash(bankValidator);
   const bankAddress = validatorToAddress("Custom", bankValidator);
+  const governanceValidator = governanceScript(stateNftPolicy);
+  const governancePolicy = validatorToScriptHash(governanceValidator);
+  const governanceAddress = validatorToAddress("Custom", governanceValidator);
   const datum = configDatum(roles, config, {
     membership: membershipPolicy,
     kyc: kycPolicy,
     bank: bankPolicy,
-    governance: policies.governance,
-    ballot: policies.ballot,
+    governance: governancePolicy,
+    ballot: ZERO_POLICY_ID,
   });
   const unit = stateUnit(stateNftPolicy);
 
@@ -388,8 +399,10 @@ export async function genesis(
     bankValidator,
     bankPolicy,
     bankAddress,
-    governancePolicy: policies.governance,
-    ballotPolicy: policies.ballot,
+    governanceValidator,
+    governancePolicy,
+    governanceAddress,
+    ballotPolicy: ZERO_POLICY_ID,
     datum,
     configUtxo,
   };

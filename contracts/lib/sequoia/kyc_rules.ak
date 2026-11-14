@@ -16,6 +16,30 @@ fn datum_of(output: Output) -> KycDatum {
   datum
 }
 
+/// The live attestation for `member_id`: exactly one reference input at the KYC
+/// script holding the id token, with an inline datum (ADR 0008 §6).
+pub fn live_kyc(
+  config: ConfigDatum,
+  member_id: AssetName,
+  self: Transaction,
+) -> KycDatum {
+  let found = list.filter(
+    self.reference_inputs,
+    fn(input) {
+      quantity_of(input.output.value, config.kyc_policy, member_id) == 1
+    },
+  )
+  when found is {
+    [input] ->
+      if input.output.address.payment_credential != Script(config.kyc_policy) {
+        fail @"kyc_rules: KYC box must stay at the KYC script"
+      } else {
+        datum_of(input.output)
+      }
+    _ -> fail @"kyc_rules: exactly one live KYC box required"
+  }
+}
+
 fn checked_datum(
   datum: KycDatum,
   asset_name: AssetName,
