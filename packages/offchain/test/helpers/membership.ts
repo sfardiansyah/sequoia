@@ -9,8 +9,8 @@ import {
   submitTx,
   submitWithBoard,
   type Genesis,
-  type M1Ledger,
-} from "./m1";
+  type Ledger,
+} from "./harness";
 import { issueKyc, kycTerms } from "./kyc";
 import { bankTerms, issueBankProof } from "./bank";
 
@@ -90,12 +90,12 @@ export function asConstr(value: unknown): DecodedDatum {
   return value as DecodedDatum;
 }
 
-export function expiryFrom(ledger: M1Ledger, ms: number): bigint {
+export function expiryFrom(ledger: Ledger, ms: number): bigint {
   return BigInt(scriptTime(ledger, ledger.emulator.now())) + BigInt(ms);
 }
 
 export async function memberBoxes(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   memberId: string,
 ): Promise<UTxO[]> {
@@ -106,7 +106,7 @@ export async function memberBoxes(
 
 /** Issue KYC and leave the KYC issuer selected. */
 export async function kycFor(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   memberId: string,
   kycMs = 600_000,
@@ -117,7 +117,7 @@ export async function kycFor(
 
 /** Issue a bank proof and leave the bank issuer selected. */
 export async function proofFor(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   memberId: string,
   nonce: string,
@@ -127,7 +127,7 @@ export async function proofFor(
 }
 
 export async function joinMember(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   terms: MemberTerms,
   kyc: UTxO,
@@ -168,7 +168,7 @@ function withContributionYear(datum: string, year: bigint): string {
  * attached as both the minting policy and the spending validator.
  */
 export async function contributeMember(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   box: UTxO,
   proof: UTxO,
@@ -226,7 +226,7 @@ export async function contributeMember(
 
 /** Issue KYC, join, and leave the member wallet selected. */
 export async function joinedMember(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   memberId: string,
   options: { founder?: boolean; kycMs?: number } = {},
@@ -244,7 +244,7 @@ export async function joinedMember(
 
 /** A plain spend keeps the record intact; the member pays the fee. */
 export async function transferMember(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   box: UTxO,
   memberId: string,

@@ -5,8 +5,8 @@ import {
   scriptTime,
   submitTx,
   type Genesis,
-  type M1Ledger,
-} from "./m1";
+  type Ledger,
+} from "./harness";
 
 /**
  * KYC attestation transactions (ADR 0008 §5). The selected wallet signs; tests
@@ -62,7 +62,7 @@ export function kycUnit(kycPolicy: string, memberId: string): string {
 export const kycRedeemer = (index: number) => Data.to(new Constr(index, []));
 
 export async function issueKyc(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   terms: KycTerms,
 ): Promise<UTxO> {
@@ -87,7 +87,7 @@ export async function issueKyc(
 }
 
 export async function renewKyc(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   old: UTxO,
   terms: KycTerms,
@@ -113,7 +113,7 @@ export async function renewKyc(
 }
 
 export async function revokeKyc(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   old: UTxO,
   memberId: string,

@@ -20,13 +20,13 @@ import {
   expectRejected,
   genesis,
   keyHash,
-  m1Ledger,
-  m1TestConfig,
+  testLedger,
+  testConfig,
   scriptTime,
   selectActor,
   type Genesis,
-  type M1Ledger,
-} from "./helpers/m1";
+  type Ledger,
+} from "./helpers/harness";
 import { joinMember } from "./helpers/membership";
 import {
   createProposal,
@@ -34,7 +34,7 @@ import {
   proposalUnit,
 } from "./helpers/proposal";
 
-const config = m1TestConfig();
+const config = testConfig();
 
 const secret = (index: number): string =>
   (index + 1).toString(16).padStart(2, "0").repeat(32);
@@ -79,7 +79,7 @@ const choices = {
 };
 
 describe("batched tally and finalize", () => {
-  let ledger: M1Ledger;
+  let ledger: Ledger;
   let m1: Genesis;
   let leaves: string[];
   let proposals: Record<keyof typeof ids, UTxO>;
@@ -91,7 +91,7 @@ describe("batched tally and finalize", () => {
     );
 
   beforeAll(async () => {
-    ledger = await m1Ledger();
+    ledger = await testLedger();
     m1 = await genesis(ledger, config);
     leaves = Array.from({ length: 11 }, (_, index) =>
       eligibleLeaf(secret(index)),

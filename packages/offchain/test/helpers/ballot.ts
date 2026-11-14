@@ -12,9 +12,9 @@ import {
   stateUnit,
   submitTx,
   type Genesis,
-  type M1Ledger,
+  type Ledger,
   type TestConfig,
-} from "./m1";
+} from "./harness";
 import {
   decodeProposalDatum,
   proposalUnit,
@@ -134,7 +134,7 @@ function voteUnitOf(voteBox: UTxO): string {
 }
 
 /** Advance the emulator clock to at least `time` (unix ms). */
-export function advanceTo(ledger: M1Ledger, time: number): void {
+export function advanceTo(ledger: Ledger, time: number): void {
   const delta = time - ledger.emulator.now();
   if (delta > 0) {
     ledger.emulator.awaitSlot(Math.ceil(delta / 1_000));
@@ -152,7 +152,7 @@ export type CastOptions = {
 
 /** Cast mints the VOTE NFT and spends the proposal to append its nullifier. */
 export async function castVote(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   proposalBox: UTxO,
   options: CastOptions,
@@ -208,7 +208,7 @@ export type RevealOptions = {
 
 /** Reveal spends only the vote box; no proposal or config reference. */
 export async function revealVote(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   voteBox: UTxO,
   options: RevealOptions,
@@ -240,7 +240,7 @@ export type DiscardOptions = {
 
 /** Discard burns the unrevealed vote and records it on the proposal. */
 export async function discardVote(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   proposalBox: UTxO,
   voteBox: UTxO,
@@ -293,7 +293,7 @@ export type TallyOptions = {
 
 /** Tally an explicit 1–10 ballot batch and return the updated proposal box. */
 export async function tallyProposal(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   proposalBox: UTxO,
   voteBoxes: UTxO[],
@@ -338,7 +338,7 @@ export type FinalizeOptions = {
 
 /** Finalize after `reveal_end`; expected status follows the live config. */
 export async function finalizeProposal(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   config: TestConfig,
   proposalBox: UTxO,
@@ -396,7 +396,7 @@ export type ExecuteOptions = {
  * config, and mark the proposal `Executed`. Permissionless after the timelock.
  */
 export async function executeProposal(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   configBox: UTxO,
   proposalBox: UTxO,

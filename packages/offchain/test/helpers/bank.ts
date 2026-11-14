@@ -5,8 +5,8 @@ import {
   scriptTime,
   submitTx,
   type Genesis,
-  type M1Ledger,
-} from "./m1";
+  type Ledger,
+} from "./harness";
 
 /**
  * Bank proof transactions (ADR 0008 §5). The selected wallet signs; tests call
@@ -61,7 +61,7 @@ export function bankUnit(membershipPolicy: string, nonce: string): string {
 }
 
 export async function issueBankProof(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   terms: BankTerms,
 ): Promise<UTxO> {
@@ -86,7 +86,7 @@ export async function issueBankProof(
 }
 
 export async function cancelBankProof(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   proof: UTxO,
   nonce: string,

@@ -15,14 +15,14 @@ import {
   expectRejected,
   genesis,
   keyHash,
-  m1Ledger,
-  m1TestConfig,
+  testLedger,
+  testConfig,
   scriptTime,
   selectActor,
   stateUnit,
   type Genesis,
-  type M1Ledger,
-} from "./helpers/m1";
+  type Ledger,
+} from "./helpers/harness";
 import { joinMember } from "./helpers/membership";
 import {
   createProposal,
@@ -32,7 +32,7 @@ import {
   withFinalized,
 } from "./helpers/proposal";
 
-const config = m1TestConfig();
+const config = testConfig();
 
 /** The config this co-op votes for: a new year and a new annual amount. */
 const nextConfig = {
@@ -51,7 +51,7 @@ const ids = {
 };
 
 describe("config execution after the timelock", () => {
-  let ledger: M1Ledger;
+  let ledger: Ledger;
   let m1: Genesis;
   let passed: UTxO;
   let rejected: UTxO;
@@ -62,7 +62,7 @@ describe("config execution after the timelock", () => {
     ledger.lucid.utxoByUnit(proposalUnit(m1.governancePolicy, id));
 
   beforeAll(async () => {
-    ledger = await m1Ledger();
+    ledger = await testLedger();
     m1 = await genesis(ledger, config);
 
     selectActor(ledger, "kycIssuer");

@@ -21,9 +21,9 @@ import {
 import { compiledValidator } from "../../src/blueprint";
 
 /**
- * Emulator genesis helpers for the current script set (M1 scripts with the M2
- * config v2 datum, ADR 0009 §8). The state NFT policy is compiled against a seed
- * output reference, so the seed must exist before any script hash is known.
+ * Emulator genesis helpers for the current v2 script set (ADR 0009 §9). The
+ * state NFT policy is compiled against a seed output reference, so the seed must
+ * exist before any script hash is known.
  */
 
 export const STATE_ASSET_NAME = "STATE";
@@ -32,29 +32,29 @@ export const KYC_MIN_LOVELACE = 3_000_000n;
 export const MEMBER_MIN_LOVELACE = 3_000_000n;
 const SEED_LOVELACE = 12_345_678n;
 
-export type M1Actors = {
+export type Actors = {
   deployer: EmulatorAccount;
   kycIssuer: EmulatorAccount;
   bankIssuer: EmulatorAccount;
   member: EmulatorAccount;
 };
 
-export type M1Ledger = {
+export type Ledger = {
   emulator: Emulator;
   lucid: LucidEvolution;
-  actors: M1Actors;
+  actors: Actors;
   board: EmulatorAccount[];
-  roles: M1Roles;
+  roles: Roles;
   slotConfig: SlotConfig;
 };
 
-export type M1Roles = {
+export type Roles = {
   boardKeys: string[];
   kycIssuer: string;
   bankIssuer: string;
 };
 
-export function m1TestConfig(): TestConfig {
+export function testConfig(): TestConfig {
   return {
     contributionYear: 2026n,
     annualAmount: 1_000_000n,
@@ -101,10 +101,10 @@ export const castTo = (value: unknown, schema: unknown): PlutusDataArg =>
 export const encode = (value: unknown, schema: unknown): string =>
   (Data.to as unknown as (v: unknown, s: unknown) => string)(value, schema);
 
-export function m1Roles(
-  actors: M1Actors,
+export function testRoles(
+  actors: Actors,
   board: EmulatorAccount[],
-): M1Roles {
+): Roles {
   return {
     boardKeys: board.map((account) => keyHash(account.address)),
     kycIssuer: keyHash(actors.kycIssuer.address),
@@ -113,7 +113,7 @@ export function m1Roles(
 }
 
 /** A funded emulator: the deployer owns the seed; issuers pay for their own txs. */
-export async function m1Ledger(): Promise<M1Ledger> {
+export async function testLedger(): Promise<Ledger> {
   const deployer = generateEmulatorAccount({ lovelace: 1_000_000_000n });
   const kycIssuer = generateEmulatorAccount({ lovelace: 100_000_000n });
   const bankIssuer = generateEmulatorAccount({ lovelace: 100_000_000n });
@@ -129,10 +129,10 @@ export async function m1Ledger(): Promise<M1Ledger> {
   const actors = { deployer, kycIssuer, bankIssuer, member };
   // The emulator-derived slot mapping is fixed when Lucid is constructed.
   const slotConfig = lucid.newTx().rawConfig().lucidConfig.slotConfig;
-  return { emulator, lucid, actors, board, roles: m1Roles(actors, board), slotConfig };
+  return { emulator, lucid, actors, board, roles: testRoles(actors, board), slotConfig };
 }
 
-export function selectActor(ledger: M1Ledger, actor: keyof M1Actors): void {
+export function selectActor(ledger: Ledger, actor: keyof Actors): void {
   ledger.lucid.selectWallet.fromSeed(ledger.actors[actor].seedPhrase);
 }
 
@@ -140,7 +140,7 @@ export function selectActor(ledger: M1Ledger, actor: keyof M1Actors): void {
  * A validator sees the lower bound as the start of the enclosing slot, not the
  * wall-clock value passed to `validFrom`. Datums pinned to the bound use this.
  */
-export function scriptTime(ledger: M1Ledger, unixTime: number): number {
+export function scriptTime(ledger: Ledger, unixTime: number): number {
   return slotToBeginUnixTime(
     unixTimeToEnclosingSlot(unixTime, ledger.slotConfig),
     ledger.slotConfig,
@@ -260,7 +260,7 @@ export type PolicyHashes = {
 };
 
 export function configDatumFields(
-  roles: M1Roles,
+  roles: Roles,
   config: TestConfig,
   policies: PolicyHashes,
 ) {
@@ -290,7 +290,7 @@ export function configDatumFields(
 }
 
 export function configDatum(
-  roles: M1Roles,
+  roles: Roles,
   config: TestConfig,
   policies: PolicyHashes,
 ) {
@@ -301,7 +301,7 @@ export function configDatum(
  * Creates the one-shot seed and resolves it by transaction hash. The wallet's
  * other UTxOs are unordered and shared with later tests, so they are not a seed.
  */
-export async function createSeed(ledger: M1Ledger): Promise<UTxO> {
+export async function createSeed(ledger: Ledger): Promise<UTxO> {
   const { lucid, emulator } = ledger;
   const address = await lucid.wallet().address();
   const tx = await lucid
@@ -348,7 +348,7 @@ export type Genesis = {
  * Not a board action — genesis is deployer-trusted (ADR 0008 §5).
  */
 export async function genesis(
-  ledger: M1Ledger,
+  ledger: Ledger,
   config: TestConfig,
 ): Promise<Genesis> {
   const { lucid, emulator, roles } = ledger;
@@ -429,7 +429,7 @@ export async function submitTx(tx: TxSignBuilder): Promise<string> {
 /// The selected wallet signs, plus the first `boardSigners` board accounts.
 export async function submitWithBoard(
   tx: TxSignBuilder,
-  ledger: M1Ledger,
+  ledger: Ledger,
   boardSigners: number,
 ): Promise<string> {
   const signed = ledger.board

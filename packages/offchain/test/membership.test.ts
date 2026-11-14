@@ -5,15 +5,15 @@ import {
   expectRejected,
   genesis,
   keyHash,
-  m1Ledger,
-  m1TestConfig,
+  testLedger,
+  testConfig,
   membershipRedeemer,
   scriptTime,
   selectActor,
   submitTx,
   type Genesis,
-  type M1Ledger,
-} from "./helpers/m1";
+  type Ledger,
+} from "./helpers/harness";
 import { issueKyc, kycTerms, revokeKyc } from "./helpers/kyc";
 import {
   TRANSFER,
@@ -22,14 +22,14 @@ import {
   transferMember,
 } from "./helpers/membership";
 
-const config = m1TestConfig();
+const config = testConfig();
 
 describe("membership join and non-transferability", () => {
-  let ledger: M1Ledger;
+  let ledger: Ledger;
   let m1: Genesis;
 
   beforeAll(async () => {
-    ledger = await m1Ledger();
+    ledger = await testLedger();
     m1 = await genesis(ledger, config);
   });
 

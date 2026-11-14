@@ -63,14 +63,14 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-11-11
+### Current implementation handoff — 2026-11-14
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken  
 **Test command:** `bun run check`  
-**Current status:** 303 tests pass, typecheck clean, 43 Postgres integration tests green  
+**Current status:** 328 tests pass, typecheck clean, 43 Postgres integration tests green  
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
@@ -78,17 +78,17 @@ The co-op is a member-owned organization that:
 PostgreSQL rows are provisional, not the co-op ledger (ADR 0004's pilot
 exception).
 
-**Next milestone:** M2 — governance (ADR 0004). M1 is complete: the GitHub
-milestone `M1: Config + Membership` (issues #17–#26) delivered the state NFT,
-config, KYC attestations, bank proofs, membership join/transfer/contribution,
-and one Lucid emulator suite for the whole slice. The M2 spec is
-`docs/plan/m2-governance.md`; its tickets are in the `M2: Governance` milestone.
-M2 has started: ADR 0009, the shared voting primitives (#27), the config v2
-datum plus its invariant library (#28), and governance proposal creation (#29)
-are in; ballots are #30, tally and finalize #31, execution #32, and the
-end-to-end suite plus docs #33.
-M1 ran on preprod only: no real IDR, no real personal data, and no preprod
-deployment in the milestone itself.
+**Next milestone:** M3 — treasury and project spending (ADR 0004). M1 and M2
+are complete. The `M1: Config + Membership` milestone (issues #17–#26) delivered
+the state NFT, config, KYC attestations, bank proofs, membership
+join/transfer/contribution, and one Lucid emulator suite. The
+`M2: Governance` milestone (issues #27–#33) delivered ADR 0009, the shared
+voting primitives, config v2 and its invariant library, secret-ballot
+commit-reveal over a board-attested leaf list, batched tally and finalize,
+config execution after the timelock, and one v2 end-to-end emulator suite. The
+M2 spec is `docs/plan/m2-governance.md`.
+M1 and M2 ran on preprod only: no real IDR, no real personal data, and no
+preprod deployment in either milestone.
 
 #### Completed milestones
 
@@ -113,6 +113,7 @@ deployment in the milestone itself.
 19. Pilot harness MVP (tickets 03–10): KYC revocation reason codes and `retain_until`, board-approved admission with a standard-only pilot policy, contribution-year approval and a domain-pinned 70/30 split, mock bank attestations, bank-attestation-gated contribution snapshots with `PILOT` provenance, `/members/me` contribution summaries, one end-to-end PGlite/Postgres flow, and docs/legal alignment.
 20. M1 on-chain foundation (tickets #17–#21): Aiken toolchain pinned to v1.1.24, shared split/vesting primitives with cross-language vectors, ADR 0008, the one-shot `state_nft` policy and the immutable `config` validator, and an emulator genesis test (seed, one `STATE`, config box, and its negative cases).
 21. M1 config and membership (tickets #22–#26): KYC attestation issue/renew/revoke, bank-proof issue/cancel and the burn guard, membership join and non-transferability, contribution with the config split and standard cap, and one end-to-end Lucid emulator suite. `contracts/plutus.json` is the only off-chain interface.
+22. M2 governance (tickets #27–#33): ADR 0009 and the shared voting primitives, the config v2 datum and invariant library, governance proposal creation with a board-signed eligible leaf list, secret-ballot cast/reveal/discard, batched tally and finalize, config execution after the timelock, and one v2 end-to-end emulator suite carrying the ADR 0009 §11 negative matrix. Proposals carry no bond, no receipt NFT, and no cancel action.
 
 #### Current auth decisions
 
@@ -180,9 +181,13 @@ Redis must not be a hard dependency for the API until the Redis adapter exists. 
 
 #### Milestone rule
 
-> **200 lines of new behavior per milestone. Pure refactors, moves, renames, and generated migration/lock files do not count.**
+> **Each milestone ships its spec's verification matrix. A milestone is done
+> when every assertion in its spec's verification section has a test and the
+> suite is green.**
 
-This rule exists because security and architecture stabilization must not be compressed into arbitrary diff limits.
+This rule replaces an earlier 200-line budget: security and architecture
+stabilization must not be compressed into arbitrary diff limits, so scale is
+held by what each milestone must prove rather than by lines changed.
 
 #### Priority order
 
@@ -203,8 +208,9 @@ This rule exists because security and architecture stabilization must not be com
 - Redis is not wired into the application.
 - KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof. It is not returned by the CLI or API; the database is the only read path.
 - Revoked or expired KYC blocks new contribution snapshots but does not freeze an existing member; voting/exit gates do not exist yet.
-- Board approval is recorded for admission and contribution years; the
-  governance context that produces the approval does not exist yet.
+- Board approval is recorded for admission and contribution years; M2
+  governance carries only `Config` proposals, so admission approvals remain an
+  off-chain board decision.
 - Audit covers KYC issue/revoke, admission, contribution year setup, bank
   attestation, and contribution recording. The operator is a self-declared
   lowercase slug from `SEQUOIA_OPERATOR`; there is no operator registry, login,
@@ -214,10 +220,11 @@ This rule exists because security and architecture stabilization must not be com
 - `retain_until` is stored but no deletion job or retention schedule runs.
 - Associate membership is not offered; membership is Indonesian natural
   persons only.
-- M1 contracts (state NFT, config, KYC, bank proof, membership
-  join/transfer/contribution) are built and emulator-tested. Governance,
-  treasury, distribution/exit, the API/DB projections, and the frontend are not
-  built yet.
+- M1 and M2 contracts (state NFT, config, KYC, bank proof, membership
+  join/transfer/contribution, governance proposals, secret ballots, tally,
+  finalize, and config execution) are built and emulator-tested. Treasury,
+  distribution/exit, the API/DB projections, and the frontend are not built
+  yet.
 
 #### Resume checklist
 
@@ -491,7 +498,8 @@ At month 60:
 - Voting is not implemented in the pilot harness. On-chain votes are secret per
   ADR 0007. M2 uses commit-reveal over a board-attested eligible leaf list (ADR
   0009); see `docs/plan/m2-governance.md`. Quorum and counts stay public;
-  individual ballots do not.
+  individual ballots do not. M2 governance is config-only: project proposals,
+  cancel, bonds, and delegation wait for M3.
 - Delegation is out of scope for v1.
 
 ### 3.10 Board and operations

@@ -1,7 +1,8 @@
 # M2 governance — spec
 
-**Status:** Draft for M2 (`M2: Governance`). Replaces the governance parts of
-plan §3.9, §6.2–§6.5 where they disagree. ADR 0009 records the decisions.
+**Status:** Implemented in M2 (`M2: Governance`, issues #27–#33). Replaces the
+governance parts of plan §3.9, §6.2–§6.5 where they disagree. ADR 0009 records
+the decisions.
 
 **Depends on:** ADR 0004 (contracts first), ADR 0007 (secret ballot), ADR 0008
 (M1 shape and the M2 handoff), plan §3.9 and §3.17.
@@ -304,13 +305,27 @@ KYC, bank, governance, and ballot scripts. M1 test-wallet boxes are abandoned
   nullifier/commitment rules, window math and the time rule, threshold math,
   creation checks, cast/reveal/discard/count, batched tally, finalize, execute,
   the proposal-datum invariant, and the immutable config fields.
-- Emulator: genesis v2 → issue KYC → join → create proposal with a board-signed
-  leaf list → cast Yes/No/Abstain → reveal → tally → finalize → execute, plus the
-  failure cases: non-board creator, ineligible leaf, duplicate nullifier,
-  early/late cast (including a stale lower bound), early/late reveal, unrevealed
-  tally, missing quorum, below threshold (including 2-of-3 at 6667), early
-  execute, a data tamper between actions, and an immutable-field change.
+- Emulator: `end-to-end.test.ts` walks one v2 ledger from genesis → KYC → join →
+  create proposal with a board-signed leaf list → cast Yes/No/Abstain → reveal →
+  tally → finalize → execute, plus the failure cases: non-board creator,
+  ineligible leaf, duplicate nullifier, a late cast with a stale lower bound, a
+  late reveal, unrevealed tally, missing quorum, below threshold (2-of-3 at
+  6667), early execute, a data tamper between actions, and an immutable-field
+  change. `ballot.test.ts` covers the early/late window-boundary cases.
 - `bun run check`, `bun run check:contracts`, and `bun run check:vectors`.
+
+### Assertion → test
+
+| Assertion | Aiken | Emulator |
+|---|---|---|
+| Tagged hashing, leaf eligibility, nullifier, commitment, windows, time rule, threshold math | `voting.test.ak` | `governance.test.ts` |
+| Creation checks and the proposed-config invariants | `governance_rules.test.ak` | `proposal.test.ts` |
+| Cast, reveal, discard, count | `ballot_rules.test.ak` | `ballot.test.ts` |
+| Batched tally | `governance_rules.test.ak` | `tally.test.ts` |
+| Finalize, quorum, threshold, 2-of-3 at 6667 | `governance_rules.test.ak` | `tally.test.ts`, `end-to-end.test.ts` |
+| Config gate: timelock, immutables, invariants, pairing | `config_rules.test.ak`, `governance_rules.test.ak` | `execution.test.ts`, `end-to-end.test.ts` |
+| Proposal-datum invariant | `governance_rules.test.ak` | `tally.test.ts`, `end-to-end.test.ts` |
+| Full lifecycle and the §11 negative matrix on one ledger | — | `end-to-end.test.ts` |
 
 ## 12. Deferred
 

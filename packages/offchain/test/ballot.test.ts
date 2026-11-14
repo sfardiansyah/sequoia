@@ -13,14 +13,14 @@ import { issueKyc, kycTerms } from "./helpers/kyc";
 import {
   genesis,
   keyHash,
-  m1Ledger,
-  m1TestConfig,
+  testLedger,
+  testConfig,
   scriptTime,
   selectActor,
   expectRejected,
   type Genesis,
-  type M1Ledger,
-} from "./helpers/m1";
+  type Ledger,
+} from "./helpers/harness";
 import { joinMember } from "./helpers/membership";
 import {
   createProposal,
@@ -29,7 +29,7 @@ import {
   type ProposalFields,
 } from "./helpers/proposal";
 
-const config = m1TestConfig();
+const config = testConfig();
 
 const secretA = "11".repeat(32);
 const secretB = "22".repeat(32);
@@ -53,7 +53,7 @@ const ids = {
 type Proposals = Record<keyof typeof ids, UTxO>;
 
 describe("ballot cast, reveal, and discard", () => {
-  let ledger: M1Ledger;
+  let ledger: Ledger;
   let m1: Genesis;
   let proposals: Proposals;
   let proposalStart: bigint;
@@ -75,7 +75,7 @@ describe("ballot cast, reveal, and discard", () => {
     );
 
   beforeAll(async () => {
-    ledger = await m1Ledger();
+    ledger = await testLedger();
     m1 = await genesis(ledger, config);
 
     selectActor(ledger, "kycIssuer");

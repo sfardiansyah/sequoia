@@ -4,12 +4,12 @@ import {
   expectRejected,
   genesis,
   keyHash,
-  m1Ledger,
-  m1TestConfig,
+  testLedger,
+  testConfig,
   selectActor,
   type Genesis,
-  type M1Ledger,
-} from "./helpers/m1";
+  type Ledger,
+} from "./helpers/harness";
 import { revokeKyc } from "./helpers/kyc";
 import { bankTerms, bankUnit, issueBankProof } from "./helpers/bank";
 import {
@@ -26,14 +26,14 @@ import {
   proofFor,
 } from "./helpers/membership";
 
-const config = m1TestConfig();
+const config = testConfig();
 
 describe("membership contribution", () => {
-  let ledger: M1Ledger;
+  let ledger: Ledger;
   let m1: Genesis;
 
   beforeAll(async () => {
-    ledger = await m1Ledger();
+    ledger = await testLedger();
     m1 = await genesis(ledger, config);
   });
 

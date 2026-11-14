@@ -1,8 +1,9 @@
 # Sequoia contracts
 
-Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`)
-is implemented per `docs/adr/0008-m1-config-and-membership.md`; the M2 config v2
-datum follows `docs/adr/0009-m2-secret-ballot-governance.md` §8.
+Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`) is
+implemented per `docs/adr/0008-m1-config-and-membership.md`; M2 governance
+(`governance` + `ballot`, config v2) follows
+`docs/adr/0009-m2-secret-ballot-governance.md`.
 
 ## Toolchain
 
@@ -48,12 +49,13 @@ scripts take the state NFT policy ID, which is derived from it.
 
 - `validators/` — one file per validator, entry point only.
 - `validators/state_nft.ak` — one-shot `STATE` mint, parameterized by the seed output.
-- `validators/config.ak` — the config box; M1 has no spend path.
+- `validators/config.ak` — the config box; its only spend is a governance
+  execution.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
 - `validators/membership.ak` — the membership policy; bank proofs (#23), join
   and transfer (#24), contribution (#25).
 - `validators/governance.ak` — the proposal box and `PROPOSAL` NFT; creation,
-  cast, discard, tally, and finalize.
+  cast, discard, tally, finalize, and execute.
 - `validators/ballot.ak` — the vote box and `VOTE` NFT; cast, reveal, discard,
   and count.
 - `validators/bank_attestation.ak` — parameterless bank proof guard.
@@ -62,9 +64,9 @@ scripts take the state NFT policy ID, which is derived from it.
   names collide with the governance redeemer's constructors.
 - `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
 - `lib/sequoia/config_rules.ak` — the config v2 immutable fields and structural
-  invariants (ADR 0009 §8).
+  invariants (ADR 0009 §8), and the config execution gate.
 - `lib/sequoia/governance_rules.ak` — proposal creation, cast, discard, tally,
-  finalize, and the proposal-datum invariant.
+  finalize, execute, and the proposal-datum invariant.
 - `lib/sequoia/ballot_rules.ak` — ballot cast, reveal, discard, and count (ADR
   0009 §5–§7).
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
@@ -135,6 +137,26 @@ cannot pair with `Reveal` at the window boundary. `Finalize` runs after
 `Passed` or `Rejected` from the live config's quorum and structural threshold. It
 stamps `finalized_at` from the validity upper bound for either outcome.
 
+### Config execution
+
+`Execute` spends the passed proposal **and** the config box, writes
+`proposed_config` as the new `ConfigDatum`, and marks the proposal `Executed`.
+It is permissionless: the board has no execution power. The two validators split
+the gate so neither action can complete alone:
+
+- the **config** validator owns the write rule: exactly one governance input
+  whose datum is a `Passed` `Config` proposal with `proposed_config` equal to the
+  output datum, `lower_bound >= finalized_at + timelock_days * 86_400_000`, the
+  immutable fields unchanged, and the structural invariants satisfied. The config
+  output must sit at the input's own address and hold one `STATE`.
+- the **governance** validator records the status change: only `Passed` may
+  become `Executed`, every other proposal field stays byte-identical, and a
+  config box holding `proposed_config` must be spent and returned.
+
+The config box is spent, not referenced, so execute reads the live config from
+that input; the other governance actions read it as a reference input. A second
+execution fails because the proposal is no longer `Passed`.
+
 ### Live-config quorum and threshold
 
 `Finalize` reads `quorum_bps` and `structural_threshold_bps` from the live config
@@ -165,5 +187,6 @@ The emulator exposes submitted outputs only after a block is produced, so the
 tests call `emulator.awaitBlock(1)` after each submit.
 
 `bun run test:contracts` runs the focused suites plus `test/end-to-end.test.ts`,
-which walks one ledger through genesis, KYC, bank proof, join, and contribution
-and exercises the ADR 0008 §11 failure cases.
+which walks one v2 ledger through genesis, KYC, bank proof, join, contribution,
+proposal creation, secret cast/reveal, tally, finalize, the timelock, and config
+execution, and carries the ADR 0008 §11 and ADR 0009 §11 failure cases.

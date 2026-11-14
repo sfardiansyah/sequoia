@@ -6,11 +6,11 @@ import {
   encode,
   submitWithBoard,
   type Genesis,
-  type M1Ledger,
-  type M1Roles,
+  type Ledger,
+  type Roles,
   type PolicyHashes,
   type TestConfig,
-} from "./m1";
+} from "./harness";
 
 /** Minimum ADA the proposal box holds; datum order mirrors types.ak. */
 export const PROPOSAL_MIN_LOVELACE = 5_000_000n;
@@ -49,7 +49,7 @@ export type ProposalTerms = {
 };
 
 export function proposalDatum(
-  roles: M1Roles,
+  roles: Roles,
   config: TestConfig,
   policies: PolicyHashes,
   terms: ProposalTerms,
@@ -210,12 +210,13 @@ export function proposedConfigDatum(datum: string): string {
 
 /** The proposer's wallet must be selected; the board co-signs. */
 export async function createProposal(
-  ledger: M1Ledger,
+  ledger: Ledger,
   m1: Genesis,
   config: TestConfig,
   terms: ProposalTerms,
   memberBox: UTxO,
   kycBox: UTxO,
+  boardSigners = 2,
 ): Promise<UTxO> {
   const unit = proposalUnit(m1.governancePolicy, terms.id);
   const datum = proposalDatum(
@@ -232,7 +233,7 @@ export async function createProposal(
   );
 
   let tx = ledger.lucid.newTx().addSignerKey(terms.proposer);
-  for (const key of ledger.roles.boardKeys.slice(0, 2)) {
+  for (const key of ledger.roles.boardKeys.slice(0, boardSigners)) {
     tx = tx.addSignerKey(key);
   }
   const built = await tx
@@ -247,7 +248,7 @@ export async function createProposal(
     .validFrom(Number(terms.start))
     .validTo(Number(terms.start) + 60_000)
     .complete();
-  await submitWithBoard(built, ledger, 2);
+  await submitWithBoard(built, ledger, boardSigners);
   ledger.emulator.awaitBlock(1);
   return ledger.lucid.utxoByUnit(unit);
 }

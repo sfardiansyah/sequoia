@@ -5,13 +5,13 @@ import { issueKyc, kycTerms } from "./helpers/kyc";
 import {
   genesis,
   keyHash,
-  m1Ledger,
-  m1TestConfig,
+  testLedger,
+  testConfig,
   scriptTime,
   selectActor,
   type Genesis,
-  type M1Ledger,
-} from "./helpers/m1";
+  type Ledger,
+} from "./helpers/harness";
 import { joinMember, memberUnit } from "./helpers/membership";
 import {
   createProposal,
@@ -19,19 +19,19 @@ import {
   proposalUnit,
 } from "./helpers/proposal";
 
-const config = m1TestConfig();
+const config = testConfig();
 const memberId = "41";
 const proposalId = "cd".repeat(32);
 const voteSecret = "11".repeat(32);
 
 describe("governance proposal creation", () => {
-  let ledger: M1Ledger;
+  let ledger: Ledger;
   let m1: Genesis;
   let memberBox: UTxO;
   let kycBox: UTxO;
 
   beforeAll(async () => {
-    ledger = await m1Ledger();
+    ledger = await testLedger();
     m1 = await genesis(ledger, config);
 
     selectActor(ledger, "kycIssuer");
