@@ -2,11 +2,11 @@ use cardano/assets.{PolicyId}
 use cardano/transaction.{OutputReference, Transaction}
 use sequoia/config_ref
 use sequoia/governance_rules
-use sequoia/types.{Cast, Discard, GovernanceRedeemer}
+use sequoia/types.{Cast, Discard, Finalize, GovernanceRedeemer, Tally}
 
 /// Proposal box and PROPOSAL NFT (ADR 0009 §1, §5, §6). `state_nft_policy`
-/// locates the config box. Creation is #29; cast and discard land in #30,
-/// tally, finalize, and execute in #31–#33.
+/// locates the config box. Creation, cast, and discard land in #29–#30; tally
+/// and finalize in #31; execute in #32.
 validator governance(state_nft_policy: PolicyId) {
   mint(_redeemer: Data, policy_id: PolicyId, self: Transaction) {
     let config = config_ref.find(state_nft_policy, self)
@@ -24,6 +24,8 @@ validator governance(state_nft_policy: PolicyId) {
     when action is {
       Cast -> governance_rules.cast(config, own_ref, self)
       Discard -> governance_rules.discard(config, own_ref, self)
+      Tally -> governance_rules.tally(config, own_ref, self)
+      Finalize -> governance_rules.finalize(config, own_ref, self)
     }
   }
 

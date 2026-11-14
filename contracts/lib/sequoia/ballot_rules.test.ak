@@ -1,11 +1,15 @@
+use aiken/collection/list
 use aiken/interval
+use aiken/primitive/bytearray
 use cardano/address.{VerificationKey, from_script, from_verification_key}
 use cardano/assets
 use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, Transaction, placeholder,
 }
 use sequoia/ballot_rules
-use sequoia/types.{Config, ConfigDatum, No, Open, ProposalDatum, VoteDatum, Yes}
+use sequoia/types.{
+  Abstain, Config, ConfigDatum, No, Open, Passed, ProposalDatum, VoteDatum, Yes,
+}
 use sequoia/voting
 
 const state_policy_id: ByteArray =
@@ -52,6 +56,12 @@ const leaf_c: ByteArray =
 
 const nullifier_a: ByteArray =
   #"1212121212121212121212121212121212121212121212121212121212121212"
+
+const nullifier_b: ByteArray =
+  #"1313131313131313131313131313131313131313131313131313131313131313"
+
+const extra_nullifier: ByteArray =
+  #"1414141414141414141414141414141414141414141414141414141414141414"
 
 const salt: ByteArray =
   #"2222222222222222222222222222222222222222222222222222222222222222"
@@ -572,4 +582,342 @@ test discard_mint_rejects_two_ballots() fail {
     ],
   }
   ballot_rules.discard_mint(config(), ballot_policy_id, tx)
+}
+
+fn vote_input_at(datum: VoteDatum, nullifier: ByteArray, index: Int) -> Input {
+  Input {
+    output_reference: ref(index),
+    output: Output {
+      address: from_script(ballot_policy_id),
+      value: assets.from_asset(ballot_policy_id, nullifier, 1),
+      datum: InlineDatum(datum),
+      reference_script: None,
+    },
+  }
+}
+
+fn burns(names: List<ByteArray>) -> assets.Assets {
+  list.foldl(
+    names,
+    assets.zero,
+    fn(name, total) {
+      assets.merge(total, assets.from_asset(ballot_policy_id, name, -1))
+    },
+  )
+}
+
+fn tally_tx(
+  proposal: ProposalDatum,
+  ballots: List<(VoteDatum, ByteArray)>,
+  minted: List<ByteArray>,
+  lower: Int,
+  upper: Int,
+) -> Transaction {
+  let vote_inputs = list.indexed_map(
+    ballots,
+    fn(index, ballot) {
+      let (datum, nullifier) = ballot
+      vote_input_at(datum, nullifier, index + 4)
+    },
+  )
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(proposal), ..vote_inputs],
+    reference_inputs: [config_input()],
+    validity_range: interval.between(lower, upper),
+    mint: burns(minted),
+  }
+}
+
+test tally_accepts_one_revealed_ballot() {
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  let counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+  and {
+    counts.count == 1,
+    counts.yes == 1,
+    counts.no == 0,
+    counts.abstain == 0,
+  }
+}
+
+test tally_accepts_two_ballots() {
+  let proposal = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+  }
+  let yes_vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  let no_vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(No) }
+  let counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(
+      proposal,
+      [(yes_vote, nullifier_a), (no_vote, nullifier_b)],
+      [nullifier_a, nullifier_b],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+  and {
+    counts.count == 2,
+    counts.yes == 1,
+    counts.no == 1,
+    counts.abstain == 0,
+  }
+}
+
+test tally_accepts_an_abstention() {
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Abstain) }
+  let counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+  and {
+    counts.count == 1,
+    counts.yes == 0,
+    counts.no == 0,
+    counts.abstain == 1,
+  }
+}
+
+test tally_rejects_more_than_ten_ballots() fail {
+  let names = list.map(
+    list.range(1, 11),
+    fn(index) { bytearray.from_int_big_endian(index, 32) },
+  )
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: names }
+  let ballots = list.map(
+    names,
+    fn(name) {
+      (VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }, name)
+    },
+  )
+  expect _counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(proposal, ballots, names, proposal.end, proposal.end + 1_000),
+  )
+  True
+}
+
+test tally_rejects_an_unrevealed_ballot() fail {
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  expect _counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(
+      proposal,
+      [(vote_datum(commitment()), nullifier_a)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+  True
+}
+
+test tally_rejects_a_ballot_not_in_the_nullifier_list() fail {
+  let proposal = proposal_datum()
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  expect _counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+  True
+}
+
+test tally_rejects_a_missing_burn() fail {
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  expect _counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+  True
+}
+
+test count_accepts_a_revealed_vote() {
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  ballot_rules.count(
+    config(),
+    ref(4),
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+}
+
+test count_rejects_before_end() fail {
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  ballot_rules.count(
+    config(),
+    ref(4),
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      proposal.end - 1,
+      proposal.end + 1_000,
+    ),
+  )
+}
+
+test count_mint_accepts_the_batch() {
+  let proposal = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+  }
+  let yes_vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  let no_vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(No) }
+  ballot_rules.count_mint(
+    config(),
+    ballot_policy_id,
+    tally_tx(
+      proposal,
+      [(yes_vote, nullifier_a), (no_vote, nullifier_b)],
+      [nullifier_a, nullifier_b],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+}
+
+test count_mint_rejects_an_extra_burn() fail {
+  let proposal = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  ballot_rules.count_mint(
+    config(),
+    ballot_policy_id,
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a, extra_nullifier],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+}
+
+test count_mint_rejects_a_missing_burn() fail {
+  let proposal = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+  }
+  let yes_vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  let no_vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(No) }
+  ballot_rules.count_mint(
+    config(),
+    ballot_policy_id,
+    tally_tx(
+      proposal,
+      [(yes_vote, nullifier_a), (no_vote, nullifier_b)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+}
+
+test tally_rejects_a_mixed_proposal_batch() fail {
+  let proposal = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+  }
+  let own_vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  let other_vote = VoteDatum {
+    ..vote_datum(commitment()),
+    proposal_id: other_proposal_id,
+    revealed: Some(Yes),
+  }
+  expect _counts = ballot_rules.tally(
+    config(),
+    proposal,
+    tally_tx(
+      proposal,
+      [(own_vote, nullifier_a), (other_vote, nullifier_b)],
+      [nullifier_a, nullifier_b],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+  True
+}
+
+test count_rejects_a_closed_proposal() fail {
+  let proposal = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a],
+    status: Passed,
+  }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  ballot_rules.count(
+    config(),
+    ref(4),
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
+}
+
+test count_mint_rejects_a_closed_proposal() fail {
+  let proposal = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a],
+    status: Passed,
+  }
+  let vote = VoteDatum { ..vote_datum(commitment()), revealed: Some(Yes) }
+  ballot_rules.count_mint(
+    config(),
+    ballot_policy_id,
+    tally_tx(
+      proposal,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      proposal.end,
+      proposal.end + 1_000,
+    ),
+  )
 }

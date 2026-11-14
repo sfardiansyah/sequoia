@@ -12,6 +12,7 @@ export const COMMITMENT_TAG = "04";
 export const MS_PER_DAY = 86_400_000;
 export const MAX_WINDOW_MS = 3_600_000;
 export const MAX_CHOICE_INDEX = 2;
+export const MAX_TALLY_BATCH = 10;
 
 const sha256 = (...parts: Uint8Array[]): string =>
   createHash("sha256")

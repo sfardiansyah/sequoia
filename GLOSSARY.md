@@ -152,7 +152,8 @@ thing: a provisional database row, not a chain record.
 | **Ballot** | The vote box at the ballot script: nullifier NFT, proposal id and deadlines, choice commitment, and (after reveal) the choice. | "vote" for the box |
 | **Commit / Reveal** | Casting posts a sealed choice; revealing posts the choice and salt, and the chain checks the seal. Unrevealed ballots are not counted. | "encrypt" |
 | **Quorum** | The minimum share of the board-attested eligible count that must vote for a result to count. | "turnout" when the rule is meant |
-| **Tally** | Counting revealed ballots in batches and updating the proposal counters. Permissionless. | "count" for the box |
+| **Tally** | Counting revealed ballots in batches and updating the proposal counters. Permissionless. The ballot-side `Count` burns each counted `VOTE` NFT. | "count" for the box |
+| **Finalize** | Closing a proposal after the reveal window, requiring every cast ballot to be tallied or discarded and recording `Passed` or `Rejected`. Permissionless. | "close", "end" |
 | **Timelock** | The forced wait between finalizing a passed config change and executing it. | "delay" |
 | **Execute** | Spending the passed proposal and the config box to write the proposed config. Permissionless after the timelock. | "apply", "deploy" |
 

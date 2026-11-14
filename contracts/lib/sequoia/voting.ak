@@ -22,6 +22,9 @@ pub const max_window_ms: Int = 3_600_000
 /// `Yes = 0`, `No = 1`, `Abstain = 2`.
 pub const max_choice_index: Int = 2
 
+/// Tally spends at most this many ballots in one transaction.
+pub const max_tally_batch: Int = 10
+
 fn is_32(bytes: ByteArray) -> Bool {
   bytearray.length(bytes) == 32
 }

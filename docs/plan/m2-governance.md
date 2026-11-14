@@ -287,6 +287,10 @@ rejected (ADR 0009 §7). `project_threshold_bps = 5001` means more than half.
 - **No cancel and no bond in M2.**
 - **Config invariants are structural only.** A passed vote may still set a low
   quorum, a zero timelock, or a poor split within the legal range.
+- **Finalize uses the live config.** Quorum and the structural threshold are read
+  from the config box at finalize time, not snapshotted into the proposal. A
+  config executed while another proposal is open changes that proposal's bar.
+  Snapshotting would add datum fields and is deferred.
 
 ## 10. Genesis v2
 

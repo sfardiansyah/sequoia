@@ -1,10 +1,27 @@
 import { Constr, Data, type UTxO } from "@lucid-evolution/lucid";
-import { choiceCommitment, nullifier } from "../../src/governance";
-import { encode, scriptTime, submitTx, type Genesis, type M1Ledger } from "./m1";
+import {
+  choiceCommitment,
+  MAX_TALLY_BATCH,
+  nullifier,
+  quorumMet,
+  thresholdMet,
+} from "../../src/governance";
+import {
+  encode,
+  scriptTime,
+  submitTx,
+  type Genesis,
+  type M1Ledger,
+  type TestConfig,
+} from "./m1";
 import {
   decodeProposalDatum,
+  proposalUnit,
   withDiscarded,
+  withFinalized,
   withNullifier,
+  withTally,
+  type TallyCounts,
 } from "./proposal";
 
 /**
@@ -26,10 +43,13 @@ export const CHOICE_INDEX: Record<ChoiceName, number> = {
 export const BALLOT_CAST = 0;
 export const BALLOT_REVEAL = 1;
 export const BALLOT_DISCARD = 2;
+export const BALLOT_COUNT = 3;
 
 // Constructor order of `GovernanceRedeemer` in `contracts/lib/sequoia/types.ak`.
 export const GOVERNANCE_CAST = 0;
 export const GOVERNANCE_DISCARD = 1;
+export const GOVERNANCE_TALLY = 2;
+export const GOVERNANCE_FINALIZE = 3;
 
 const choiceSchema = Data.Enum([
   Data.Literal("Yes"),
@@ -88,9 +108,15 @@ export const ballotReveal = (choice: ChoiceName, salt: string): string =>
 
 export const ballotDiscard = Data.to(new Constr(BALLOT_DISCARD, []));
 
+export const ballotCount = Data.to(new Constr(BALLOT_COUNT, []));
+
 export const governanceCast = Data.to(new Constr(GOVERNANCE_CAST, []));
 
 export const governanceDiscard = Data.to(new Constr(GOVERNANCE_DISCARD, []));
+
+export const governanceTally = Data.to(new Constr(GOVERNANCE_TALLY, []));
+
+export const governanceFinalize = Data.to(new Constr(GOVERNANCE_FINALIZE, []));
 
 export function voteUnit(ballotPolicy: string, voteNullifier: string): string {
   return ballotPolicy + voteNullifier;
@@ -237,4 +263,117 @@ export async function discardVote(
     .complete();
   await submitTx(tx);
   ledger.emulator.awaitBlock(1);
+}
+
+function tallyCounts(voteBoxes: UTxO[]): TallyCounts {
+  let yes = 0n;
+  let no = 0n;
+  let abstain = 0n;
+  for (const box of voteBoxes) {
+    const revealed = decodeVoteDatum(box.datum!).revealed;
+    if (revealed === null) throw new Error("tally requires revealed ballots");
+    if (revealed === "Yes") yes += 1n;
+    else if (revealed === "No") no += 1n;
+    else abstain += 1n;
+  }
+  return { count: BigInt(voteBoxes.length), yes, no, abstain };
+}
+
+export type TallyOptions = {
+  validFrom?: number;
+  validTo?: number;
+  /** Negative tests only: skip the client-side revealed check. */
+  counts?: TallyCounts;
+};
+
+/** Tally an explicit 1–10 ballot batch and return the updated proposal box. */
+export async function tallyProposal(
+  ledger: M1Ledger,
+  m1: Genesis,
+  proposalBox: UTxO,
+  voteBoxes: UTxO[],
+  options: TallyOptions = {},
+): Promise<UTxO> {
+  if (voteBoxes.length < 1 || voteBoxes.length > MAX_TALLY_BATCH) {
+    throw new Error(`tally batch must be 1-${MAX_TALLY_BATCH} ballots`);
+  }
+  const counts = options.counts ?? tallyCounts(voteBoxes);
+  const id = decodeProposalDatum(proposalBox.datum!).id;
+  const now = scriptTime(ledger, ledger.emulator.now());
+  const burns = Object.fromEntries(
+    voteBoxes.map((box) => [voteUnitOf(box), -1n]),
+  );
+
+  const tx = await ledger.lucid
+    .newTx()
+    .collectFrom([proposalBox], governanceTally)
+    .collectFrom(voteBoxes, ballotCount)
+    .readFrom([m1.configUtxo])
+    .attach.SpendingValidator(m1.governanceValidator)
+    .attach.SpendingValidator(m1.ballotValidator)
+    .attach.MintingPolicy(m1.ballotValidator)
+    .validFrom(options.validFrom ?? now)
+    .validTo(options.validTo ?? now + 60_000)
+    .mintAssets(burns, ballotCount)
+    .pay.ToContract(
+      m1.governanceAddress,
+      { kind: "inline", value: withTally(proposalBox.datum!, counts) },
+      proposalBox.assets,
+    )
+    .complete();
+  await submitTx(tx);
+  ledger.emulator.awaitBlock(1);
+  return ledger.lucid.utxoByUnit(proposalUnit(m1.governancePolicy, id));
+}
+
+export type FinalizeOptions = {
+  validFrom?: number;
+  validTo?: number;
+};
+
+/** Finalize after `reveal_end`; expected status follows the live config. */
+export async function finalizeProposal(
+  ledger: M1Ledger,
+  m1: Genesis,
+  config: TestConfig,
+  proposalBox: UTxO,
+  options: FinalizeOptions = {},
+): Promise<UTxO> {
+  const fields = decodeProposalDatum(proposalBox.datum!);
+  const votes = fields.yes + fields.no + fields.abstain;
+  const passed =
+    quorumMet(
+      Number(votes),
+      fields.eligible_leaves.length,
+      Number(config.quorumBps),
+    ) &&
+    thresholdMet(
+      Number(fields.yes),
+      Number(fields.no),
+      Number(config.structuralThresholdBps),
+    );
+  const status = passed ? "Passed" : "Rejected";
+  const now = scriptTime(ledger, ledger.emulator.now());
+  const validTo = options.validTo ?? now + 60_000;
+  const finalizedAt = BigInt(scriptTime(ledger, validTo));
+
+  const tx = await ledger.lucid
+    .newTx()
+    .collectFrom([proposalBox], governanceFinalize)
+    .readFrom([m1.configUtxo])
+    .attach.SpendingValidator(m1.governanceValidator)
+    .validFrom(options.validFrom ?? now)
+    .validTo(validTo)
+    .pay.ToContract(
+      m1.governanceAddress,
+      {
+        kind: "inline",
+        value: withFinalized(proposalBox.datum!, status, finalizedAt),
+      },
+      proposalBox.assets,
+    )
+    .complete();
+  await submitTx(tx);
+  ledger.emulator.awaitBlock(1);
+  return ledger.lucid.utxoByUnit(proposalUnit(m1.governancePolicy, fields.id));
 }

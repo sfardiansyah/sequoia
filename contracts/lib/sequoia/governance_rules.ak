@@ -5,18 +5,20 @@ use aiken/primitive/bytearray
 use cardano/address.{Script}
 use cardano/assets.{PolicyId, quantity_of, tokens}
 use cardano/transaction.{Input, Output, OutputReference, Transaction}
+use sequoia/ballot_rules
 use sequoia/config_rules
 use sequoia/kyc_rules
 use sequoia/tx.{
   inline_datum, lower_bound, one_token_output, signed, spent_input, upper_bound,
 }
 use sequoia/types.{
-  Active, Config, ConfigDatum, MemberDatum, Open, ProposalDatum, VoteDatum,
+  Active, Config, ConfigDatum, MemberDatum, Open, Passed, ProposalDatum,
+  Rejected, VoteDatum,
 }
 use sequoia/voting
 
 /// Governance proposal rules (ADR 0009 §1, §2, §4, §6). Creation, cast, and
-/// discard are #29–#30; tally, finalize, and execute land in #31–#33.
+/// discard are #29–#30; tally and finalize are #31; execute is #32.
 fn datum_of(output: Output) -> ProposalDatum {
   expect datum: ProposalDatum = inline_datum(output)
   datum
@@ -151,7 +153,7 @@ fn returned_proposal(
   )
 }
 
-fn ballot_inputs(
+fn unrevealed_ballot_inputs(
   config: ConfigDatum,
   id: ByteArray,
   self: Transaction,
@@ -163,7 +165,10 @@ fn ballot_inputs(
         False
       } else {
         expect vote: VoteDatum = inline_datum(input.output)
-        vote.proposal_id == id
+        and {
+          vote.proposal_id == id,
+          vote.revealed == None,
+        }
       }
     },
   )
@@ -191,6 +196,26 @@ fn unchanged_by_discard(old: ProposalDatum, new: ProposalDatum) -> Bool {
   and {
     same_counters(old, new),
     new.nullifiers == old.nullifiers,
+  }
+}
+
+fn untouched_by_tally(old: ProposalDatum, new: ProposalDatum) -> Bool {
+  and {
+    new.nullifiers == old.nullifiers,
+    new.discarded == old.discarded,
+    new.status == old.status,
+    new.finalized_at == old.finalized_at,
+  }
+}
+
+fn counters_unchanged(old: ProposalDatum, new: ProposalDatum) -> Bool {
+  and {
+    new.nullifiers == old.nullifiers,
+    new.discarded == old.discarded,
+    new.tallied == old.tallied,
+    new.yes == old.yes,
+    new.no == old.no,
+    new.abstain == old.abstain,
   }
 }
 
@@ -236,19 +261,103 @@ pub fn discard(
 ) -> Bool {
   let old = datum_of(spent_input(own_ref, self).output)
   let new = returned_proposal(config, old.id, self)
-  let ballots = ballot_inputs(config, old.id, self)
+  let ballots = unrevealed_ballot_inputs(config, old.id, self)
   if old.status != Open {
     fail @"governance_rules: discard on a closed proposal"
   } else if !voting.not_before(lower_bound(self), old.reveal_end) {
     fail @"governance_rules: discard before the reveal window ends"
   } else if list.length(ballots) != 1 {
     fail @"governance_rules: discard spends exactly one ballot"
+  } else if !ballot_rules.vote_is_burned(
+    config,
+    list.expect_head(ballots),
+    self,
+  ) {
+    fail @"governance_rules: discard must burn the ballot"
   } else if !keep_proposal(old, new) {
     fail @"governance_rules: discard must preserve the proposal identity"
   } else if new.discarded != old.discarded + 1 {
     fail @"governance_rules: discard must increment the counter by one"
   } else if !unchanged_by_discard(old, new) {
     fail @"governance_rules: discard must not touch other fields"
+  } else {
+    True
+  }
+}
+
+/// `Tally` spends 1–10 revealed ballots, adds their choices, and changes only
+/// the tally counters (ADR 0009 §5–§7).
+pub fn tally(
+  config: ConfigDatum,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let old = datum_of(spent_input(own_ref, self).output)
+  let new = returned_proposal(config, old.id, self)
+  if old.status != Open {
+    fail @"governance_rules: tally on a closed proposal"
+  } else if !voting.not_before(lower_bound(self), old.end) {
+    fail @"governance_rules: tally before the voting window ends"
+  } else {
+    let counts = ballot_rules.tally(config, old, self)
+    if !keep_proposal(old, new) {
+      fail @"governance_rules: tally must preserve the proposal identity"
+    } else if new.tallied != old.tallied + counts.count {
+      fail @"governance_rules: tally must add the counted ballots"
+    } else if new.yes != old.yes + counts.yes {
+      fail @"governance_rules: tally must add the yes votes"
+    } else if new.no != old.no + counts.no {
+      fail @"governance_rules: tally must add the no votes"
+    } else if new.abstain != old.abstain + counts.abstain {
+      fail @"governance_rules: tally must add the abstentions"
+    } else if !untouched_by_tally(old, new) {
+      fail @"governance_rules: tally must not touch other fields"
+    } else {
+      True
+    }
+  }
+}
+
+/// `Finalize` closes the proposal once every cast ballot is tallied or
+/// discarded (ADR 0009 §4, §7). Quorum and threshold come from the live config.
+pub fn finalize(
+  config: ConfigDatum,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let old = datum_of(spent_input(own_ref, self).output)
+  let new = returned_proposal(config, old.id, self)
+  let lower = lower_bound(self)
+  let upper = upper_bound(self)
+  let cast_count = list.length(old.nullifiers)
+  let eligible = list.length(old.eligible_leaves)
+  let counted_votes = old.yes + old.no + old.abstain
+  let status = if and {
+    voting.quorum_met(counted_votes, eligible, config.quorum_bps),
+    voting.threshold_met(old.yes, old.no, config.structural_threshold_bps),
+  } {
+    Passed
+  } else {
+    Rejected
+  }
+  if old.status != Open {
+    fail @"governance_rules: finalize on a closed proposal"
+  } else if !voting.not_before(lower, old.reveal_end) {
+    fail @"governance_rules: finalize before the reveal window ends"
+  } else if !voting.window_is_tight(lower, upper) {
+    fail @"governance_rules: finalize window must be at most one hour"
+  } else if old.tallied + old.discarded != cast_count {
+    fail @"governance_rules: every cast ballot must be tallied or discarded"
+  } else if old.tallied != counted_votes {
+    fail @"governance_rules: tallied must equal the counted choices"
+  } else if !keep_proposal(old, new) {
+    fail @"governance_rules: finalize must preserve the proposal identity"
+  } else if !counters_unchanged(old, new) {
+    fail @"governance_rules: finalize must not touch the vote counters"
+  } else if new.status != status {
+    fail @"governance_rules: finalize status must follow quorum and threshold"
+  } else if new.finalized_at != Some(upper) {
+    fail @"governance_rules: finalized_at must be the validity upper bound"
   } else {
     True
   }

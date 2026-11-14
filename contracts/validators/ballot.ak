@@ -1,9 +1,9 @@
 use cardano/assets.{PolicyId}
 use cardano/transaction.{OutputReference, Transaction}
-use sequoia/ballot_rules.{BallotRedeemer, Cast, Discard, Reveal}
+use sequoia/ballot_rules.{BallotRedeemer, Cast, Count, Discard, Reveal}
 use sequoia/config_ref
 
-/// The vote box and VOTE NFT policy (ADR 0009 §5). The NFT name is the
+/// The vote box and VOTE NFT policy (ADR 0009 §5–§7). The NFT name is the
 /// nullifier, so one vote per member per proposal is enforced by the mint.
 validator ballot(state_nft_policy: PolicyId) {
   mint(redeemer: Data, policy_id: PolicyId, self: Transaction) {
@@ -13,6 +13,7 @@ validator ballot(state_nft_policy: PolicyId) {
       Cast { leaf } -> ballot_rules.cast(config, policy_id, leaf, self)
       Reveal { .. } -> fail @"ballot: reveal is a spend action"
       Discard -> ballot_rules.discard_mint(config, policy_id, self)
+      Count -> ballot_rules.count_mint(config, policy_id, self)
     }
   }
 
@@ -30,6 +31,10 @@ validator ballot(state_nft_policy: PolicyId) {
       Discard -> {
         let config = config_ref.find(state_nft_policy, self)
         ballot_rules.discard(config, own_ref, self)
+      }
+      Count -> {
+        let config = config_ref.find(state_nft_policy, self)
+        ballot_rules.count(config, own_ref, self)
       }
     }
   }

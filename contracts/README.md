@@ -53,9 +53,9 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/membership.ak` — the membership policy; bank proofs (#23), join
   and transfer (#24), contribution (#25).
 - `validators/governance.ak` — the proposal box and `PROPOSAL` NFT; creation,
-  cast, and discard.
-- `validators/ballot.ak` — the vote box and `VOTE` NFT; cast, reveal, and
-  discard.
+  cast, discard, tally, and finalize.
+- `validators/ballot.ak` — the vote box and `VOTE` NFT; cast, reveal, discard,
+  and count.
 - `validators/bank_attestation.ak` — parameterless bank proof guard.
 - `lib/sequoia/types.ak` — the ADR 0008 and ADR 0009 datums and governance
   redeemer. `ballot_rules.ak` holds `BallotRedeemer`: its `Cast`/`Discard`
@@ -63,10 +63,10 @@ scripts take the state NFT policy ID, which is derived from it.
 - `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
 - `lib/sequoia/config_rules.ak` — the config v2 immutable fields and structural
   invariants (ADR 0009 §8).
-- `lib/sequoia/governance_rules.ak` — proposal creation, cast, discard, and the
-  proposal-datum invariant.
-- `lib/sequoia/ballot_rules.ak` — ballot cast, reveal, and discard (ADR 0009
-  §5).
+- `lib/sequoia/governance_rules.ak` — proposal creation, cast, discard, tally,
+  finalize, and the proposal-datum invariant.
+- `lib/sequoia/ballot_rules.ak` — ballot cast, reveal, discard, and count (ADR
+  0009 §5–§7).
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
 - `lib/sequoia/kyc_rules.ak` — issue, renew, and revoke checks.
 - `lib/sequoia/bank_rules.ak` — bank-proof issue, cancel, and guard checks.
@@ -124,6 +124,24 @@ without the burn and the mint cannot run without the member box. The proof nonce
 may not be `MCAP` or `PROJ`; those names share the policy's asset-name
 namespace. Board accounts are emulator accounts generated from a private key, so
 the tests can co-sign with `sign.withPrivateKey`.
+
+## Governance tally and finalize
+
+`Tally` spends 1–10 revealed ballots of one proposal and adds their choices to
+`tallied`/`yes`/`no`/`abstain`; the ballot `Count` action burns each VOTE NFT, so
+a ballot can be counted once. Governance `Discard` requires the same burn, so it
+cannot pair with `Reveal` at the window boundary. `Finalize` runs after
+`reveal_end`, requires every cast ballot to be tallied or discarded, and decides
+`Passed` or `Rejected` from the live config's quorum and structural threshold. It
+stamps `finalized_at` from the validity upper bound for either outcome.
+
+### Live-config quorum and threshold
+
+`Finalize` reads `quorum_bps` and `structural_threshold_bps` from the live config
+box, never from `proposed_config`. A config executed while another proposal is
+open therefore changes that proposal's bar. The datum has no snapshot of these
+values; this is a known M2 limitation, acceptable at pilot scale and recorded in
+the plan.
 
 ## Emulator support (answered 2026-11-07)
 

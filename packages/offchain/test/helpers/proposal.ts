@@ -85,6 +85,22 @@ export function proposalUnit(governancePolicy: string, id: string): string {
   return governancePolicy + id;
 }
 
+export type ProposalStatus = "Open" | "Passed" | "Rejected" | "Executed";
+
+const STATUS_INDEX: Record<ProposalStatus, number> = {
+  Open: 0,
+  Passed: 1,
+  Rejected: 2,
+  Executed: 3,
+};
+
+const STATUS_BY_INDEX: ProposalStatus[] = [
+  "Open",
+  "Passed",
+  "Rejected",
+  "Executed",
+];
+
 export type ProposalFields = {
   id: string;
   eligible_leaves: string[];
@@ -93,6 +109,12 @@ export type ProposalFields = {
   reveal_end: bigint;
   nullifiers: string[];
   discarded: bigint;
+  tallied: bigint;
+  yes: bigint;
+  no: bigint;
+  abstain: bigint;
+  status: ProposalStatus;
+  finalizedAt: bigint | null;
 };
 
 type ProposalConstr = { index: number; fields: unknown[] };
@@ -103,6 +125,8 @@ function proposalConstr(datum: string): ProposalConstr {
 
 export function decodeProposalDatum(datum: string): ProposalFields {
   const { fields } = proposalConstr(datum);
+  const status = fields[14] as { index: number };
+  const finalizedAt = fields[15] as { index: number; fields: unknown[] };
   return {
     id: fields[0] as string,
     eligible_leaves: fields[4] as string[],
@@ -111,6 +135,12 @@ export function decodeProposalDatum(datum: string): ProposalFields {
     reveal_end: fields[7] as bigint,
     nullifiers: fields[8] as string[],
     discarded: fields[9] as bigint,
+    tallied: fields[10] as bigint,
+    yes: fields[11] as bigint,
+    no: fields[12] as bigint,
+    abstain: fields[13] as bigint,
+    status: STATUS_BY_INDEX[status.index]!,
+    finalizedAt: finalizedAt.index === 0 ? (finalizedAt.fields[0] as bigint) : null,
   };
 }
 
@@ -131,6 +161,37 @@ export function withDiscarded(datum: string): string {
   const constr = proposalConstr(datum);
   const fields = [...constr.fields];
   fields[9] = (fields[9] as bigint) + 1n;
+  return reencodeProposal(constr, fields);
+}
+
+export type TallyCounts = {
+  count: bigint;
+  yes: bigint;
+  no: bigint;
+  abstain: bigint;
+};
+
+/** The proposal datum after one tally batch. */
+export function withTally(datum: string, counts: TallyCounts): string {
+  const constr = proposalConstr(datum);
+  const fields = [...constr.fields];
+  fields[10] = (fields[10] as bigint) + counts.count;
+  fields[11] = (fields[11] as bigint) + counts.yes;
+  fields[12] = (fields[12] as bigint) + counts.no;
+  fields[13] = (fields[13] as bigint) + counts.abstain;
+  return reencodeProposal(constr, fields);
+}
+
+/** The proposal datum after finalize; only status and finalized_at change. */
+export function withFinalized(
+  datum: string,
+  status: "Passed" | "Rejected",
+  finalizedAt: bigint,
+): string {
+  const constr = proposalConstr(datum);
+  const fields = [...constr.fields];
+  fields[14] = new Constr(STATUS_INDEX[status], []);
+  fields[15] = new Constr(0, [finalizedAt]);
   return reencodeProposal(constr, fields);
 }
 

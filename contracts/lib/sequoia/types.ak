@@ -160,4 +160,6 @@ pub type VoteDatum {
 pub type GovernanceRedeemer {
   Cast
   Discard
+  Tally
+  Finalize
 }

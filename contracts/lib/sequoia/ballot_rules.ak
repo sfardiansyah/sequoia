@@ -14,13 +14,21 @@ use sequoia/types.{
 }
 use sequoia/voting
 
-/// Ballot actions (ADR 0009 §5). The ballot validator is parameterized by the
-/// state NFT policy, so `Cast` and `Discard` find the config; `Reveal` is
-/// self-contained and needs no reference input.
+/// Ballot actions (ADR 0009 §5, §7). The ballot validator is parameterized by
+/// the state NFT policy, so `Cast`, `Discard`, and `Count` find the config;
+/// `Reveal` is self-contained and needs no reference input.
 pub type BallotRedeemer {
   Cast { leaf: ByteArray }
   Reveal { choice: Choice, reveal_salt: ByteArray }
   Discard
+  Count
+}
+
+pub type TallyCounts {
+  count: Int,
+  yes: Int,
+  no: Int,
+  abstain: Int,
 }
 
 fn datum_of(output: Output) -> VoteDatum {
@@ -72,6 +80,158 @@ fn keep_vote(old: VoteDatum, new: VoteDatum) -> Bool {
     new.end == old.end,
     new.reveal_end == old.reveal_end,
     new.choice_commitment == old.choice_commitment,
+  }
+}
+
+fn ballot_inputs(config: ConfigDatum, self: Transaction) -> List<Input> {
+  list.filter(
+    self.inputs,
+    fn(input) {
+      input.output.address.payment_credential == Script(config.ballot_policy)
+    },
+  )
+}
+
+fn add_choice(total: (Int, Int, Int), choice: Choice) -> (Int, Int, Int) {
+  let (yes, no, abstain) = total
+  when choice is {
+    Yes -> (yes + 1, no, abstain)
+    No -> (yes, no + 1, abstain)
+    Abstain -> (yes, no, abstain + 1)
+  }
+}
+
+/// A ballot that a counting or discarding transaction may spend: of this
+/// proposal, cast (its nullifier is in `nullifiers`), and burned here.
+fn vote_checks(
+  config: ConfigDatum,
+  proposal: ProposalDatum,
+  input: Input,
+  expect_revealed: Bool,
+  self: Transaction,
+) -> VoteDatum {
+  let (policy_id, nullifier) = single_vote(input.output.value)
+  let vote = datum_of(input.output)
+  if policy_id != config.ballot_policy {
+    fail @"ballot_rules: config names a different ballot policy"
+  } else if expect_revealed && vote.revealed == None {
+    fail @"ballot_rules: only a revealed vote can be counted"
+  } else if !expect_revealed && vote.revealed != None {
+    fail @"ballot_rules: only an unrevealed vote can be discarded"
+  } else if proposal.id != vote.proposal_id {
+    fail @"ballot_rules: vote must name the proposal"
+  } else if proposal.end != vote.end || proposal.reveal_end != vote.reveal_end {
+    fail @"ballot_rules: vote deadlines must match the proposal"
+  } else if !list.has(proposal.nullifiers, nullifier) {
+    fail @"ballot_rules: the vote was never cast"
+  } else if quantity_of(self.mint, policy_id, nullifier) != -1 {
+    fail @"ballot_rules: the VOTE NFT must be burned"
+  } else if list.any(
+    self.outputs,
+    fn(output) { quantity_of(output.value, policy_id, nullifier) != 0 },
+  ) {
+    fail @"ballot_rules: a counted or discarded vote cannot be recreated"
+  } else {
+    vote
+  }
+}
+
+fn counted_vote(
+  config: ConfigDatum,
+  proposal: ProposalDatum,
+  input: Input,
+  self: Transaction,
+) -> Choice {
+  let vote = vote_checks(config, proposal, input, True, self)
+  expect Some(choice) = vote.revealed
+  choice
+}
+
+/// Sum 1–10 revealed ballots of this proposal. Every ballot input in the
+/// transaction must be one of them; mixed proposals fail.
+pub fn tally(
+  config: ConfigDatum,
+  proposal: ProposalDatum,
+  self: Transaction,
+) -> TallyCounts {
+  let ballots = ballot_inputs(config, self)
+  if list.is_empty(ballots) {
+    fail @"ballot_rules: tally spends at least one ballot"
+  } else if list.length(ballots) > voting.max_tally_batch {
+    fail @"ballot_rules: tally batch is at most ten ballots"
+  } else {
+    let totals = list.foldl(
+      ballots,
+      (0, 0, 0),
+      fn(input, total) {
+        add_choice(total, counted_vote(config, proposal, input, self))
+      },
+    )
+    let (yes, no, abstain) = totals
+    TallyCounts { count: list.length(ballots), yes, no, abstain }
+  }
+}
+
+/// The spend half of count: this vote is revealed and burned.
+pub fn count(
+  config: ConfigDatum,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let proposal = proposal_input(config, self)
+  if proposal.status != Open {
+    fail @"ballot_rules: count on a closed proposal"
+  } else if !voting.not_before(lower_bound(self), proposal.end) {
+    fail @"ballot_rules: count before the voting window ends"
+  } else {
+    expect _choice = counted_vote(
+      config,
+      proposal,
+      spent_input(own_ref, self),
+      self,
+    )
+    True
+  }
+}
+
+/// The mint half of count: every burn belongs to a counted ballot and every
+/// counted ballot is burned exactly once.
+pub fn count_mint(
+  config: ConfigDatum,
+  policy_id: PolicyId,
+  self: Transaction,
+) -> Bool {
+  if config.ballot_policy != policy_id {
+    fail @"ballot_rules: config names a different ballot policy"
+  } else {
+    let proposal = proposal_input(config, self)
+    if proposal.status != Open {
+      fail @"ballot_rules: count on a closed proposal"
+    } else if !voting.not_before(lower_bound(self), proposal.end) {
+      fail @"ballot_rules: count before the voting window ends"
+    } else {
+      let counts = tally(config, proposal, self)
+      let names = list.map(
+        ballot_inputs(config, self),
+        fn(input) {
+          let (_, name) = single_vote(input.output.value)
+          name
+        },
+      )
+      let mints = dict.to_pairs(tokens(self.mint, policy_id))
+      if list.length(mints) != counts.count || list.length(mints) != list.length(
+        names,
+      ) {
+        fail @"ballot_rules: count burns exactly the collected ballots"
+      } else if !list.all(
+        mints,
+        fn(Pair(name, quantity)) { quantity == -1 && list.has(names, name) },
+      ) {
+        fail @"ballot_rules: count burns exactly the collected ballots"
+      } else {
+        True
+      }
+    }
   }
 }
 
@@ -165,34 +325,33 @@ pub fn reveal(
 }
 
 fn discard_checks(config: ConfigDatum, input: Input, self: Transaction) -> Bool {
-  let (policy_id, nullifier) = single_vote(input.output.value)
-  let vote = datum_of(input.output)
   let proposal = proposal_input(config, self)
-  if config.ballot_policy != policy_id {
-    fail @"ballot_rules: config names a different ballot policy"
-  } else if vote.revealed != None {
-    fail @"ballot_rules: only an unrevealed vote can be discarded"
-  } else if !voting.not_before(lower_bound(self), vote.reveal_end) {
-    fail @"ballot_rules: discard before the reveal window ends"
-  } else if proposal.id != vote.proposal_id {
-    fail @"ballot_rules: vote must name the proposal"
-  } else if proposal.status != Open {
+  if proposal.status != Open {
     fail @"ballot_rules: discard on a closed proposal"
-  } else if proposal.end != vote.end {
-    fail @"ballot_rules: vote deadlines must match the proposal"
-  } else if proposal.reveal_end != vote.reveal_end {
-    fail @"ballot_rules: vote deadlines must match the proposal"
-  } else if !list.has(proposal.nullifiers, nullifier) {
-    fail @"ballot_rules: the vote was never cast"
-  } else if quantity_of(self.mint, policy_id, nullifier) != -1 {
-    fail @"ballot_rules: discard must burn the VOTE NFT"
-  } else if list.any(
-    self.outputs,
-    fn(output) { quantity_of(output.value, policy_id, nullifier) != 0 },
-  ) {
-    fail @"ballot_rules: a discarded vote cannot be recreated"
+  } else if !voting.not_before(lower_bound(self), proposal.reveal_end) {
+    fail @"ballot_rules: discard before the reveal window ends"
   } else {
+    expect _vote = vote_checks(config, proposal, input, False, self)
     True
+  }
+}
+
+/// True when this transaction burns the input ballot's VOTE NFT and does not
+/// recreate it. Governance `Discard` requires this so it cannot pair with
+/// `Reveal` at the window boundary.
+pub fn vote_is_burned(
+  config: ConfigDatum,
+  input: Input,
+  self: Transaction,
+) -> Bool {
+  let (policy_id, nullifier) = single_vote(input.output.value)
+  and {
+    policy_id == config.ballot_policy,
+    quantity_of(self.mint, policy_id, nullifier) == -1,
+    !list.any(
+      self.outputs,
+      fn(output) { quantity_of(output.value, policy_id, nullifier) != 0 },
+    ),
   }
 }
 

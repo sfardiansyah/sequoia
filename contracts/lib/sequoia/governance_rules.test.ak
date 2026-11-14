@@ -1,3 +1,4 @@
+use aiken/collection/list
 use aiken/interval
 use cardano/address.{VerificationKey, from_script, from_verification_key}
 use cardano/assets
@@ -6,8 +7,8 @@ use cardano/transaction.{
 }
 use sequoia/governance_rules
 use sequoia/types.{
-  Active, Config, ConfigDatum, Inactive, KycDatum, MemberDatum, Open, Passed,
-  ProposalDatum, Standard, VoteDatum,
+  Active, Config, ConfigDatum, Inactive, KycDatum, MemberDatum, No, Open, Passed,
+  ProposalDatum, Rejected, Standard, VoteDatum, Yes,
 }
 use sequoia/voting
 
@@ -60,6 +61,9 @@ const leaf_b: ByteArray =
 
 const nullifier_a: ByteArray =
   #"1212121212121212121212121212121212121212121212121212121212121212"
+
+const nullifier_b: ByteArray =
+  #"1313131313131313131313131313131313131313131313131313131313131313"
 
 const joined_at: Int = 1_000
 
@@ -536,6 +540,7 @@ fn discard_tx(
     inputs: [proposal_input(old), ..ballots],
     reference_inputs: [config_input()],
     validity_range: interval.between(lower, upper),
+    mint: assets.from_asset(ballot_policy_id, nullifier_a, -1),
     outputs: [proposal_output(new)],
   }
 }
@@ -743,5 +748,411 @@ test discard_rejects_a_changed_nullifier_list() fail {
       old.reveal_end,
       old.reveal_end + 1_000,
     ),
+  )
+}
+
+fn ballot_input_named(
+  vote: VoteDatum,
+  nullifier: ByteArray,
+  index: Int,
+) -> Input {
+  Input {
+    output_reference: ref(index),
+    output: Output {
+      address: from_script(ballot_policy_id),
+      value: assets.from_asset(ballot_policy_id, nullifier, 1),
+      datum: InlineDatum(vote),
+      reference_script: None,
+    },
+  }
+}
+
+fn burns(names: List<ByteArray>) -> assets.Assets {
+  list.foldl(
+    names,
+    assets.zero,
+    fn(name, total) {
+      assets.merge(total, assets.from_asset(ballot_policy_id, name, -1))
+    },
+  )
+}
+
+fn tally_tx(
+  old: ProposalDatum,
+  new: ProposalDatum,
+  ballots: List<(VoteDatum, ByteArray)>,
+  minted: List<ByteArray>,
+  lower: Int,
+  upper: Int,
+) -> Transaction {
+  let vote_inputs = list.indexed_map(
+    ballots,
+    fn(index, ballot) {
+      let (vote, name) = ballot
+      ballot_input_named(vote, name, index + 4)
+    },
+  )
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(old), ..vote_inputs],
+    reference_inputs: [config_input()],
+    validity_range: interval.between(lower, upper),
+    mint: burns(minted),
+    outputs: [proposal_output(new)],
+  }
+}
+
+fn finalize_tx(
+  old: ProposalDatum,
+  new: ProposalDatum,
+  lower: Int,
+  upper: Int,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(old)],
+    reference_inputs: [config_input()],
+    validity_range: interval.between(lower, upper),
+    outputs: [proposal_output(new)],
+  }
+}
+
+test tally_accepts_a_revealed_ballot() {
+  let old = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(old.id), revealed: Some(Yes) }
+  let new = ProposalDatum { ..old, tallied: 1, yes: 1 }
+  governance_rules.tally(
+    config(),
+    ref(3),
+    tally_tx(
+      old,
+      new,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      old.end,
+      old.end + 1_000,
+    ),
+  )
+}
+
+test tally_accepts_two_ballots() {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+  }
+  let yes_vote = VoteDatum { ..vote_datum(old.id), revealed: Some(Yes) }
+  let no_vote = VoteDatum { ..vote_datum(old.id), revealed: Some(No) }
+  let new = ProposalDatum { ..old, tallied: 2, yes: 1, no: 1 }
+  governance_rules.tally(
+    config(),
+    ref(3),
+    tally_tx(
+      old,
+      new,
+      [(yes_vote, nullifier_a), (no_vote, nullifier_b)],
+      [nullifier_a, nullifier_b],
+      old.end,
+      old.end + 1_000,
+    ),
+  )
+}
+
+test tally_rejects_an_unrevealed_ballot() fail {
+  let old = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let new = ProposalDatum { ..old, tallied: 1, yes: 1 }
+  governance_rules.tally(
+    config(),
+    ref(3),
+    tally_tx(
+      old,
+      new,
+      [(vote_datum(old.id), nullifier_a)],
+      [nullifier_a],
+      old.end,
+      old.end + 1_000,
+    ),
+  )
+}
+
+test tally_rejects_a_wrong_counter() fail {
+  let old = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(old.id), revealed: Some(Yes) }
+  let new = ProposalDatum { ..old, tallied: 2, yes: 1 }
+  governance_rules.tally(
+    config(),
+    ref(3),
+    tally_tx(
+      old,
+      new,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      old.end,
+      old.end + 1_000,
+    ),
+  )
+}
+
+test tally_rejects_before_end() fail {
+  let old = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(old.id), revealed: Some(Yes) }
+  let new = ProposalDatum { ..old, tallied: 1, yes: 1 }
+  governance_rules.tally(
+    config(),
+    ref(3),
+    tally_tx(
+      old,
+      new,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      old.end - 1,
+      old.end + 1_000,
+    ),
+  )
+}
+
+test tally_rejects_a_changed_nullifier_list() fail {
+  let old = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let vote = VoteDatum { ..vote_datum(old.id), revealed: Some(Yes) }
+  let new = ProposalDatum {
+    ..old,
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 1,
+    yes: 1,
+  }
+  governance_rules.tally(
+    config(),
+    ref(3),
+    tally_tx(
+      old,
+      new,
+      [(vote, nullifier_a)],
+      [nullifier_a],
+      old.end,
+      old.end + 1_000,
+    ),
+  )
+}
+
+test finalize_accepts_a_passing_proposal() {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 2,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Passed, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_rejects_before_reveal_end() fail {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 2,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Passed, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end - 1, upper),
+  )
+}
+
+test finalize_rejects_a_missing_tally_or_discard() fail {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 1,
+    yes: 1,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Passed, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_rejects_a_tallied_votes_mismatch() fail {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 1,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Passed, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_records_rejected_on_a_quorum_shortfall() {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    eligible_leaves: [leaf_a, leaf_b, leaf_a, leaf_b, leaf_a],
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 2,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Rejected, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_records_rejected_for_two_of_three() {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    eligible_leaves: [leaf_a, leaf_b, leaf_a],
+    nullifiers: [nullifier_a, nullifier_b, nullifier_a],
+    tallied: 3,
+    yes: 2,
+    no: 1,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Rejected, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_accepts_three_of_four() {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    eligible_leaves: [leaf_a, leaf_b, leaf_a, leaf_b],
+    nullifiers: [nullifier_a, nullifier_b, nullifier_a, nullifier_b],
+    tallied: 4,
+    yes: 3,
+    no: 1,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Passed, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_records_rejected_with_no_votes() {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a],
+    discarded: 1,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Rejected, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_rejects_a_window_over_one_hour() fail {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 2,
+  }
+  let upper = old.reveal_end + voting.max_window_ms + 1
+  let new = ProposalDatum { ..old, status: Passed, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test finalize_rejects_a_wrong_timestamp() fail {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 2,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum {
+    ..old,
+    status: Passed,
+    finalized_at: Some(upper + 1),
+  }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
+  )
+}
+
+test discard_rejects_a_revealed_ballot() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1 }
+  let vote = VoteDatum { ..vote_datum(old.id), revealed: Some(Yes) }
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      new,
+      [ballot_input(vote, 4)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+  )
+}
+
+test discard_rejects_a_reveal_pairing() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1 }
+  let vote = vote_datum(old.id)
+  let tx = Transaction {
+    ..discard_tx(
+      old,
+      new,
+      [ballot_input(vote, 4)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+    mint: assets.zero,
+  }
+  governance_rules.discard(config(), ref(3), tx)
+}
+
+test finalize_uses_the_live_config_not_the_proposed_config() {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    proposed_config: ConfigDatum {
+      ..config(),
+      quorum_bps: 1,
+      structural_threshold_bps: 1,
+    },
+    eligible_leaves: [leaf_a, leaf_b, leaf_a, leaf_b, leaf_a],
+    nullifiers: [nullifier_a, nullifier_b],
+    tallied: 2,
+    yes: 2,
+  }
+  let upper = old.reveal_end + 1_000
+  let new = ProposalDatum { ..old, status: Rejected, finalized_at: Some(upper) }
+  governance_rules.finalize(
+    config(),
+    ref(3),
+    finalize_tx(old, new, old.reveal_end, upper),
   )
 }
