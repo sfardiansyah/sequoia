@@ -70,7 +70,7 @@ The co-op is a member-owned organization that:
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken  
 **Test command:** `bun run check`  
-**Current status:** 291 tests pass, typecheck clean, 43 Postgres integration tests green  
+**Current status:** 302 tests pass, typecheck clean, 43 Postgres integration tests green  
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
@@ -83,7 +83,8 @@ milestone `M1: Config + Membership` (issues #17–#26) delivered the state NFT,
 config, KYC attestations, bank proofs, membership join/transfer/contribution,
 and one Lucid emulator suite for the whole slice. The M2 spec is
 `docs/plan/m2-governance.md`; its tickets are in the `M2: Governance` milestone.
-No M2 code exists yet.
+M2 has started: ADR 0009 and the shared voting primitives are in (ticket #27);
+the validators are #28–#33.
 M1 ran on preprod only: no real IDR, no real personal data, and no preprod
 deployment in the milestone itself.
 
@@ -482,13 +483,13 @@ At month 60:
 - Only active members with valid KYC may vote.
 - Quorum: 50% of active members at proposal snapshot.
 - Project spending: >50% of votes cast.
-- Structural changes, split changes, board changes, and bylaws: two-thirds of votes cast with 50% quorum.
+- Structural changes, split changes, board changes, and bylaws: two-thirds of votes cast with 50% quorum (the configured `structural_threshold_bps`; `6667` is more than two-thirds, ADR 0009 §7).
 - 7-day timelock for structural and parameter changes.
 - Proposal bond: deferred to M3, when a treasury exists to receive a forfeited bond.
 - Voting is not implemented in the pilot harness. On-chain votes are secret per
-  ADR 0007. M2 uses commit-reveal over a board-attested eligible root; see
-  `docs/plan/m2-governance.md`. Quorum and counts stay public; individual ballots
-  do not.
+  ADR 0007. M2 uses commit-reveal over a board-attested eligible leaf list (ADR
+  0009); see `docs/plan/m2-governance.md`. Quorum and counts stay public;
+  individual ballots do not.
 - Delegation is out of scope for v1.
 
 ### 3.10 Board and operations
@@ -613,9 +614,9 @@ surplus_capital_bps:                       2500
 
 ### 4.3 Proposal and vote
 
-1. An active member with live KYC creates a proposal; the board signs the eligible root, count, and snapshot at creation.
+1. An active member with live KYC creates a proposal; the board signs the eligible leaf list at creation.
 2. The `PROPOSAL` NFT, UTxO, windows, and proposed config are recorded. No bond in M2; a bond waits for the treasury (M3).
-3. Members cast sealed ballots with a nullifier against the eligible root during the voting window.
+3. Members cast sealed ballots with a nullifier during the voting window; a ballot is eligible when its leaf is in the list.
 4. After the voting window, ballots are revealed; the chain checks each choice against its seal.
 5. Anyone tallies revealed ballots in batches. Unrevealed ballots are discarded after the reveal deadline and do not count.
 6. When every cast ballot is tallied or discarded, anyone finalizes: 50% quorum of the eligible count and the threshold decide `Passed` or `Rejected`.
@@ -866,7 +867,7 @@ The chain cannot verify the bank balance or prevent a fraudulent transfer. The t
 |---|---|
 | `config` | State NFT; annual amount, `Member Capital`/`Capital Participation` split, founder extra capital, surplus allocation incl. education, redemption reserve policy, quorum, windows, board keys, KYC issuer, token policies |
 | `membership` | Member records; `MEMBER`, `MCAP`, `PROJ` mint/burn; contribution; voting record; founder lock/vesting; conversion; exit request |
-| `governance` | Proposals, eligible root, one-member-one-vote via nullifiers, quorum, batched tally, execution (bonds deferred to M3) |
+| `governance` | Proposals, eligible leaf list, one-member-one-vote via nullifiers, quorum, batched tally, execution (bonds deferred to M3) |
 | `treasury` | Project pool budgets, tranches, spending, cancel/return |
 | `attestation` | KYC, bank contribution, reserve, and project spending attestations |
 | `distribution` | Surplus split across education, patronage, and capital; Merkle root; claims; double-claim prevention |
@@ -878,8 +879,8 @@ The chain cannot verify the bank balance or prevent a fraudulent transfer. The t
 ```text
 Config UTxO          — state NFT, parameters
 MemberRecord UTxO    — one per member; holds MEMBER + MCAP + PROJ
-Proposal UTxO        — one per proposal; PROPOSAL NFT; eligible root, proposed
-                       config, nullifier list, counters, status
+Proposal UTxO        — one per proposal; PROPOSAL NFT; eligible leaf list,
+                       proposed config, nullifier list, counters, status
 Ballot UTxO          — one per member per proposal at the ballot script; VOTE
                        NFT (the nullifier) + choice commitment, no member id
                        until reveal; no receipt NFT (it would relink the member)
@@ -1023,7 +1024,7 @@ Exit:       RequestExit | RedeemMemberCapital | SettleCapitalParticipation | Def
 ### 6.5 Transaction flows
 
 1. **Join/contribution:** config reference input + KYC attestation + bank attestation + member record → mint tokens.
-2. **Vote:** cast against the eligible root → mint the VOTE NFT (nullifier) → create the ballot UTxO with a sealed choice. Later, reveal the choice and salt against the seal; the member record is never touched.
+2. **Vote:** cast with a leaf from the eligible list → mint the VOTE NFT (nullifier) → create the ballot UTxO with a sealed choice. Later, reveal the choice and salt against the seal from the ballot alone; the proposal and member record are never touched by a reveal.
 3. **Tally:** consume batches of revealed ballot UTxOs → update proposal counters → finalize when every cast ballot is tallied or discarded.
 4. **Execute:** proposal + treasury → create project UTxO or update config.
 5. **Spend tranche:** project + proposal + board signatures + bank attestation → update project.

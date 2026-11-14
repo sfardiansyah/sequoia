@@ -30,11 +30,12 @@ From the repository root, `bun run check:contracts` runs all three and fails if
 it is the only interface the off-chain builders read; `build/` is generated and
 ignored.
 
-The shared test vectors live at `packages/shared/vectors/aiken.json`. They are
-the source of truth for the split and vesting math: the TS test in
-`packages/shared/src/vectors.test.ts` and the Aiken tests both read them.
-`bun run gen:vectors` regenerates `lib/sequoia/vectors.ak` from the JSON and
-formats it; `bun run check:vectors` regenerates and fails if the committed file
+The shared test vectors live at `packages/shared/vectors/aiken.json` (split and
+vesting) and `packages/shared/vectors/governance.json` (governance hashes,
+windows, and voting math). They are the source of truth: the TS tests and the
+Aiken tests both read them. `bun run gen:vectors` regenerates
+`lib/sequoia/vectors.ak` and `lib/sequoia/voting_vectors.ak` from the JSON and
+formats them; `bun run check:vectors` regenerates and fails if a committed file
 drifts. CI runs the latter.
 
 Parameters are applied at transaction-build time with Lucid's
@@ -60,7 +61,11 @@ scripts take the state NFT policy ID, which is derived from it.
   every member action reuses.
 - `lib/sequoia/split.ak` — the contribution split, mirroring `@sequoia/shared`.
 - `lib/sequoia/vesting.ak` — the founder vesting schedule.
+- `lib/sequoia/voting.ak` — M2 tagged hashes, window derivation, the validity
+  time rule, and quorum/threshold math (ADR 0009), mirrored by
+  `packages/offchain/src/governance.ts`.
 - `lib/sequoia/vectors.ak` — generated from the shared JSON; do not edit.
+- `lib/sequoia/voting_vectors.ak` — generated governance vectors; do not edit.
 - `*.test.ak` — unit and property tests, colocated with the code.
 
 ## KYC actions

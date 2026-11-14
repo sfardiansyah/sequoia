@@ -1,0 +1,187 @@
+{
+  "leaf": [
+    {
+      "secret": "1111111111111111111111111111111111111111111111111111111111111111",
+      "leaf": "c2ad0a997751e04066912fa490a9976d6135d221c0df197dfb8c8a7a7e04da0e"
+    },
+    {
+      "secret": "2222222222222222222222222222222222222222222222222222222222222222",
+      "leaf": "5c1b924542fecd099a9568826bce5018476b3c2a29944c9c7ff6e47f80d21d24"
+    },
+    {
+      "secret": "3333333333333333333333333333333333333333333333333333333333333333",
+      "leaf": "40910b8c96ef4c8fcc342a1c45a4135f7a9376fa4b34890991d4e27d2c2ba32f"
+    }
+  ],
+  "nullifier": [
+    {
+      "secret": "1111111111111111111111111111111111111111111111111111111111111111",
+      "proposalId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "nullifier": "adf8af595b88caeab1c9a37ca3a4556c6a5e1af5bf947cbbeb7631ade7ccd410"
+    },
+    {
+      "secret": "1111111111111111111111111111111111111111111111111111111111111111",
+      "proposalId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "nullifier": "293ea85db84218e3a33bdd11b0ebfd664a954a214ada73484ab3c1b4b0a42c44"
+    },
+    {
+      "secret": "2222222222222222222222222222222222222222222222222222222222222222",
+      "proposalId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "nullifier": "7a88089fd3cf0de673c2223b06db7d1ca6311ea22d2a6e43edec10006d58534f"
+    }
+  ],
+  "commitment": [
+    {
+      "choice": 0,
+      "salt": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "commitment": "59881ee63e6c4cce64876a0f21fa13d9468def0a03b7c82ead3b3f864d35602b"
+    },
+    {
+      "choice": 0,
+      "salt": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "commitment": "ccc2950e219a051c69827b9d6fd0c8a19edb8a7e231793341d068685058f86a5"
+    },
+    {
+      "choice": 1,
+      "salt": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "commitment": "df5cdc9cc3ffc9fdb0792d56b7a7cface8776825246c4d61cffed112647707dd"
+    },
+    {
+      "choice": 1,
+      "salt": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "commitment": "9c6f0f729e69fa27630e6933984d2e6e1920b2bf7853b57f26e1e67265af13df"
+    },
+    {
+      "choice": 2,
+      "salt": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "commitment": "24f0e22b81a649e255d4bc8b827b0f59767692326ce9cee6d300841e44abdfbc"
+    },
+    {
+      "choice": 2,
+      "salt": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "commitment": "507deeaaabdcf661189aaa6ddab44cc070500d59b44cc10e8288132e24870fc9"
+    }
+  ],
+  "windows": [
+    {
+      "start": 1780000000000,
+      "votingDays": 7,
+      "revealDays": 3,
+      "timelockDays": 7,
+      "end": 1780604800000,
+      "revealEnd": 1780864000000,
+      "finalizedAt": 1780864300000,
+      "timelockEnd": 1781469100000
+    },
+    {
+      "start": 1780000000000,
+      "votingDays": 1,
+      "revealDays": 1,
+      "timelockDays": 0,
+      "end": 1780086400000,
+      "revealEnd": 1780172800000,
+      "finalizedAt": 1780173100000,
+      "timelockEnd": 1780173100000
+    }
+  ],
+  "quorum": [
+    {
+      "votes": 3,
+      "eligibleCount": 5,
+      "quorumBps": 5000,
+      "met": true
+    },
+    {
+      "votes": 2,
+      "eligibleCount": 5,
+      "quorumBps": 5000,
+      "met": false
+    },
+    {
+      "votes": 1,
+      "eligibleCount": 1,
+      "quorumBps": 5000,
+      "met": true
+    },
+    {
+      "votes": 0,
+      "eligibleCount": 0,
+      "quorumBps": 5000,
+      "met": true
+    },
+    {
+      "votes": 3,
+      "eligibleCount": 3,
+      "quorumBps": 10000,
+      "met": true
+    },
+    {
+      "votes": 2,
+      "eligibleCount": 3,
+      "quorumBps": 10000,
+      "met": false
+    },
+    {
+      "votes": 4,
+      "eligibleCount": 4,
+      "quorumBps": 5000,
+      "met": true
+    }
+  ],
+  "threshold": [
+    {
+      "yes": 2,
+      "no": 1,
+      "thresholdBps": 6667,
+      "met": false
+    },
+    {
+      "yes": 3,
+      "no": 1,
+      "thresholdBps": 6667,
+      "met": true
+    },
+    {
+      "yes": 1,
+      "no": 2,
+      "thresholdBps": 6667,
+      "met": false
+    },
+    {
+      "yes": 0,
+      "no": 0,
+      "thresholdBps": 6667,
+      "met": false
+    },
+    {
+      "yes": 2,
+      "no": 0,
+      "thresholdBps": 6667,
+      "met": true
+    },
+    {
+      "yes": 5,
+      "no": 0,
+      "thresholdBps": 6667,
+      "met": true
+    },
+    {
+      "yes": 2,
+      "no": 2,
+      "thresholdBps": 5001,
+      "met": false
+    },
+    {
+      "yes": 3,
+      "no": 2,
+      "thresholdBps": 5001,
+      "met": true
+    },
+    {
+      "yes": 1,
+      "no": 1,
+      "thresholdBps": 5001,
+      "met": false
+    }
+  ]
+}
