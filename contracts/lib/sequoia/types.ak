@@ -105,8 +105,7 @@ pub type BankProofDatum {
   issued_at: Int,
 }
 
-// M2 governance (ADR 0009 §1, §5, §6). The VOTE datum, `Choice`, and the
-// remaining redeemers land with the ballot actions (#30–#32).
+// M2 governance (ADR 0009 §1, §5, §6).
 
 pub type ProposalKind {
   Config
@@ -136,4 +135,29 @@ pub type ProposalDatum {
   abstain: Int,
   status: ProposalStatus,
   finalized_at: Option<Int>,
+}
+
+/// Ballot choices, in commitment-index order: `Yes = 0`, `No = 1`,
+/// `Abstain = 2` (ADR 0009 §3).
+pub type Choice {
+  Yes
+  No
+  Abstain
+}
+
+/// The vote box is self-contained once cast: `Reveal` reads its own deadlines
+/// and needs no proposal reference (ADR 0009 §5).
+pub type VoteDatum {
+  proposal_id: AssetName,
+  end: Int,
+  reveal_end: Int,
+  choice_commitment: ByteArray,
+  revealed: Option<Choice>,
+}
+
+/// Governance spend actions. Ballot actions live in `ballot_rules` because both
+/// enums use the names `Cast` and `Discard`.
+pub type GovernanceRedeemer {
+  Cast
+  Discard
 }

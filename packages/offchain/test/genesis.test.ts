@@ -58,7 +58,7 @@ describe("state NFT and config genesis", () => {
     ]);
     expect(datum.fields.slice(13)).toEqual([
       m1.governancePolicy,
-      "00".repeat(28),
+      m1.ballotPolicy,
       5_000n,
       5_001n,
       6_667n,

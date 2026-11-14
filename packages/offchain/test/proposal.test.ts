@@ -9,14 +9,13 @@ import {
   m1TestConfig,
   scriptTime,
   selectActor,
-  submitWithBoard,
   type Genesis,
   type M1Ledger,
 } from "./helpers/m1";
 import { joinMember, memberUnit } from "./helpers/membership";
 import {
+  createProposal,
   PROPOSAL_MIN_LOVELACE,
-  proposalDatum,
   proposalUnit,
 } from "./helpers/proposal";
 
@@ -55,51 +54,27 @@ describe("governance proposal creation", () => {
   });
 
   test("a board-signed proposal is recorded", async () => {
-    const now = ledger.emulator.now();
-    const start = BigInt(scriptTime(ledger, now));
+    const start = BigInt(scriptTime(ledger, ledger.emulator.now()));
     const proposer = keyHash(await ledger.lucid.wallet().address());
     const leaf = eligibleLeaf(voteSecret);
     const unit = proposalUnit(m1.governancePolicy, proposalId);
-    const datum = proposalDatum(
-      ledger.roles,
+    const box = await createProposal(
+      ledger,
+      m1,
       config,
-      {
-        membership: m1.membershipPolicy,
-        kyc: m1.kycPolicy,
-        bank: m1.bankPolicy,
-        governance: m1.governancePolicy,
-        ballot: m1.ballotPolicy,
-      },
       { id: proposalId, proposer, leaves: [leaf], start },
+      memberBox,
+      kycBox,
     );
-
-    let tx = ledger.lucid.newTx().addSignerKey(proposer);
-    for (const key of ledger.roles.boardKeys.slice(0, 2)) {
-      tx = tx.addSignerKey(key);
-    }
-    const built = await tx
-      .attach.MintingPolicy(m1.governanceValidator)
-      .mintAssets({ [unit]: 1n }, Data.void())
-      .readFrom([m1.configUtxo, memberBox, kycBox])
-      .pay.ToAddressWithData(
-        m1.governanceAddress,
-        { kind: "inline", value: datum },
-        { lovelace: PROPOSAL_MIN_LOVELACE, [unit]: 1n },
-      )
-      .validFrom(Number(start))
-      .validTo(Number(start) + 60_000)
-      .complete();
-    await submitWithBoard(built, ledger, 2);
-    ledger.emulator.awaitBlock(1);
 
     const boxes = await ledger.lucid.utxosAt(m1.governanceAddress);
     expect(boxes).toHaveLength(1);
-    expect(boxes[0]!.assets).toEqual({
+    expect(box.assets).toEqual({
       lovelace: PROPOSAL_MIN_LOVELACE,
       [unit]: 1n,
     });
 
-    const decoded = Data.from(boxes[0]!.datum!) as {
+    const decoded = Data.from(box.datum!) as {
       index: number;
       fields: unknown[];
     };

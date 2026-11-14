@@ -7,7 +7,7 @@ use cardano/transaction.{
 use sequoia/governance_rules
 use sequoia/types.{
   Active, Config, ConfigDatum, Inactive, KycDatum, MemberDatum, Open, Passed,
-  ProposalDatum, Standard,
+  ProposalDatum, Standard, VoteDatum,
 }
 use sequoia/voting
 
@@ -57,6 +57,9 @@ const leaf_a: ByteArray =
 
 const leaf_b: ByteArray =
   #"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+
+const nullifier_a: ByteArray =
+  #"1212121212121212121212121212121212121212121212121212121212121212"
 
 const joined_at: Int = 1_000
 
@@ -468,4 +471,277 @@ test keep_proposal_leaves_action_fields_to_the_action() {
       ProposalDatum { ..old, finalized_at: Some(joined_at) },
     ),
   }
+}
+
+fn proposal_input(datum: ProposalDatum) -> Input {
+  Input {
+    output_reference: ref(3),
+    output: Output {
+      address: from_script(governance_policy_id),
+      value: assets.from_asset(governance_policy_id, datum.id, 1),
+      datum: InlineDatum(datum),
+      reference_script: None,
+    },
+  }
+}
+
+fn vote_datum(id: ByteArray) -> VoteDatum {
+  VoteDatum {
+    proposal_id: id,
+    end: proposal_datum().end,
+    reveal_end: proposal_datum().reveal_end,
+    choice_commitment: #"3434343434343434343434343434343434343434343434343434343434343434",
+    revealed: None,
+  }
+}
+
+fn ballot_input(vote: VoteDatum, index: Int) -> Input {
+  Input {
+    output_reference: ref(index),
+    output: Output {
+      address: from_script(ballot_policy_id),
+      value: assets.from_asset(ballot_policy_id, nullifier_a, 1),
+      datum: InlineDatum(vote),
+      reference_script: None,
+    },
+  }
+}
+
+fn cast_tx(
+  old: ProposalDatum,
+  new: ProposalDatum,
+  nullifier: ByteArray,
+  lower: Int,
+  upper: Int,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(old)],
+    reference_inputs: [config_input()],
+    validity_range: interval.between(lower, upper),
+    mint: assets.from_asset(ballot_policy_id, nullifier, 1),
+    outputs: [proposal_output(new)],
+  }
+}
+
+fn discard_tx(
+  old: ProposalDatum,
+  new: ProposalDatum,
+  ballots: List<Input>,
+  lower: Int,
+  upper: Int,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(old), ..ballots],
+    reference_inputs: [config_input()],
+    validity_range: interval.between(lower, upper),
+    outputs: [proposal_output(new)],
+  }
+}
+
+test cast_accepts_a_valid_ballot() {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, nullifiers: [nullifier_a] }
+  governance_rules.cast(
+    config(),
+    ref(3),
+    cast_tx(old, new, nullifier_a, old.start, old.start + 1_000),
+  )
+}
+
+test cast_rejects_a_ballot_after_end_with_a_stale_lower_bound() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, nullifiers: [nullifier_a] }
+  governance_rules.cast(
+    config(),
+    ref(3),
+    cast_tx(old, new, nullifier_a, old.end - 1_000, old.end + 1),
+  )
+}
+
+test cast_rejects_a_ballot_before_start() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, nullifiers: [nullifier_a] }
+  governance_rules.cast(
+    config(),
+    ref(3),
+    cast_tx(old, new, nullifier_a, old.start - 1_000, old.start + 1_000),
+  )
+}
+
+test cast_rejects_a_duplicate_nullifier() fail {
+  let old = ProposalDatum { ..proposal_datum(), nullifiers: [nullifier_a] }
+  let new = ProposalDatum { ..old, nullifiers: [nullifier_a, nullifier_a] }
+  governance_rules.cast(
+    config(),
+    ref(3),
+    cast_tx(old, new, nullifier_a, old.start, old.start + 1_000),
+  )
+}
+
+test cast_rejects_a_changed_counter() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, nullifiers: [nullifier_a], discarded: 1 }
+  governance_rules.cast(
+    config(),
+    ref(3),
+    cast_tx(old, new, nullifier_a, old.start, old.start + 1_000),
+  )
+}
+
+test cast_rejects_a_changed_status() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, nullifiers: [nullifier_a], status: Passed }
+  governance_rules.cast(
+    config(),
+    ref(3),
+    cast_tx(old, new, nullifier_a, old.start, old.start + 1_000),
+  )
+}
+
+test cast_rejects_a_changed_proposed_config() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum {
+    ..old,
+    nullifiers: [nullifier_a],
+    proposed_config: ConfigDatum { ..config(), annual_amount: 2_000_000 },
+  }
+  governance_rules.cast(
+    config(),
+    ref(3),
+    cast_tx(old, new, nullifier_a, old.start, old.start + 1_000),
+  )
+}
+
+test cast_rejects_a_wrong_mint_quantity() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, nullifiers: [nullifier_a] }
+  let tx = Transaction {
+    ..cast_tx(old, new, nullifier_a, old.start, old.start + 1_000),
+    mint: assets.from_asset(ballot_policy_id, nullifier_a, 2),
+  }
+  governance_rules.cast(config(), ref(3), tx)
+}
+
+test discard_accepts_one_unrevealed_ballot() {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1 }
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      new,
+      [ballot_input(vote_datum(old.id), 4)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+  )
+}
+
+test discard_rejects_a_discard_before_reveal_end() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1 }
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      new,
+      [ballot_input(vote_datum(old.id), 4)],
+      old.reveal_end - 1,
+      old.reveal_end + 1_000,
+    ),
+  )
+}
+
+test discard_rejects_no_ballot() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1 }
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(old, new, [], old.reveal_end, old.reveal_end + 1_000),
+  )
+}
+
+test discard_rejects_two_ballots() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1 }
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      new,
+      [ballot_input(vote_datum(old.id), 4), ballot_input(vote_datum(old.id), 5)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+  )
+}
+
+test discard_rejects_a_ballot_from_another_proposal() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1 }
+  let other = #"abababababababababababababababababababababababababababababababab"
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      new,
+      [ballot_input(vote_datum(other), 4)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+  )
+}
+
+test discard_rejects_a_missing_increment() fail {
+  let old = proposal_datum()
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      old,
+      [ballot_input(vote_datum(old.id), 4)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+  )
+}
+
+test discard_rejects_a_double_increment() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 2 }
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      new,
+      [ballot_input(vote_datum(old.id), 4)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+  )
+}
+
+test discard_rejects_a_changed_nullifier_list() fail {
+  let old = proposal_datum()
+  let new = ProposalDatum { ..old, discarded: 1, nullifiers: [nullifier_a] }
+  governance_rules.discard(
+    config(),
+    ref(3),
+    discard_tx(
+      old,
+      new,
+      [ballot_input(vote_datum(old.id), 4)],
+      old.reveal_end,
+      old.reveal_end + 1_000,
+    ),
+  )
 }

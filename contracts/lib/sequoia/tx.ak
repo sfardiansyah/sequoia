@@ -3,7 +3,9 @@ use aiken/crypto.{ScriptHash, VerificationKeyHash}
 use aiken/interval.{Finite}
 use cardano/address.{Credential, Script, VerificationKey}
 use cardano/assets.{AssetName, PolicyId, quantity_of}
-use cardano/transaction.{InlineDatum, Output, Transaction}
+use cardano/transaction.{
+  InlineDatum, Input, Output, OutputReference, Transaction,
+}
 
 /// Shared transaction helpers for the M1 validators.
 /// M1 authorities are keys: a Plutus script cannot sign a transaction, and the
@@ -49,6 +51,16 @@ pub fn inline_datum(output: Output) -> Data {
     InlineDatum(raw) -> raw
     _ -> fail @"tx: datum must be inline"
   }
+}
+
+/// The input named by `own_ref`, or a clear failure when it is not spent.
+pub fn spent_input(own_ref: OutputReference, self: Transaction) -> Input {
+  let spent = list.find(
+    self.inputs,
+    fn(input) { input.output_reference == own_ref },
+  )
+  expect Some(input) = spent
+  input
 }
 
 /// Exactly one output must hold one unit of the token, and that output must sit

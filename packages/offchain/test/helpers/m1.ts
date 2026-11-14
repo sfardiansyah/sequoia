@@ -32,9 +32,6 @@ export const KYC_MIN_LOVELACE = 3_000_000n;
 export const MEMBER_MIN_LOVELACE = 3_000_000n;
 const SEED_LOVELACE = 12_345_678n;
 
-/** The ballot script lands in #30; its policy id stays zero until then. */
-export const ZERO_POLICY_ID = "00".repeat(28);
-
 export type M1Actors = {
   deployer: EmulatorAccount;
   kycIssuer: EmulatorAccount;
@@ -213,6 +210,16 @@ export function governanceScript(stateNftPolicy: string): Script {
   };
 }
 
+export function ballotScript(stateNftPolicy: string): Script {
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(
+      compiledValidator("ballot.ballot.mint").compiledCode,
+      [castTo(stateNftPolicy, Data.Bytes())],
+    ),
+  };
+}
+
 export function stateUnit(stateNftPolicy: string): string {
   return stateNftPolicy + Buffer.from(STATE_ASSET_NAME).toString("hex");
 }
@@ -329,7 +336,9 @@ export type Genesis = {
   governanceValidator: Script;
   governancePolicy: string;
   governanceAddress: string;
+  ballotValidator: Script;
   ballotPolicy: string;
+  ballotAddress: string;
   datum: string;
   configUtxo: UTxO;
 };
@@ -360,12 +369,15 @@ export async function genesis(
   const governanceValidator = governanceScript(stateNftPolicy);
   const governancePolicy = validatorToScriptHash(governanceValidator);
   const governanceAddress = validatorToAddress("Custom", governanceValidator);
+  const ballotValidator = ballotScript(stateNftPolicy);
+  const ballotPolicy = validatorToScriptHash(ballotValidator);
+  const ballotAddress = validatorToAddress("Custom", ballotValidator);
   const datum = configDatum(roles, config, {
     membership: membershipPolicy,
     kyc: kycPolicy,
     bank: bankPolicy,
     governance: governancePolicy,
-    ballot: ZERO_POLICY_ID,
+    ballot: ballotPolicy,
   });
   const unit = stateUnit(stateNftPolicy);
 
@@ -402,7 +414,9 @@ export async function genesis(
     governanceValidator,
     governancePolicy,
     governanceAddress,
-    ballotPolicy: ZERO_POLICY_ID,
+    ballotValidator,
+    ballotPolicy,
+    ballotAddress,
     datum,
     configUtxo,
   };

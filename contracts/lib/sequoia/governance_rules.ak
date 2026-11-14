@@ -4,19 +4,19 @@ use aiken/crypto.{VerificationKeyHash}
 use aiken/primitive/bytearray
 use cardano/address.{Script}
 use cardano/assets.{PolicyId, quantity_of, tokens}
-use cardano/transaction.{Output, Transaction}
+use cardano/transaction.{Input, Output, OutputReference, Transaction}
 use sequoia/config_rules
 use sequoia/kyc_rules
 use sequoia/tx.{
-  inline_datum, lower_bound, one_token_output, signed, upper_bound,
+  inline_datum, lower_bound, one_token_output, signed, spent_input, upper_bound,
 }
 use sequoia/types.{
-  Active, Config, ConfigDatum, MemberDatum, Open, ProposalDatum,
+  Active, Config, ConfigDatum, MemberDatum, Open, ProposalDatum, VoteDatum,
 }
 use sequoia/voting
 
-/// Governance proposal rules (ADR 0009 §1, §2, §4, §6). Creation is #29; cast,
-/// discard, tally, finalize, and execute land in #30–#33.
+/// Governance proposal rules (ADR 0009 §1, §2, §4, §6). Creation, cast, and
+/// discard are #29–#30; tally, finalize, and execute land in #31–#33.
 fn datum_of(output: Output) -> ProposalDatum {
   expect datum: ProposalDatum = inline_datum(output)
   datum
@@ -131,6 +131,124 @@ pub fn create_proposal(
     fail @"governance_rules: reveal end must follow the config"
   } else if !fresh_proposal(datum) {
     fail @"governance_rules: a new proposal is open with empty counters"
+  } else {
+    True
+  }
+}
+
+fn returned_proposal(
+  config: ConfigDatum,
+  id: ByteArray,
+  self: Transaction,
+) -> ProposalDatum {
+  datum_of(
+    one_token_output(
+      config.governance_policy,
+      id,
+      config.governance_policy,
+      self,
+    ),
+  )
+}
+
+fn ballot_inputs(
+  config: ConfigDatum,
+  id: ByteArray,
+  self: Transaction,
+) -> List<Input> {
+  list.filter(
+    self.inputs,
+    fn(input) {
+      if input.output.address.payment_credential != Script(config.ballot_policy) {
+        False
+      } else {
+        expect vote: VoteDatum = inline_datum(input.output)
+        vote.proposal_id == id
+      }
+    },
+  )
+}
+
+fn same_counters(old: ProposalDatum, new: ProposalDatum) -> Bool {
+  and {
+    new.tallied == old.tallied,
+    new.yes == old.yes,
+    new.no == old.no,
+    new.abstain == old.abstain,
+    new.status == old.status,
+    new.finalized_at == old.finalized_at,
+  }
+}
+
+fn unchanged_by_cast(old: ProposalDatum, new: ProposalDatum) -> Bool {
+  and {
+    same_counters(old, new),
+    new.discarded == old.discarded,
+  }
+}
+
+fn unchanged_by_discard(old: ProposalDatum, new: ProposalDatum) -> Bool {
+  and {
+    same_counters(old, new),
+    new.nullifiers == old.nullifiers,
+  }
+}
+
+/// `Cast` appends the freshly minted VOTE name to the proposal and changes
+/// nothing else (ADR 0009 §6). The VOTE mint is checked here; the ballot mint
+/// checks the vote box and eligibility.
+pub fn cast(
+  config: ConfigDatum,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let old = datum_of(spent_input(own_ref, self).output)
+  expect [Pair(nullifier, 1)] = tokens(self.mint, config.ballot_policy)
+    |> dict.to_pairs()
+  let new = returned_proposal(config, old.id, self)
+  if old.status != Open {
+    fail @"governance_rules: cast on a closed proposal"
+  } else if !voting.not_before(lower_bound(self), old.start) {
+    fail @"governance_rules: cast before the voting window"
+  } else if !voting.not_after(upper_bound(self), old.end) {
+    fail @"governance_rules: cast after the voting window"
+  } else if bytearray.length(nullifier) != 32 {
+    fail @"governance_rules: nullifier must be 32 bytes"
+  } else if list.has(old.nullifiers, nullifier) {
+    fail @"governance_rules: nullifier already cast"
+  } else if !keep_proposal(old, new) {
+    fail @"governance_rules: cast must preserve the proposal identity"
+  } else if new.nullifiers != list.concat(old.nullifiers, [nullifier]) {
+    fail @"governance_rules: cast must append exactly the new nullifier"
+  } else if !unchanged_by_cast(old, new) {
+    fail @"governance_rules: cast must not touch counters or status"
+  } else {
+    True
+  }
+}
+
+/// `Discard` burns one unrevealed ballot and records it so finalize can require
+/// `tallied + discarded == cast`. One ballot per transaction (ADR 0009 §5).
+pub fn discard(
+  config: ConfigDatum,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let old = datum_of(spent_input(own_ref, self).output)
+  let new = returned_proposal(config, old.id, self)
+  let ballots = ballot_inputs(config, old.id, self)
+  if old.status != Open {
+    fail @"governance_rules: discard on a closed proposal"
+  } else if !voting.not_before(lower_bound(self), old.reveal_end) {
+    fail @"governance_rules: discard before the reveal window ends"
+  } else if list.length(ballots) != 1 {
+    fail @"governance_rules: discard spends exactly one ballot"
+  } else if !keep_proposal(old, new) {
+    fail @"governance_rules: discard must preserve the proposal identity"
+  } else if new.discarded != old.discarded + 1 {
+    fail @"governance_rules: discard must increment the counter by one"
+  } else if !unchanged_by_discard(old, new) {
+    fail @"governance_rules: discard must not touch other fields"
   } else {
     True
   }
