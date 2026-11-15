@@ -46,7 +46,7 @@ Implemented:
   with the config split, tested with Aiken and one Lucid emulator suite;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Test suite: 291 tests (`bun run check`, PGlite and the Aiken emulator suites
+Test suite: 333 tests (`bun run check`, PGlite and the Aiken emulator suites
 included) and 43 Postgres integration tests (`bun run test:integration`).
 
 The pilot is synthetic and preprod: no real IDR, no chain, and no real personal

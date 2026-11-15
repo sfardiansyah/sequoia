@@ -82,11 +82,14 @@ describe("governance proposal creation", () => {
       value as { index: number; fields: unknown[] };
 
     expect(decoded.index).toBe(0);
-    expect(decoded.fields).toHaveLength(16);
+    expect(decoded.fields).toHaveLength(15);
     expect(decoded.fields[0]).toBe(proposalId);
     expect(decoded.fields[1]).toBe(proposer);
-    expect(constr(decoded.fields[2])).toEqual({ index: 0, fields: [] });
-    const proposedConfig = constr(decoded.fields[3]);
+    // The payload's constructor is the kind: a `Config` wrapping one config datum.
+    const payload = constr(decoded.fields[2]);
+    expect(payload.index).toBe(0);
+    expect(payload.fields).toHaveLength(1);
+    const proposedConfig = constr(payload.fields[0]);
     expect(proposedConfig.fields.slice(0, 5)).toEqual([
       2026n,
       1_000_000n,
@@ -106,16 +109,16 @@ describe("governance proposal creation", () => {
       7n,
       3n,
     ]);
-    expect(decoded.fields[4]).toEqual([leaf]);
-    expect(decoded.fields[5]).toBe(start);
-    expect(decoded.fields[6]).toBe(
+    expect(decoded.fields[3]).toEqual([leaf]);
+    expect(decoded.fields[4]).toBe(start);
+    expect(decoded.fields[5]).toBe(
       start + config.votingDays * BigInt(MS_PER_DAY),
     );
-    expect(decoded.fields[7]).toBe(
+    expect(decoded.fields[6]).toBe(
       start + (config.votingDays + config.revealDays) * BigInt(MS_PER_DAY),
     );
-    expect(decoded.fields.slice(8, 14)).toEqual([[], 0n, 0n, 0n, 0n, 0n]);
-    expect(constr(decoded.fields[14])).toEqual({ index: 0, fields: [] });
-    expect(constr(decoded.fields[15])).toEqual({ index: 1, fields: [] });
+    expect(decoded.fields.slice(7, 13)).toEqual([[], 0n, 0n, 0n, 0n, 0n]);
+    expect(constr(decoded.fields[13])).toEqual({ index: 0, fields: [] });
+    expect(constr(decoded.fields[14])).toEqual({ index: 1, fields: [] });
   });
 });

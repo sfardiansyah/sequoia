@@ -3,7 +3,9 @@
 Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`) is
 implemented per `docs/adr/0008-m1-config-and-membership.md`; M2 governance
 (`governance` + `ballot`, config v2) follows
-`docs/adr/0009-m2-secret-ballot-governance.md`.
+`docs/adr/0009-m2-secret-ballot-governance.md`. M3 treasury starts with the v3
+datums and genesis (`POOL`, the pool box, `validators/treasury.ak` as a stub) per
+`docs/adr/0010-m3-project-treasury.md`; the treasury rules follow.
 
 ## Toolchain
 
@@ -48,7 +50,11 @@ scripts take the state NFT policy ID, which is derived from it.
 ## Layout
 
 - `validators/` — one file per validator, entry point only.
-- `validators/state_nft.ak` — one-shot `STATE` mint, parameterized by the seed output.
+- `validators/state_nft.ak` — one-shot `STATE` and `POOL` mint, parameterized by
+  the seed output.
+- `validators/treasury.ak` — the pool box, the project boxes, and the `PROJECT`
+  NFT policy (ADR 0010 §1). A stub for now: it fixes the script hash at genesis,
+  and the rules follow.
 - `validators/config.ak` — the config box; its only spend is a governance
   execution.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
@@ -59,8 +65,8 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/ballot.ak` — the vote box and `VOTE` NFT; cast, reveal, discard,
   and count.
 - `validators/bank_attestation.ak` — parameterless bank proof guard.
-- `lib/sequoia/types.ak` — the ADR 0008 and ADR 0009 datums and governance
-  redeemer. `ballot_rules.ak` holds `BallotRedeemer`: its `Cast`/`Discard`
+- `lib/sequoia/types.ak` — the ADR 0008, ADR 0009, and ADR 0010 datums and
+  redeemers. `ballot_rules.ak` holds `BallotRedeemer`: its `Cast`/`Discard`
   names collide with the governance redeemer's constructors.
 - `lib/sequoia/config_ref.ak` — finds the config box among reference inputs.
 - `lib/sequoia/config_rules.ak` — the config v2 immutable fields and structural
@@ -140,18 +146,18 @@ stamps `finalized_at` from the validity upper bound for either outcome.
 ### Config execution
 
 `Execute` spends the passed proposal **and** the config box, writes
-`proposed_config` as the new `ConfigDatum`, and marks the proposal `Executed`.
+the payload's `ConfigDatum`, and marks the proposal `Executed`.
 It is permissionless: the board has no execution power. The two validators split
 the gate so neither action can complete alone:
 
 - the **config** validator owns the write rule: exactly one governance input
-  whose datum is a `Passed` `Config` proposal with `proposed_config` equal to the
-  output datum, `lower_bound >= finalized_at + timelock_days * 86_400_000`, the
+  whose datum is a `Passed` proposal with a `Config` payload equal to the output
+  datum, `lower_bound >= finalized_at + timelock_days * 86_400_000`, the
   immutable fields unchanged, and the structural invariants satisfied. The config
   output must sit at the input's own address and hold one `STATE`.
 - the **governance** validator records the status change: only `Passed` may
   become `Executed`, every other proposal field stays byte-identical, and a
-  config box holding `proposed_config` must be spent and returned.
+  config box holding the payload's config must be spent and returned.
 
 The config box is spent, not referenced, so execute reads the live config from
 that input; the other governance actions read it as a reference input. A second
@@ -162,8 +168,8 @@ against anything but the real config.
 ### Live-config quorum and threshold
 
 `Finalize` reads `quorum_bps` and `structural_threshold_bps` from the live config
-box, never from `proposed_config`. A config executed while another proposal is
-open therefore changes that proposal's bar. The datum has no snapshot of these
+box, never from the proposal's payload. A config executed while another proposal
+is open therefore changes that proposal's bar. The datum has no snapshot of these
 values; this is a known M2 limitation, acceptable at pilot scale and recorded in
 the plan.
 

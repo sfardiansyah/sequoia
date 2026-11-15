@@ -76,7 +76,8 @@ fn fresh_proposal(datum: ProposalDatum) -> Bool {
 }
 
 /// Creation is the PROPOSAL NFT mint: one proposal box, one board-attested
-/// eligible leaf set, and the proposed config fixed for the whole vote.
+/// eligible leaf set, and the payload fixed for the whole vote. M3 creates only
+/// `Config` proposals; the project kinds land with their rules (spec §7).
 pub fn create_proposal(
   config: ConfigDatum,
   policy_id: PolicyId,
@@ -95,8 +96,6 @@ pub fn create_proposal(
     fail @"governance_rules: proposal id must be 32 bytes"
   } else if datum.id != id {
     fail @"governance_rules: datum id must match the token name"
-  } else if datum.kind != Config {
-    fail @"governance_rules: only config proposals are supported"
   } else if !signed(self, datum.proposer) {
     fail @"governance_rules: proposer must sign"
   } else if config.board_threshold < 1 {
@@ -116,10 +115,6 @@ pub fn create_proposal(
     fn(leaf) { bytearray.length(leaf) == 32 },
   ) {
     fail @"governance_rules: eligible leaves must be 32 bytes"
-  } else if !config_rules.immutable_unchanged(config, datum.proposed_config) {
-    fail @"governance_rules: immutable config fields must not change"
-  } else if !config_rules.invariants_hold(datum.proposed_config) {
-    fail @"governance_rules: proposed config breaks the invariants"
   } else if !voting.window_is_tight(lower, upper) {
     fail @"governance_rules: creation window must be at most one hour"
   } else if datum.start != lower {
@@ -134,7 +129,17 @@ pub fn create_proposal(
   } else if !fresh_proposal(datum) {
     fail @"governance_rules: a new proposal is open with empty counters"
   } else {
-    True
+    when datum.payload is {
+      Config(proposed) ->
+        if !config_rules.immutable_unchanged(config, proposed) {
+          fail @"governance_rules: immutable config fields must not change"
+        } else if !config_rules.invariants_hold(proposed) {
+          fail @"governance_rules: proposed config breaks the invariants"
+        } else {
+          True
+        }
+      _ -> fail @"governance_rules: only config proposals are supported"
+    }
   }
 }
 
@@ -380,35 +385,41 @@ fn config_spent_input(state_nft_policy: PolicyId, self: Transaction) -> Input {
 /// (ADR 0009 §1, §6). The config box is spent, not referenced, so the live
 /// config comes from that input. The config validator owns the write gate —
 /// timelock, immutable fields, invariants — so governance only requires that
-/// the write happened and records the status change.
+/// the write happened and records the status change. The project kinds get their
+/// execution with the treasury rules (spec §7).
 pub fn execute(
   state_nft_policy: PolicyId,
   own_ref: OutputReference,
   self: Transaction,
 ) -> Bool {
   let old = datum_of(spent_input(own_ref, self).output)
-  let config_input = config_spent_input(state_nft_policy, self)
-  expect config: ConfigDatum = inline_datum(config_input.output)
-  let new = returned_proposal(config, old.id, self)
-  let written = config_rules.returned_config(
-    state_nft_policy,
-    config_input,
-    self,
-  )
-  if old.status != Passed {
-    fail @"governance_rules: execute requires a passed proposal"
-  } else if !keep_proposal(old, new) {
-    fail @"governance_rules: execute must preserve the proposal identity"
-  } else if !counters_unchanged(old, new) {
-    fail @"governance_rules: execute must not touch the vote counters"
-  } else if new.finalized_at != old.finalized_at {
-    fail @"governance_rules: execute must not touch the finalize time"
-  } else if new.status != Executed {
-    fail @"governance_rules: execute must mark the proposal executed"
-  } else if written != old.proposed_config {
-    fail @"governance_rules: execute must write the proposed config"
-  } else {
-    True
+  when old.payload is {
+    Config(proposed) -> {
+      let config_input = config_spent_input(state_nft_policy, self)
+      expect config: ConfigDatum = inline_datum(config_input.output)
+      let new = returned_proposal(config, old.id, self)
+      let written = config_rules.returned_config(
+        state_nft_policy,
+        config_input,
+        self,
+      )
+      if old.status != Passed {
+        fail @"governance_rules: execute requires a passed proposal"
+      } else if !keep_proposal(old, new) {
+        fail @"governance_rules: execute must preserve the proposal identity"
+      } else if !counters_unchanged(old, new) {
+        fail @"governance_rules: execute must not touch the vote counters"
+      } else if new.finalized_at != old.finalized_at {
+        fail @"governance_rules: execute must not touch the finalize time"
+      } else if new.status != Executed {
+        fail @"governance_rules: execute must mark the proposal executed"
+      } else if written != proposed {
+        fail @"governance_rules: execute must write the proposed config"
+      } else {
+        True
+      }
+    }
+    _ -> fail @"governance_rules: only config execution is supported"
   }
 }
 
@@ -419,8 +430,7 @@ pub fn keep_proposal(old: ProposalDatum, new: ProposalDatum) -> Bool {
   and {
     new.id == old.id,
     new.proposer == old.proposer,
-    new.kind == old.kind,
-    new.proposed_config == old.proposed_config,
+    new.payload == old.payload,
     new.eligible_leaves == old.eligible_leaves,
     new.start == old.start,
     new.end == old.end,

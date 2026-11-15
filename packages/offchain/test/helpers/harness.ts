@@ -27,9 +27,11 @@ import { compiledValidator } from "../../src/blueprint";
  */
 
 export const STATE_ASSET_NAME = "STATE";
+export const POOL_ASSET_NAME = "POOL";
 export const CONFIG_MIN_LOVELACE = 5_000_000n;
 export const KYC_MIN_LOVELACE = 3_000_000n;
 export const MEMBER_MIN_LOVELACE = 3_000_000n;
+export const POOL_MIN_LOVELACE = 5_000_000n;
 const SEED_LOVELACE = 12_345_678n;
 
 export type Actors = {
@@ -220,8 +222,27 @@ export function ballotScript(stateNftPolicy: string): Script {
   };
 }
 
+/**
+ * The treasury stub (ADR 0010 §1). The rules land in the treasury tickets; the
+ * script is parameterized by the state NFT policy already, so only its body
+ * changes and every derived hash follows.
+ */
+function treasuryScript(stateNftPolicy: string): Script {
+  return {
+    type: "PlutusV3",
+    script: applyParamsToScript(
+      compiledValidator("treasury.treasury.else").compiledCode,
+      [castTo(stateNftPolicy, Data.Bytes())],
+    ),
+  };
+}
+
 export function stateUnit(stateNftPolicy: string): string {
   return stateNftPolicy + Buffer.from(STATE_ASSET_NAME).toString("hex");
+}
+
+export function poolUnit(stateNftPolicy: string): string {
+  return stateNftPolicy + Buffer.from(POOL_ASSET_NAME).toString("hex");
 }
 
 const credential = Data.Object({ VerificationKey: Data.Bytes() });
@@ -308,6 +329,16 @@ export function configDatum(
   return encode(configDatumFields(roles, config, policies), configDatumSchema);
 }
 
+const poolDatumSchema = Data.Object({
+  balance: Data.Integer(),
+  committed: Data.Integer(),
+});
+
+/** The pool opens empty: the first attestation funds it (ADR 0010 §8). */
+export function poolDatum(balance: bigint, committed: bigint): string {
+  return encode({ balance, committed }, poolDatumSchema);
+}
+
 /**
  * Creates the one-shot seed and resolves it by transaction hash. The wallet's
  * other UTxOs are unordered and shared with later tests, so they are not a seed.
@@ -350,13 +381,19 @@ export type Genesis = {
   ballotValidator: Script;
   ballotPolicy: string;
   ballotAddress: string;
-  datum: string;
+  treasuryValidator: Script;
+  treasuryPolicy: string;
+  treasuryAddress: string;
+  configDatum: string;
   configUtxo: UTxO;
+  poolDatum: string;
+  poolUtxo: UTxO;
 };
 
 /**
- * One transaction: spend the seed, mint one STATE, create the config box.
- * Not a board action — genesis is deployer-trusted (ADR 0008 §5).
+ * One transaction: spend the seed, mint one STATE and one POOL, create the
+ * config box and the pool box. Not a board action — genesis is
+ * deployer-trusted (ADR 0008 §5, ADR 0010 §8).
  */
 export async function genesis(
   ledger: Ledger,
@@ -383,7 +420,10 @@ export async function genesis(
   const ballotValidator = ballotScript(stateNftPolicy);
   const ballotPolicy = validatorToScriptHash(ballotValidator);
   const ballotAddress = validatorToAddress("Custom", ballotValidator);
-  const datum = configDatum(roles, config, {
+  const treasuryValidator = treasuryScript(stateNftPolicy);
+  const treasuryPolicy = validatorToScriptHash(treasuryValidator);
+  const treasuryAddress = validatorToAddress("Custom", treasuryValidator);
+  const config_datum = configDatum(roles, config, {
     membership: membershipPolicy,
     kyc: kycPolicy,
     bank: bankPolicy,
@@ -391,22 +431,32 @@ export async function genesis(
     ballot: ballotPolicy,
   });
   const unit = stateUnit(stateNftPolicy);
+  const pool_datum = poolDatum(0n, 0n);
 
   const tx = await lucid
     .newTx()
     .collectFrom([seed])
     .attach.MintingPolicy(stateNft)
-    .mintAssets({ [unit]: 1n }, Data.void())
+    .mintAssets(
+      { [unit]: 1n, [poolUnit(stateNftPolicy)]: 1n },
+      Data.void(),
+    )
     .pay.ToAddressWithData(
       configAddress,
-      { kind: "inline", value: datum },
+      { kind: "inline", value: config_datum },
       { lovelace: CONFIG_MIN_LOVELACE, [unit]: 1n },
+    )
+    .pay.ToAddressWithData(
+      treasuryAddress,
+      { kind: "inline", value: pool_datum },
+      { lovelace: POOL_MIN_LOVELACE, [poolUnit(stateNftPolicy)]: 1n },
     )
     .complete();
   await submitTx(tx);
   emulator.awaitBlock(1);
 
   const configUtxo = await lucid.utxoByUnit(unit);
+  const poolUtxo = await lucid.utxoByUnit(poolUnit(stateNftPolicy));
   return {
     seed,
     stateNft,
@@ -428,8 +478,13 @@ export async function genesis(
     ballotValidator,
     ballotPolicy,
     ballotAddress,
-    datum,
+    treasuryValidator,
+    treasuryPolicy,
+    treasuryAddress,
+    configDatum: config_datum,
     configUtxo,
+    poolDatum: pool_datum,
+    poolUtxo,
   };
 }
 

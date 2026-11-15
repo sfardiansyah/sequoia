@@ -7,8 +7,9 @@ use cardano/transaction.{
 }
 use sequoia/governance_rules
 use sequoia/types.{
-  Active, Config, ConfigDatum, Executed, Inactive, KycDatum, MemberDatum, No,
-  Open, Passed, ProposalDatum, Rejected, Standard, VoteDatum, Yes,
+  Active, Config, ConfigDatum, Executed, Inactive, KycDatum, MemberDatum,
+  Milestone, No, Open, Passed, Project, ProjectSpec, ProposalDatum, Rejected,
+  Standard, VoteDatum, Yes,
 }
 use sequoia/voting
 
@@ -178,8 +179,7 @@ fn proposal_datum() -> ProposalDatum {
   ProposalDatum {
     id: proposal_id,
     proposer: owner_a,
-    kind: Config,
-    proposed_config: config(),
+    payload: Config(config()),
     eligible_leaves: [leaf_a, leaf_b],
     start: joined_at,
     end,
@@ -365,7 +365,7 @@ test create_proposal_rejects_an_immutable_config_change() fail {
     create_tx(
       ProposalDatum {
         ..proposal_datum(),
-        proposed_config: ConfigDatum { ..config(), network: 1 },
+        payload: Config(ConfigDatum { ..config(), network: 1 }),
       },
     ),
   )
@@ -378,7 +378,26 @@ test create_proposal_rejects_a_config_that_breaks_an_invariant() fail {
     create_tx(
       ProposalDatum {
         ..proposal_datum(),
-        proposed_config: ConfigDatum { ..config(), member_capital_bps: 6_000 },
+        payload: Config(ConfigDatum { ..config(), member_capital_bps: 6_000 }),
+      },
+    ),
+  )
+}
+
+test create_proposal_rejects_a_non_config_payload() fail {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(
+      ProposalDatum {
+        ..proposal_datum(),
+        payload: Project(
+          ProjectSpec {
+            recipient_commitment: leaf_a,
+            deadline: joined_at + 1_000_000,
+            milestones: [Milestone { amount: 1, evidence_commitment: leaf_a }],
+          },
+        ),
       },
     ),
   )
@@ -430,7 +449,7 @@ test keep_proposal_rejects_changed_identity() {
       old,
       ProposalDatum {
         ..old,
-        proposed_config: ConfigDatum { ..config(), annual_amount: 2_000_000 },
+        payload: Config(ConfigDatum { ..config(), annual_amount: 2_000_000 }),
       },
     ),
     !governance_rules.keep_proposal(
@@ -610,7 +629,7 @@ test cast_rejects_a_changed_proposed_config() fail {
   let new = ProposalDatum {
     ..old,
     nullifiers: [nullifier_a],
-    proposed_config: ConfigDatum { ..config(), annual_amount: 2_000_000 },
+    payload: Config(ConfigDatum { ..config(), annual_amount: 2_000_000 }),
   }
   governance_rules.cast(
     config(),
@@ -1138,11 +1157,9 @@ test discard_rejects_a_reveal_pairing() fail {
 test finalize_uses_the_live_config_not_the_proposed_config() {
   let old = ProposalDatum {
     ..proposal_datum(),
-    proposed_config: ConfigDatum {
-      ..config(),
-      quorum_bps: 1,
-      structural_threshold_bps: 1,
-    },
+    payload: Config(
+      ConfigDatum { ..config(), quorum_bps: 1, structural_threshold_bps: 1 },
+    ),
     eligible_leaves: [leaf_a, leaf_b, leaf_a, leaf_b, leaf_a],
     nullifiers: [nullifier_a, nullifier_b],
     tallied: 2,
@@ -1164,11 +1181,13 @@ fn passed_proposal() -> ProposalDatum {
   let datum = proposal_datum()
   ProposalDatum {
     ..datum,
-    proposed_config: ConfigDatum {
-      ..config(),
-      contribution_year: 2027,
-      annual_amount: 2_000_000,
-    },
+    payload: Config(
+      ConfigDatum {
+        ..config(),
+        contribution_year: 2027,
+        annual_amount: 2_000_000,
+      },
+    ),
     nullifiers: [nullifier_a, nullifier_b],
     tallied: 2,
     yes: 2,
@@ -1212,8 +1231,13 @@ fn execute_tx(
   }
 }
 
+fn proposed_config_datum(datum: ProposalDatum) -> ConfigDatum {
+  expect Config(proposed) = datum.payload
+  proposed
+}
+
 fn execute_outputs(old: ProposalDatum) -> List<Output> {
-  [config_output(old.proposed_config)]
+  [config_output(proposed_config_datum(old))]
 }
 
 test execute_accepts_a_passed_proposal() {
@@ -1295,7 +1319,7 @@ test execute_rejects_a_config_output_at_another_address() fail {
         Output {
           address: from_script(governance_policy_id),
           value: assets.from_asset(state_policy_id, "STATE", 1),
-          datum: InlineDatum(old.proposed_config),
+          datum: InlineDatum(proposed_config_datum(old)),
           reference_script: None,
         },
       ],
@@ -1332,7 +1356,7 @@ test execute_rejects_a_changed_proposed_config() fail {
   let new = ProposalDatum {
     ..old,
     status: Executed,
-    proposed_config: ConfigDatum { ..config(), annual_amount: 4_000_000 },
+    payload: Config(ConfigDatum { ..config(), annual_amount: 4_000_000 }),
   }
   governance_rules.execute(
     state_policy_id,

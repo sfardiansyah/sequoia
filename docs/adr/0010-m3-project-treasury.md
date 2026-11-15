@@ -78,18 +78,16 @@ is visible off chain and gives nobody new power.
 `ProposalDatum` carries a kind-tagged payload instead of a mandatory config:
 
 ```aiken
-pub type ProposalKind {
-  Config
-  Project
-  CancelProject
-}
-
 pub type ProposalPayload {
   Config(ConfigDatum)
   Project(ProjectSpec)
   Cancel(AssetName)      // the target project id
 }
 ```
+
+The payload's constructor is the kind. A separate `ProposalKind` enum would put
+`Config` and `Project` constructors twice in one Aiken module namespace, so every
+kind-sensitive rule matches on the payload instead.
 
 - `Finalize` selects `structural_threshold_bps` (`6667`) for `Config` and
   `project_threshold_bps` (`5001`) for `Project` and `CancelProject`. Quorum is
@@ -119,9 +117,12 @@ pub type ProjectDatum {
   project_id: AssetName,              // == the proposal id, PROJECT NFT name
   spec: ProjectSpec,
   next_milestone: Int,
-  status: ProjectStatus,              // Open | Closed | Cancelled
+  status: ProjectStatus,              // ProjectOpen | ProjectClosed | ProjectCancelled
 }
 ```
+
+`ProjectStatus` carries its type's prefix on each constructor: Aiken constructors
+share their module's namespace with `ProposalStatus.Open`.
 
 - **No `budget` and no `spent`.** The budget is the sum of the milestone
   amounts, and spending is the sum of the consumed milestones. One source of
@@ -156,9 +157,9 @@ the balance could inflate the pool and approve unfundable projects.
 ### 6. Close, deadline, and cancel
 
 ```text
-created ──▶ Open ──tranche (last milestone)──▶ Closed
-              ├──────CloseProject────────────▶ Closed
-              └──────CancelProject───────────▶ Cancelled
+created ──▶ ProjectOpen ──tranche (last milestone)──▶ ProjectClosed
+              ├──────CloseProject──────────────────────▶ ProjectClosed
+              └──────CancelProject─────────────────────▶ ProjectCancelled
 ```
 
 - **Auto-close on full spend.** The tranche that consumes the last milestone
@@ -170,8 +171,8 @@ created ──▶ Open ──tranche (last milestone)──▶ Closed
   stalled board cannot lock it.
 - **Cancel is a proposal.** `CancelProject` carries a project id, uses the
   project threshold and no timelock, and executes only against an open project.
-  It closes the project as `Cancelled` and returns the remainder. The vote is
-  the authority, so the treasury side needs no board signature.
+  It closes the project as `ProjectCancelled` and returns the remainder. The
+  vote is the authority, so the treasury side needs no board signature.
 - **No cancel for `Config`.** The M2 reasoning stands: there is no pre-vote
   window in which cancelling is safe, and an unwanted config proposal is
   rejected at finalize (ADR 0009 §1).

@@ -102,10 +102,12 @@ pub type ProjectSpec {
   milestones: List<Milestone>,        // non-empty, ordered
 }
 
+// Aiken constructors share their module's namespace with `ProposalStatus.Open`,
+// so the project states carry their type's prefix.
 pub type ProjectStatus {
-  Open
-  Closed
-  Cancelled
+  ProjectOpen
+  ProjectClosed
+  ProjectCancelled
 }
 
 pub type ProjectDatum {
@@ -115,18 +117,17 @@ pub type ProjectDatum {
   status: ProjectStatus,
 }
 
-pub type ProposalKind {
-  Config
-  Project
-  CancelProject
-}
-
 pub type ProposalPayload {
   Config(ConfigDatum)
   Project(ProjectSpec)
   Cancel(AssetName)                   // the target project id
 }
 ```
+
+The payload constructor is the kind. Aiken constructors share their module's
+namespace, so a separate `ProposalKind` with `Config`/`Project` constructors
+cannot coexist with this payload; every rule that needs the kind matches on the
+payload instead.
 
 `ProposalDatum` replaces `proposed_config` with `payload: ProposalPayload`; its
 other fields are unchanged from M2.
@@ -196,32 +197,33 @@ input holding one `PROJECT` token at this script.
 
 - **SpendTranche** (spend one project box and the pool box).
   Redeemer `SpendTranche { evidence_hash, bank_ref_hash }`.
-  `status = Open`, `next_milestone < length(milestones)`, and
+  `status = ProjectOpen`, `next_milestone < length(milestones)`, and
   `amount = milestones[next_milestone].amount`; `evidence_hash` equals that
   milestone's `evidence_commitment`; `upper_bound <= deadline`;
   `amount <= balance`; `bank_ref_hash` is non-empty; `board_threshold` board keys
   sign and the treasurer signs. Effects: the project datum's `next_milestone`
-  becomes `+1`, and its status becomes `Closed` when it was the last milestone;
-  the pool datum becomes `balance - amount` and `committed - amount`. Both
-  tokens are held exactly once after the transaction. The spec and id are
+  becomes `+1`, and its status becomes `ProjectClosed` when it was the last
+  milestone; the pool datum becomes `balance - amount` and `committed - amount`.
+  Both tokens are held exactly once after the transaction. The spec and id are
   byte-identical.
 
 - **CloseProject** (spend one project box and the pool box).
-  Redeemer `CloseProject`. `status = Open`. Before the deadline the board
+  Redeemer `CloseProject`. `status = ProjectOpen`. Before the deadline the board
   threshold signs; from `lower_bound >= deadline` no signature is required.
-  Effects: `status = Closed`; `committed - remaining`; the balance is unchanged.
+  Effects: `status = ProjectClosed`; `committed - remaining`; the balance is
+  unchanged.
   The spec and `next_milestone` are byte-identical.
 
 - **CancelProject** (spend one project box, the pool box, and the proposal).
   Redeemer `CancelProject`. The transaction spends a governance proposal box
   whose datum is `Passed`, whose payload is `Cancel(project_id)`, and whose
-  output datum is `Executed`; the project is `Open`. No board signature is
+  output datum is `Executed`; the project is `ProjectOpen`. No board signature is
   required: the vote is the authority. Effects are `CloseProject`'s with
-  `status = Cancelled`.
+  `status = ProjectCancelled`.
 
 - **Mint `PROJECT`** (mint purpose). Paired with governance `Execute` on a
   passed `Project` proposal: exactly one token named the proposal id, the
-  project box at this script with `next_milestone = 0` and `Open`, the spec
+  project box at this script with `next_milestone = 0` and `ProjectOpen`, the spec
   equal to the proposal payload, and the reserve satisfied
   (`committed + budget <= balance`, committed raised by `budget`).
 
@@ -238,7 +240,7 @@ input holding one `PROJECT` token at this script.
   - `Project`: a non-empty milestone list, every amount `> 0`, 32-byte recipient
     and evidence commitments, and `deadline > reveal_end`.
   - `CancelProject`: a 32-byte project id, and the project box read as a
-    reference input with `status = Open`.
+    reference input with `status = ProjectOpen`.
 
 - **Finalize** selects the threshold by kind: `structural_threshold_bps` for
   `Config`, `project_threshold_bps` for `Project` and `CancelProject`. Quorum,

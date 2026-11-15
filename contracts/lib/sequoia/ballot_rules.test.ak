@@ -118,8 +118,7 @@ fn proposal_datum() -> ProposalDatum {
   ProposalDatum {
     id: proposal_id,
     proposer: owner_a,
-    kind: Config,
-    proposed_config: config(),
+    payload: Config(config()),
     eligible_leaves: [leaf_a, leaf_b],
     start,
     end,

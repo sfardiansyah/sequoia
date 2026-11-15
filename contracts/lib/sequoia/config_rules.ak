@@ -71,7 +71,7 @@ fn passed_proposal(config: ConfigDatum, self: Transaction) -> ProposalDatum {
 }
 
 /// The config box's only spend: a passed `Config` proposal, after the timelock,
-/// writes its `proposed_config` (ADR 0009 §4, §8). The governance validator
+/// writes its payload's config (ADR 0009 §4, §8). The governance validator
 /// records the status change and requires this write; the timelock, immutability,
 /// and invariant checks live here, where the config is written.
 pub fn execute(
@@ -89,19 +89,23 @@ pub fn execute(
     fail @"config_rules: the executed config breaks the invariants"
   } else if proposal.status != Passed {
     fail @"config_rules: only a passed proposal can execute"
-  } else if proposal.kind != Config {
-    fail @"config_rules: only a config proposal can execute the config"
-  } else if proposal.proposed_config != new {
-    fail @"config_rules: the executed config must be the proposed config"
   } else {
-    expect Some(finalized_at) = proposal.finalized_at
-    if !voting.not_before(
-      lower_bound(self),
-      voting.timelock_end(finalized_at, old.timelock_days),
-    ) {
-      fail @"config_rules: the timelock has not elapsed"
-    } else {
-      True
+    when proposal.payload is {
+      Config(proposed) ->
+        if proposed != new {
+          fail @"config_rules: the executed config must be the proposed config"
+        } else {
+          expect Some(finalized_at) = proposal.finalized_at
+          if !voting.not_before(
+            lower_bound(self),
+            voting.timelock_end(finalized_at, old.timelock_days),
+          ) {
+            fail @"config_rules: the timelock has not elapsed"
+          } else {
+            True
+          }
+        }
+      _ -> fail @"config_rules: only a config proposal can execute the config"
     }
   }
 }

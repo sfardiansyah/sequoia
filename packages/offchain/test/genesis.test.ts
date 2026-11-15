@@ -2,11 +2,13 @@ import { beforeAll, describe, expect, test } from "bun:test";
 import { Data, getAddressDetails, validatorToScriptHash } from "@lucid-evolution/lucid";
 import {
   CONFIG_MIN_LOVELACE,
+  POOL_MIN_LOVELACE,
   createSeed,
   expectRejected,
   genesis,
   testLedger,
   testConfig,
+  poolUnit,
   stateNftScript,
   stateUnit,
   submitTx,
@@ -16,7 +18,7 @@ import {
 
 const config = testConfig();
 
-describe("state NFT and config genesis", () => {
+describe("state NFT, config, and pool genesis", () => {
   let ledger: Ledger;
   let m1: Genesis;
 
@@ -35,7 +37,20 @@ describe("state NFT and config genesis", () => {
       [stateUnit(m1.stateNftPolicy)]: 1n,
     });
     expect(box.scriptRef).toBeUndefined();
-    expect(box.datum?.replace(/^0x/, "")).toBe(m1.datum);
+    expect(box.datum?.replace(/^0x/, "")).toBe(m1.configDatum);
+  });
+
+  test("genesis creates exactly one pool box holding one POOL and an empty pool", async () => {
+    const boxes = await ledger.lucid.utxosAt(m1.treasuryAddress);
+
+    expect(boxes).toHaveLength(1);
+    const box = boxes[0]!;
+    expect(box.assets).toEqual({
+      lovelace: POOL_MIN_LOVELACE,
+      [poolUnit(m1.stateNftPolicy)]: 1n,
+    });
+    expect(box.datum?.replace(/^0x/, "")).toBe(m1.poolDatum);
+    expect(Data.from(box.datum!)).toEqual({ index: 0, fields: [0n, 0n] });
   });
 
   test("the config datum follows the ADR 0009 config v2 field order", async () => {
@@ -85,6 +100,14 @@ describe("state NFT and config genesis", () => {
     );
   });
 
+  test("the pool box sits at the treasury script", () => {
+    expect(validatorToScriptHash(m1.treasuryValidator)).toBe(m1.treasuryPolicy);
+    expect(getAddressDetails(m1.treasuryAddress).paymentCredential?.hash).toBe(
+      m1.treasuryPolicy,
+    );
+    expect(m1.poolUtxo.assets[poolUnit(m1.stateNftPolicy)]).toBe(1n);
+  });
+
   test("the seed is spent by genesis", async () => {
     const utxos = await ledger.lucid.utxosAt(await ledger.lucid.wallet().address());
     const seedStillThere = utxos.some(
@@ -95,12 +118,83 @@ describe("state NFT and config genesis", () => {
 
   test("a second mint with the same policy fails", async () => {
     const unit = stateUnit(m1.stateNftPolicy);
+    const pool = poolUnit(m1.stateNftPolicy);
 
     const failure = await expectRejected(async () => {
       const tx = await ledger.lucid
         .newTx()
         .attach.MintingPolicy(m1.stateNft)
-        .mintAssets({ [unit]: 1n }, Data.void())
+        .mintAssets({ [unit]: 1n, [pool]: 1n }, Data.void())
+        .complete();
+      await submitTx(tx);
+    });
+
+    expect(failure).toBeInstanceOf(Error);
+  });
+
+  test("minting one STATE and two POOL fails", async () => {
+    const seed = await createSeed(ledger);
+    const stateNft = stateNftScript(seed);
+    const policy = validatorToScriptHash(stateNft);
+
+    const failure = await expectRejected(async () => {
+      const tx = await ledger.lucid
+        .newTx()
+        .collectFrom([seed])
+        .attach.MintingPolicy(stateNft)
+        .mintAssets(
+          { [stateUnit(policy)]: 1n, [poolUnit(policy)]: 2n },
+          Data.void(),
+        )
+        .complete();
+      await submitTx(tx);
+    });
+
+    expect(failure).toBeInstanceOf(Error);
+  });
+
+  test("minting without spending the seed fails", async () => {
+    const seed = await createSeed(ledger);
+    const stateNft = stateNftScript(seed);
+    const policy = validatorToScriptHash(stateNft);
+
+    const failure = await expectRejected(async () => {
+      const tx = await ledger.lucid
+        .newTx()
+        .attach.MintingPolicy(stateNft)
+        .mintAssets(
+          { [stateUnit(policy)]: 1n, [poolUnit(policy)]: 1n },
+          Data.void(),
+        )
+        .complete();
+      await submitTx(tx);
+    });
+
+    expect(failure).toBeInstanceOf(Error);
+  });
+
+  // One unit cannot sit in two outputs, so the mint-amount rule rejects this
+  // before the output count can: the split is impossible, not merely invalid.
+  test("splitting two STATE across two outputs fails", async () => {
+    const seed = await createSeed(ledger);
+    const stateNft = stateNftScript(seed);
+    const policy = validatorToScriptHash(stateNft);
+    const address = await ledger.lucid.wallet().address();
+
+    const failure = await expectRejected(async () => {
+      const tx = await ledger.lucid
+        .newTx()
+        .collectFrom([seed])
+        .attach.MintingPolicy(stateNft)
+        .mintAssets(
+          { [stateUnit(policy)]: 2n, [poolUnit(policy)]: 1n },
+          Data.void(),
+        )
+        .pay.ToAddress(address, { [stateUnit(policy)]: 1n })
+        .pay.ToAddress(address, {
+          [stateUnit(policy)]: 1n,
+          [poolUnit(policy)]: 1n,
+        })
         .complete();
       await submitTx(tx);
     });
@@ -134,7 +228,7 @@ describe("state NFT and config genesis", () => {
         .attach.SpendingValidator(m1.configValidator)
         .pay.ToContract(
           m1.configAddress,
-          { kind: "inline", value: m1.datum },
+          { kind: "inline", value: m1.configDatum },
           m1.configUtxo.assets,
         )
         .complete();

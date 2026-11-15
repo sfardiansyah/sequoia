@@ -16,13 +16,34 @@ import {
 /** Minimum ADA the proposal box holds; datum order mirrors types.ak. */
 export const PROPOSAL_MIN_LOVELACE = 5_000_000n;
 
+const milestoneSchema = Data.Object({
+  amount: Data.Integer(),
+  evidence_commitment: Data.Bytes(),
+});
+
+const projectSpecSchema = Data.Object({
+  recipient_commitment: Data.Bytes(),
+  deadline: Data.Integer(),
+  milestones: Data.Array(milestoneSchema),
+});
+
+/**
+ * Mirrors `ProposalPayload` in types.ak: the constructor is the kind, and each
+ * variant carries exactly one nested value. Lucid's `Data.Enum` inlines an
+ * object variant's fields into the constructor, so a single-field variant wraps
+ * its value in a one-item `Data.Tuple` to keep the nesting: `Config` encodes as
+ * `Constr(0, [Constr(0, configFields)])`.
+ */
+const proposalPayloadSchema = Data.Enum([
+  Data.Object({ Config: Data.Tuple([configDatumSchema]) }),
+  Data.Object({ Project: Data.Tuple([projectSpecSchema]) }),
+  Data.Object({ Cancel: Data.Tuple([Data.Bytes()]) }),
+]);
+
 const proposalDatumSchema = Data.Object({
   id: Data.Bytes(),
   proposer: Data.Bytes(),
-  // Lucid's Data.Enum needs at least two literals; `Config` is index 0 and the
-  // only kind M2 accepts.
-  kind: Data.Enum([Data.Literal("Config"), Data.Literal("Unused")]),
-  proposed_config: configDatumSchema,
+  payload: proposalPayloadSchema,
   eligible_leaves: Data.Array(Data.Bytes()),
   start: Data.Integer(),
   end: Data.Integer(),
@@ -63,8 +84,7 @@ export function proposalDatum(
     {
       id: terms.id,
       proposer: terms.proposer,
-      kind: "Config",
-      proposed_config: configDatumFields(roles, config, policies),
+      payload: { Config: [configDatumFields(roles, config, policies)] },
       eligible_leaves: terms.leaves,
       start: terms.start,
       end,
@@ -126,20 +146,20 @@ function proposalConstr(datum: string): ProposalConstr {
 
 export function decodeProposalDatum(datum: string): ProposalFields {
   const { fields } = proposalConstr(datum);
-  const status = fields[14] as { index: number };
-  const finalizedAt = fields[15] as { index: number; fields: unknown[] };
+  const status = fields[13] as { index: number };
+  const finalizedAt = fields[14] as { index: number; fields: unknown[] };
   return {
     id: fields[0] as string,
-    eligible_leaves: fields[4] as string[],
-    start: fields[5] as bigint,
-    end: fields[6] as bigint,
-    reveal_end: fields[7] as bigint,
-    nullifiers: fields[8] as string[],
-    discarded: fields[9] as bigint,
-    tallied: fields[10] as bigint,
-    yes: fields[11] as bigint,
-    no: fields[12] as bigint,
-    abstain: fields[13] as bigint,
+    eligible_leaves: fields[3] as string[],
+    start: fields[4] as bigint,
+    end: fields[5] as bigint,
+    reveal_end: fields[6] as bigint,
+    nullifiers: fields[7] as string[],
+    discarded: fields[8] as bigint,
+    tallied: fields[9] as bigint,
+    yes: fields[10] as bigint,
+    no: fields[11] as bigint,
+    abstain: fields[12] as bigint,
     status: STATUS_BY_INDEX[status.index]!,
     finalizedAt: finalizedAt.index === 0 ? (finalizedAt.fields[0] as bigint) : null,
   };
@@ -153,7 +173,7 @@ function reencodeProposal(constr: ProposalConstr, fields: unknown[]): string {
 export function withNullifier(datum: string, nullifier: string): string {
   const constr = proposalConstr(datum);
   const fields = [...constr.fields];
-  fields[8] = [...(fields[8] as string[]), nullifier];
+  fields[7] = [...(fields[7] as string[]), nullifier];
   return reencodeProposal(constr, fields);
 }
 
@@ -161,7 +181,7 @@ export function withNullifier(datum: string, nullifier: string): string {
 export function withDiscarded(datum: string): string {
   const constr = proposalConstr(datum);
   const fields = [...constr.fields];
-  fields[9] = (fields[9] as bigint) + 1n;
+  fields[8] = (fields[8] as bigint) + 1n;
   return reencodeProposal(constr, fields);
 }
 
@@ -176,10 +196,10 @@ export type TallyCounts = {
 export function withTally(datum: string, counts: TallyCounts): string {
   const constr = proposalConstr(datum);
   const fields = [...constr.fields];
-  fields[10] = (fields[10] as bigint) + counts.count;
-  fields[11] = (fields[11] as bigint) + counts.yes;
-  fields[12] = (fields[12] as bigint) + counts.no;
-  fields[13] = (fields[13] as bigint) + counts.abstain;
+  fields[9] = (fields[9] as bigint) + counts.count;
+  fields[10] = (fields[10] as bigint) + counts.yes;
+  fields[11] = (fields[11] as bigint) + counts.no;
+  fields[12] = (fields[12] as bigint) + counts.abstain;
   return reencodeProposal(constr, fields);
 }
 
@@ -191,8 +211,8 @@ export function withFinalized(
 ): string {
   const constr = proposalConstr(datum);
   const fields = [...constr.fields];
-  fields[14] = new Constr(STATUS_INDEX[status], []);
-  fields[15] = new Constr(0, [finalizedAt]);
+  fields[13] = new Constr(STATUS_INDEX[status], []);
+  fields[14] = new Constr(0, [finalizedAt]);
   return reencodeProposal(constr, fields);
 }
 
@@ -200,13 +220,15 @@ export function withFinalized(
 export function withExecuted(datum: string): string {
   const constr = proposalConstr(datum);
   const fields = [...constr.fields];
-  fields[14] = new Constr(STATUS_INDEX.Executed, []);
+  fields[13] = new Constr(STATUS_INDEX.Executed, []);
   return reencodeProposal(constr, fields);
 }
 
-/** The proposed config datum, re-encoded for the config output at execute. */
-export function proposedConfigDatum(datum: string): string {
-  return Data.to(proposalConstr(datum).fields[3] as never);
+/** The config a `Config` proposal carries, re-encoded for the config output. */
+export function payloadConfigDatum(datum: string): string {
+  const payload = proposalConstr(datum).fields[2] as ProposalConstr;
+  if (payload.index !== 0) throw new Error("proposal payload is not Config");
+  return Data.to(payload.fields[0] as never);
 }
 
 /** The proposer's wallet must be selected; the board co-signs. */

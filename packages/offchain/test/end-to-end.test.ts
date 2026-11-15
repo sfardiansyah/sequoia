@@ -189,7 +189,7 @@ describe("M2 end to end", () => {
       lovelace: CONFIG_MIN_LOVELACE,
       [stateUnit(m1.stateNftPolicy)]: 1n,
     });
-    expect(configBoxes[0]!.datum?.replace(/^0x/, "")).toBe(m1.datum);
+    expect(configBoxes[0]!.datum?.replace(/^0x/, "")).toBe(m1.configDatum);
   });
 
   test("a non-board signer cannot join", async () => {

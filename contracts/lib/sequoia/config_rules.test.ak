@@ -6,7 +6,8 @@ use cardano/transaction.{
 }
 use sequoia/config_rules
 use sequoia/types.{
-  Config, ConfigDatum, Open, Passed, ProposalDatum, Rejected, state_asset_name,
+  Config, ConfigDatum, Milestone, Open, Passed, Project, ProjectSpec,
+  ProposalDatum, Rejected, state_asset_name,
 }
 use sequoia/voting
 
@@ -259,8 +260,7 @@ fn passed_proposal() -> ProposalDatum {
   ProposalDatum {
     id: proposal_id,
     proposer: issuer,
-    kind: Config,
-    proposed_config: proposed_config(),
+    payload: Config(proposed_config()),
     eligible_leaves: [leaf_a],
     start: finalized_at - 100_000,
     end: finalized_at - 50_000,
@@ -477,6 +477,29 @@ test execute_rejects_two_proposals() fail {
     ],
   }
   config_rules.execute(state_policy_id, ref(0), tx)
+}
+
+test execute_rejects_a_non_config_payload() fail {
+  let proposal = ProposalDatum {
+    ..passed_proposal(),
+    payload: Project(
+      ProjectSpec {
+        recipient_commitment: leaf_a,
+        deadline: finalized_at + 100_000,
+        milestones: [Milestone { amount: 1, evidence_commitment: leaf_a }],
+      },
+    ),
+  }
+  config_rules.execute(
+    state_policy_id,
+    ref(0),
+    execute_tx(
+      proposed_config(),
+      proposal,
+      timelock_end(),
+      timelock_end() + 1_000,
+    ),
+  )
 }
 
 test execute_rejects_a_passed_proposal_without_a_finalize_time() fail {

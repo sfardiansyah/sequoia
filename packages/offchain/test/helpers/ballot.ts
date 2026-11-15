@@ -18,7 +18,7 @@ import {
 import {
   decodeProposalDatum,
   proposalUnit,
-  proposedConfigDatum,
+  payloadConfigDatum,
   withDiscarded,
   withExecuted,
   withFinalized,
@@ -424,7 +424,7 @@ export async function executeProposal(
       m1.configAddress,
       {
         kind: "inline",
-        value: options.configDatum ?? proposedConfigDatum(proposalBox.datum!),
+        value: options.configDatum ?? payloadConfigDatum(proposalBox.datum!),
       },
       configBox.assets,
     )
