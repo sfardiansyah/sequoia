@@ -8,8 +8,10 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-M1 — Aiken config and membership — is complete (ADR 0008, GitHub milestone
-`M1: Config + Membership`). Next: **M2 — governance** (ADR 0004).
+M1 — Aiken config and membership — and M2 — governance — are complete (ADR
+0008, ADR 0009; GitHub milestones `M1: Config + Membership` and
+`M2: Governance`). Next: **M3 — treasury** (ADR 0010,
+`docs/plan/m3-treasury.md`).
 
 Implemented:
 

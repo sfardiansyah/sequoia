@@ -63,7 +63,7 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-11-14
+### Current implementation handoff — 2026-11-15
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
@@ -78,15 +78,18 @@ The co-op is a member-owned organization that:
 PostgreSQL rows are provisional, not the co-op ledger (ADR 0004's pilot
 exception).
 
-**Next milestone:** M3 — treasury and project spending (ADR 0004). M1 and M2
-are complete. The `M1: Config + Membership` milestone (issues #17–#26) delivered
-the state NFT, config, KYC attestations, bank proofs, membership
-join/transfer/contribution, and one Lucid emulator suite. The
+**Next milestone:** M3 — treasury and project spending (ADR 0004). The M3 spec
+is `docs/plan/m3-treasury.md`, the decisions are ADR 0010, and the tickets are
+issues #34–#41. M1 and M2 are complete. The `M1: Config + Membership` milestone
+(issues #17–#26) delivered the state NFT, config, KYC attestations, bank
+proofs, membership join/transfer/contribution, and one Lucid emulator suite. The
 `M2: Governance` milestone (issues #27–#33) delivered ADR 0009, the shared
 voting primitives, config v2 and its invariant library, secret-ballot
 commit-reveal over a board-attested leaf list, batched tally and finalize,
 config execution after the timelock, and one v2 end-to-end emulator suite. The
-M2 spec is `docs/plan/m2-governance.md`.
+M2 spec is `docs/plan/m2-governance.md`. M3 adds a treasurer-attested project
+pool, kind-tagged project and cancel proposals, milestone tranches signed by the
+board and the treasurer, and close/cancel (ADR 0010).
 M1 and M2 ran on preprod only: no real IDR, no real personal data, and no
 preprod deployment in either milestone.
 
@@ -494,12 +497,13 @@ At month 60:
 - Project spending: >50% of votes cast.
 - Structural changes, split changes, board changes, and bylaws: two-thirds of votes cast with 50% quorum (the configured `structural_threshold_bps`; `6667` is more than two-thirds, ADR 0009 §7).
 - 7-day timelock for structural and parameter changes.
-- Proposal bond: deferred to M3, when a treasury exists to receive a forfeited bond.
+- Proposal bond: none. M3 has no on-chain asset to hold or forfeit, and creation
+  is already board-signed (ADR 0010 §7).
 - Voting is not implemented in the pilot harness. On-chain votes are secret per
   ADR 0007. M2 uses commit-reveal over a board-attested eligible leaf list (ADR
   0009); see `docs/plan/m2-governance.md`. Quorum and counts stay public;
-  individual ballots do not. M2 governance is config-only: project proposals,
-  cancel, bonds, and delegation wait for M3.
+  individual ballots do not. M3 adds project and cancel proposals (ADR 0010);
+  delegation waits.
 - Delegation is out of scope for v1.
 
 ### 3.10 Board and operations
@@ -515,10 +519,10 @@ At month 60:
 ### 3.11 Project funding
 
 - Only the project pool is spendable on projects.
-- A proposal specifies amount, recipient, milestones, deadline, and evidence requirements.
-- Funds are released in tranches.
-- The board may spend within the approved budget and milestone.
-- Unused funds return to the project pool.
+- A proposal specifies a recipient commitment, an ordered list of milestone amounts and evidence commitments, and a deadline.
+- Funds are released one approved milestone at a time, signed by the board and the treasurer.
+- The board cannot vary an approved amount or skip a milestone.
+- Unused funds return to the project pool on close or cancel.
 - Members may vote to cancel a failing project.
 - Project spending is recorded on-chain; bank transfers are attested off-chain.
 
@@ -625,24 +629,22 @@ surplus_capital_bps:                       2500
 ### 4.3 Proposal and vote
 
 1. An active member with live KYC creates a proposal; the board signs the eligible leaf list at creation.
-2. The `PROPOSAL` NFT, UTxO, windows, and proposed config are recorded. No bond in M2; a bond waits for the treasury (M3).
+2. The `PROPOSAL` NFT, UTxO, windows, and the kind-tagged payload are recorded. No bond: creation is board-signed, and ADR 0010 §7 drops the forfeit.
 3. Members cast sealed ballots with a nullifier during the voting window; a ballot is eligible when its leaf is in the list.
 4. After the voting window, ballots are revealed; the chain checks each choice against its seal.
 5. Anyone tallies revealed ballots in batches. Unrevealed ballots are discarded after the reveal deadline and do not count.
 6. When every cast ballot is tallied or discarded, anyone finalizes: 50% quorum of the eligible count and the threshold decide `Passed` or `Rejected`.
-7. A passed config change waits for the 7-day timelock, then anyone executes it. Project proposals wait for M3, where execution creates or updates the project UTxO.
+7. A passed config change waits for the 7-day timelock, then anyone executes it. A passed project proposal executes without a timelock, creating the project UTxO and reserving pool funds (ADR 0010 §3–§4).
 8. No receipt NFT in M2; a receipt would relink the member to the ballot.
 
 ### 4.4 Project execution and spending
 
-1. Approved project UTxO records budget and milestones.
-2. Board submits a tranche request with evidence.
-3. Treasury validator checks proposal, budget, and remaining amount.
-4. Bank transfer is executed under dual control.
-5. Treasurer attestation records the transfer.
-6. Project UTxO updates `spent`.
-7. Unused funds return to the project pool.
-8. Members may vote to cancel and recover the remainder.
+1. The approved project UTxO records the milestone commitments, the recipient commitment, and the deadline.
+2. The board and the treasurer sign a tranche request carrying the evidence hash.
+3. The treasury validator checks the next milestone, the evidence commitment, the deadline, and the pool balance.
+4. The bank transfer is executed under dual control.
+5. The project UTxO advances `next_milestone`; the pool debits the amount from `balance` and `committed`.
+6. A close returns the unspent milestones to the pool; a passed cancel proposal closes a failing project.
 
 ### 4.5 Surplus distribution
 
@@ -877,9 +879,9 @@ The chain cannot verify the bank balance or prevent a fraudulent transfer. The t
 |---|---|
 | `config` | State NFT; annual amount, `Member Capital`/`Capital Participation` split, founder extra capital, surplus allocation incl. education, redemption reserve policy, quorum, windows, board keys, KYC issuer, token policies |
 | `membership` | Member records; `MEMBER`, `MCAP`, `PROJ` mint/burn; contribution; voting record; founder lock/vesting; conversion; exit request |
-| `governance` | Proposals, eligible leaf list, one-member-one-vote via nullifiers, quorum, batched tally, execution (bonds deferred to M3) |
-| `treasury` | Project pool budgets, tranches, spending, cancel/return |
-| `attestation` | KYC, bank contribution, reserve, and project spending attestations |
+| `governance` | Proposals (config, project, cancel), eligible leaf list, one-member-one-vote via nullifiers, quorum, batched tally, execution (no bond, ADR 0010 §7) |
+| `treasury` | Attested project pool, project boxes, milestone tranches, close, cancel |
+| `attestation` | KYC, bank contribution, and reserve attestations (a tranche is signed into the transaction, not a separate attestation) |
 | `distribution` | Surplus split across education, patronage, and capital; Merkle root; claims; double-claim prevention |
 | `exit` | Annual exit window, `Member Capital` redemption, `Capital Participation` book value, founder claim, defer/claim |
 | token policies | `MEMBER`, `MCAP`, `PROJ`, `STATE`, `PROPOSAL`, `VOTE`, `CLAIM` |
@@ -909,9 +911,9 @@ Use CIP-31 reference inputs for config and CIP-33 reference scripts to stay unde
 
 ### 6.3 Datum schemas
 
-The authoritative shapes are ADR 0008 for M1 and `docs/plan/m2-governance.md`
-for M2. The sketch below is the original plan and is superseded where they
-disagree.
+The authoritative shapes are ADR 0008 for M1, `docs/plan/m2-governance.md` for
+M2, and `docs/plan/m3-treasury.md` for M3. The sketch below is the original plan
+and is superseded where they disagree.
 
 ```aiken
 pub type ConfigDatum {
@@ -1020,12 +1022,14 @@ pub type KycDatum {
 
 ### 6.4 Redeemers/actions
 
+The list below is the original sketch. The M2 and M3 specs are authoritative.
+
 ```text
 Config:     Execute (M2; UpdateParams/RotateBoard/Migrate arrive with later versions)
 Membership: Join | Contribute | RequestExit | CompleteExit | ConvertFounder | RotateOwner
-Governance: CreateProposal | Cast | Reveal | Discard | Tally | Finalize | Execute
-Treasury:   CreateProject | SpendTranche | CancelProject | CloseProject
-Attestation: KycIssue | KycRevoke | BankContribution | ReserveAttest | SpendAttest | PatronageAttest
+Governance: CreateProposal | Cast | Discard | Tally | Finalize | Execute
+Treasury:   AttestPool | SpendTranche | CloseProject | CancelProject
+Attestation: KycIssue | KycRevoke | BankContribution | ReserveAttest | PatronageAttest
 Distribution: CreateDistribution | Claim | CloseDistribution
 Endowment:  AbsorbLoss | FundDevelopment
 Exit:       RequestExit | RedeemMemberCapital | SettleCapitalParticipation | DeferRedemption | CreateFounderClaim | PayClaim
@@ -1036,8 +1040,8 @@ Exit:       RequestExit | RedeemMemberCapital | SettleCapitalParticipation | Def
 1. **Join/contribution:** config reference input + KYC attestation + bank attestation + member record → mint tokens.
 2. **Vote:** cast with a leaf from the eligible list → mint the VOTE NFT (nullifier) → create the ballot UTxO with a sealed choice. Later, reveal the choice and salt against the seal from the ballot alone; the proposal and member record are never touched by a reveal.
 3. **Tally:** consume batches of revealed ballot UTxOs → update proposal counters → finalize when every cast ballot is tallied or discarded.
-4. **Execute:** proposal + treasury → create project UTxO or update config.
-5. **Spend tranche:** project + proposal + board signatures + bank attestation → update project.
+4. **Execute:** proposal + pool → create the project UTxO and reserve, or update the config.
+5. **Spend tranche:** project + pool + board and treasurer signatures → advance the project's `next_milestone` and debit the pool.
 6. **Distribution:** audit, patronage, and capital-weight attestations + proposal →
    education and endowment retention → distribution UTxO → Merkle claims.
 7. **Exit:** member record + exit window + reserve attestation → redeem `MCAP` →

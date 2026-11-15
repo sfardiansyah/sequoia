@@ -157,6 +157,24 @@ thing: a provisional database row, not a chain record.
 | **Timelock** | The forced wait between finalizing a passed config change and executing it. | "delay" |
 | **Execute** | Spending the passed proposal and the config box to write the proposed config. Permissionless after the timelock. | "apply", "deploy" |
 
+## On-chain (M3 treasury)
+
+The treasury holds no money. Its figures are attested; the cash is in the bank
+(ADR 0010 §1).
+
+| Term | Meaning | Avoid |
+|---|---|---|
+| **Project Pool** | The on-chain accounting box for the project account: the treasurer-attested IDR balance and the amount committed to open projects. It holds no money. | "treasury" for the box, "fund" |
+| **Pool Attestation** | The treasurer-signed statement of the project account's balance. Absolute, not a delta. | "deposit", "top-up" |
+| **Committed** | The sum of the remaining milestone amounts over open projects. Raised when a project is approved, released by a tranche or a close. | "allocated", "budgeted" |
+| **Project** | The on-chain box for one approved project: the milestone commitments, the recipient commitment, the deadline, and the next milestone. The `PROJECT` NFT name is its id. | "grant", "initiative", "campaign" |
+| **Milestone** | One approved tranche: an IDR amount plus the 32-byte commitment to the evidence the board will present. | "phase", "stage" |
+| **Tranche** | One payment of the next milestone, signed by the board threshold and the treasurer. | "draw", "installment" |
+| **Recipient Commitment** | A 32-byte hash of the payee's bank and identity details. The plaintext stays off chain. | "recipient address" |
+| **Evidence Commitment** | The 32-byte hash approved at proposal time. A tranche must reveal a preimage with that hash. It is a commitment, not proof of the work. | "proof", "receipt" |
+| **Project Proposal** | A governance proposal whose payload is a project spec. Passing and executing it creates the project box and reserves the pool. | "budget request" |
+| **Cancel Proposal** | A governance proposal whose payload is a project id. Executing it cancels an open project and returns the remainder to the pool. | "revocation" |
+
 ## Money
 
 | Term | Meaning |

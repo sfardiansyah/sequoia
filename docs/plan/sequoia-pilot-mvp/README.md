@@ -16,7 +16,9 @@ pilot-exception section and ADR 0007.
 - **M18: Audit transaction scope** — shipped ticket 11 (closed).
 - **Pilot harness MVP** — shipped tickets 03–10 (closed).
 - **M1: Config + Membership** — shipped tickets 17–26 (closed); ADR 0008.
-- **Next: M2 — governance** — ADR 0004.
+- **M2: Governance** — shipped tickets 27–33 (closed); ADR 0009.
+- **Next: M3 — treasury** — ADR 0010, spec `docs/plan/m3-treasury.md`, tickets
+  #34–#41.
 
 ## Finding the frontier
 
