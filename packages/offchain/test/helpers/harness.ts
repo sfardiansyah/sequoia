@@ -224,15 +224,14 @@ export function ballotScript(stateNftPolicy: string): Script {
 }
 
 /**
- * The treasury stub (ADR 0010 §1). The rules land in the treasury tickets; the
- * script is parameterized by the state NFT policy already, so only its body
- * changes and every derived hash follows.
+ * The treasury (ADR 0010 §1). The script is parameterized by the state NFT
+ * policy, so a rule change moves its hash and every derived address follows.
  */
 function treasuryScript(stateNftPolicy: string): Script {
   return {
     type: "PlutusV3",
     script: applyParamsToScript(
-      compiledValidator("treasury.treasury.else").compiledCode,
+      compiledValidator("treasury.treasury.spend").compiledCode,
       [castTo(stateNftPolicy, Data.Bytes())],
     ),
   };

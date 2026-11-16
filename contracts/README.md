@@ -3,9 +3,9 @@
 Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`) is
 implemented per `docs/adr/0008-m1-config-and-membership.md`; M2 governance
 (`governance` + `ballot`, config v2) follows
-`docs/adr/0009-m2-secret-ballot-governance.md`. M3 treasury starts with the v3
-datums and genesis (`POOL`, the pool box, `validators/treasury.ak` as a stub) per
-`docs/adr/0010-m3-project-treasury.md`; the treasury rules follow.
+`docs/adr/0009-m2-secret-ballot-governance.md`. M3 treasury follows
+`docs/adr/0010-m3-project-treasury.md`: genesis v3 (`POOL`, the pool box) and
+the pool attestation are implemented; the project rules follow.
 
 ## Toolchain
 
@@ -53,8 +53,8 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/state_nft.ak` — one-shot `STATE` and `POOL` mint, parameterized by
   the seed output.
 - `validators/treasury.ak` — the pool box, the project boxes, and the `PROJECT`
-  NFT policy (ADR 0010 §1). A stub for now: it fixes the script hash at genesis,
-  and the rules follow.
+  NFT policy (ADR 0010 §1). The pool attestation is live; the project actions
+  follow.
 - `validators/config.ak` — the config box; its only spend is a governance
   execution.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
@@ -73,6 +73,7 @@ scripts take the state NFT policy ID, which is derived from it.
   invariants (ADR 0009 §8), and the config execution gate.
 - `lib/sequoia/governance_rules.ak` — proposal creation, cast, discard, tally,
   finalize, execute, and the proposal-datum invariant.
+- `lib/sequoia/treasury_rules.ak` — the pool attestation (ADR 0010 §2).
 - `lib/sequoia/ballot_rules.ak` — ballot cast, reveal, discard, and count (ADR
   0009 §5–§7).
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
@@ -132,6 +133,18 @@ without the burn and the mint cannot run without the member box. The proof nonce
 may not be `MCAP` or `PROJ`; those names share the policy's asset-name
 namespace. Board accounts are emulator accounts generated from a private key, so
 the tests can co-sign with `sign.withPrivateKey`.
+
+## Treasury pool attestation
+
+The pool box holds the one-shot `POOL` token and `PoolDatum { balance, committed }`;
+the cash stays at the bank (ADR 0010 §1–§2). `AttestPool` is the only action so
+far: the treasurer — the config's `bank_issuer` — must be a required signer, the
+redeemer carries the absolute `balance` and a non-empty `bank_ref_hash`, and the
+datum written back keeps `committed` byte-identical. The balance is never a
+delta, and it may fall below `committed`: an honest shortfall is recorded rather
+than hidden, and tranches fail until the pool is funded. Exactly one input and
+one output may hold the `POOL` token, both at the treasury script, so the pool
+stays a singleton and cannot be minted or burned here.
 
 ## Proposal kinds
 
