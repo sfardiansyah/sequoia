@@ -7,7 +7,7 @@ use cardano/transaction.{
 }
 use sequoia/governance_rules
 use sequoia/types.{
-  Active, Config, ConfigDatum, Executed, Inactive, KycDatum, MemberDatum,
+  Active, Cancel, Config, ConfigDatum, Executed, Inactive, KycDatum, MemberDatum,
   Milestone, No, Open, Passed, Project, ProjectSpec, ProposalDatum, Rejected,
   Standard, VoteDatum, Yes,
 }
@@ -53,6 +53,9 @@ const member_a: ByteArray = #"01"
 
 const proposal_id: ByteArray =
   #"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+
+const project_id: ByteArray =
+  #"dededededededededededededededededededededededededededededededede"
 
 const leaf_a: ByteArray =
   #"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -193,6 +196,24 @@ fn proposal_datum() -> ProposalDatum {
     status: Open,
     finalized_at: None,
   }
+}
+
+/// The terms members approve for a project: positive milestones whose evidence
+/// is committed, a 32-byte payee commitment, and a deadline after the reveal
+/// window (spec §6–§7).
+fn project_spec() -> ProjectSpec {
+  ProjectSpec {
+    recipient_commitment: leaf_a,
+    deadline: proposal_datum().reveal_end + 1,
+    milestones: [
+      Milestone { amount: 1_000_000, evidence_commitment: leaf_a },
+      Milestone { amount: 500_000, evidence_commitment: leaf_b },
+    ],
+  }
+}
+
+fn project_proposal() -> ProposalDatum {
+  ProposalDatum { ..proposal_datum(), payload: Project(project_spec()) }
 }
 
 fn create_tx(datum: ProposalDatum) -> Transaction {
@@ -384,22 +405,127 @@ test create_proposal_rejects_a_config_that_breaks_an_invariant() fail {
   )
 }
 
-test create_proposal_rejects_a_non_config_payload() fail {
+test create_proposal_accepts_a_project_proposal() {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(project_proposal()),
+  )
+}
+
+test create_proposal_accepts_a_cancel_proposal() {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(ProposalDatum { ..proposal_datum(), payload: Cancel(project_id) }),
+  )
+}
+
+test create_proposal_rejects_an_empty_milestone_list() fail {
   governance_rules.create_proposal(
     config(),
     governance_policy_id,
     create_tx(
       ProposalDatum {
-        ..proposal_datum(),
+        ..project_proposal(),
+        payload: Project(ProjectSpec { ..project_spec(), milestones: [] }),
+      },
+    ),
+  )
+}
+
+test create_proposal_rejects_a_zero_milestone_amount() fail {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(
+      ProposalDatum {
+        ..project_proposal(),
         payload: Project(
           ProjectSpec {
-            recipient_commitment: leaf_a,
-            deadline: joined_at + 1_000_000,
-            milestones: [Milestone { amount: 1, evidence_commitment: leaf_a }],
+            ..project_spec(),
+            milestones: [Milestone { amount: 0, evidence_commitment: leaf_a }],
           },
         ),
       },
     ),
+  )
+}
+
+test create_proposal_rejects_a_negative_milestone_amount() fail {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(
+      ProposalDatum {
+        ..project_proposal(),
+        payload: Project(
+          ProjectSpec {
+            ..project_spec(),
+            milestones: [Milestone { amount: -1, evidence_commitment: leaf_a }],
+          },
+        ),
+      },
+    ),
+  )
+}
+
+test create_proposal_rejects_a_short_recipient_commitment() fail {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(
+      ProposalDatum {
+        ..project_proposal(),
+        payload: Project(
+          ProjectSpec { ..project_spec(), recipient_commitment: #"aabb" },
+        ),
+      },
+    ),
+  )
+}
+
+test create_proposal_rejects_a_short_evidence_commitment() fail {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(
+      ProposalDatum {
+        ..project_proposal(),
+        payload: Project(
+          ProjectSpec {
+            ..project_spec(),
+            milestones: [Milestone { amount: 1, evidence_commitment: #"aabb" }],
+          },
+        ),
+      },
+    ),
+  )
+}
+
+test create_proposal_rejects_a_deadline_at_the_reveal_end() fail {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(
+      ProposalDatum {
+        ..project_proposal(),
+        payload: Project(
+          ProjectSpec {
+            ..project_spec(),
+            deadline: proposal_datum().reveal_end,
+          },
+        ),
+      },
+    ),
+  )
+}
+
+test create_proposal_rejects_a_short_cancel_target() fail {
+  governance_rules.create_proposal(
+    config(),
+    governance_policy_id,
+    create_tx(ProposalDatum { ..proposal_datum(), payload: Cancel(#"dd") }),
   )
 }
 
@@ -451,6 +577,10 @@ test keep_proposal_rejects_changed_identity() {
         ..old,
         payload: Config(ConfigDatum { ..config(), annual_amount: 2_000_000 }),
       },
+    ),
+    !governance_rules.keep_proposal(
+      old,
+      ProposalDatum { ..old, payload: Cancel(project_id) },
     ),
     !governance_rules.keep_proposal(
       old,
@@ -1082,6 +1212,53 @@ test finalize_records_rejected_with_no_votes() {
     ref(3),
     finalize_tx(old, new, old.reveal_end, upper),
   )
+}
+
+test finalize_selects_the_threshold_by_kind() {
+  let base = ProposalDatum {
+    ..proposal_datum(),
+    eligible_leaves: [leaf_a, leaf_b, leaf_a],
+    nullifiers: [nullifier_a, nullifier_b, nullifier_a],
+    tallied: 3,
+    yes: 2,
+    no: 1,
+  }
+  let upper = base.reveal_end + 1_000
+  let project = ProposalDatum { ..base, payload: Project(project_spec()) }
+  let cancel = ProposalDatum { ..base, payload: Cancel(project_id) }
+  and {
+    governance_rules.finalize(
+      config(),
+      ref(3),
+      finalize_tx(
+        project,
+        ProposalDatum { ..project, status: Passed, finalized_at: Some(upper) },
+        base.reveal_end,
+        upper,
+      ),
+    ),
+    governance_rules.finalize(
+      config(),
+      ref(3),
+      finalize_tx(
+        cancel,
+        ProposalDatum { ..cancel, status: Passed, finalized_at: Some(upper) },
+        base.reveal_end,
+        upper,
+      ),
+    ),
+    // The same 2-of-3 fails the structural threshold a config change needs.
+    governance_rules.finalize(
+      config(),
+      ref(3),
+      finalize_tx(
+        base,
+        ProposalDatum { ..base, status: Rejected, finalized_at: Some(upper) },
+        base.reveal_end,
+        upper,
+      ),
+    ),
+  }
 }
 
 test finalize_rejects_a_window_over_one_hour() fail {

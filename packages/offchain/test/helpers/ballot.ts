@@ -313,7 +313,7 @@ export async function tallyProposal(
     .newTx()
     .collectFrom([proposalBox], governanceTally)
     .collectFrom(voteBoxes, ballotCount)
-    .readFrom([m1.configUtxo])
+    .readFrom([m1.configUtxo, m1.governanceScriptRef, m1.ballotScriptRef])
     .attach.SpendingValidator(m1.governanceValidator)
     .attach.SpendingValidator(m1.ballotValidator)
     .attach.MintingPolicy(m1.ballotValidator)
@@ -355,7 +355,12 @@ export async function finalizeProposal(
     thresholdMet(
       Number(fields.yes),
       Number(fields.no),
-      Number(config.structuralThresholdBps),
+      // Project and cancel proposals are operational, not structural (ADR 0010 §3).
+      Number(
+        fields.kind === "Config"
+          ? config.structuralThresholdBps
+          : config.projectThresholdBps,
+      ),
     );
   const status = passed ? "Passed" : "Rejected";
   const now = scriptTime(ledger, ledger.emulator.now());

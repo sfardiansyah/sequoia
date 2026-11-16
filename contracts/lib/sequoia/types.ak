@@ -112,8 +112,7 @@ pub type BankProofDatum {
 // M2 governance (ADR 0009 §1, §5, §6), extended by ADR 0010 §3 for M3.
 
 /// The kind tag and the approved terms in one field, so a proposal cannot claim
-/// one kind and carry another's payload. The tag is the kind. M3 creates only
-/// `Config` proposals until the project kinds land (spec §7).
+/// one kind and carry another's payload. The tag is the kind.
 pub type ProposalPayload {
   Config(ConfigDatum)
   Project(ProjectSpec)

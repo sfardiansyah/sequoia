@@ -4,6 +4,7 @@ import {
   Emulator,
   Lucid,
   applyParamsToScript,
+  credentialToAddress,
   generateEmulatorAccount,
   generateEmulatorAccountFromPrivateKey,
   getAddressDetails,
@@ -378,9 +379,12 @@ export type Genesis = {
   governanceValidator: Script;
   governancePolicy: string;
   governanceAddress: string;
+  /** Reference-script UTxOs (CIP-33) so heavy validators leave the tx body. */
+  governanceScriptRef: UTxO;
   ballotValidator: Script;
   ballotPolicy: string;
   ballotAddress: string;
+  ballotScriptRef: UTxO;
   treasuryValidator: Script;
   treasuryPolicy: string;
   treasuryAddress: string;
@@ -432,6 +436,12 @@ export async function genesis(
   });
   const unit = stateUnit(stateNftPolicy);
   const pool_datum = poolDatum(0n, 0n);
+  // Reference scripts are read-only inputs, so they live at an address no wallet
+  // controls: coin selection can never spend them and drop the script.
+  const referenceAddress = credentialToAddress("Custom", {
+    type: "Script",
+    hash: "00".repeat(28),
+  });
 
   const tx = await lucid
     .newTx()
@@ -451,12 +461,36 @@ export async function genesis(
       { kind: "inline", value: pool_datum },
       { lovelace: POOL_MIN_LOVELACE, [poolUnit(stateNftPolicy)]: 1n },
     )
+    .pay.ToAddressWithData(
+      referenceAddress,
+      undefined,
+      { lovelace: 50_000_000n },
+      governanceValidator,
+    )
+    .pay.ToAddressWithData(
+      referenceAddress,
+      undefined,
+      { lovelace: 30_000_000n },
+      ballotValidator,
+    )
     .complete();
   await submitTx(tx);
   emulator.awaitBlock(1);
 
   const configUtxo = await lucid.utxoByUnit(unit);
   const poolUtxo = await lucid.utxoByUnit(poolUnit(stateNftPolicy));
+  const scriptRefs = (await lucid.utxosAt(referenceAddress)).filter(
+    (utxo) => utxo.scriptRef,
+  );
+  const scriptRef = (validator: Script): UTxO => {
+    const found = scriptRefs.find(
+      (utxo) => (utxo.scriptRef as Script).script === validator.script,
+    );
+    if (found === undefined) {
+      throw new Error("genesis: missing reference-script UTxO");
+    }
+    return found;
+  };
   return {
     seed,
     stateNft,
@@ -475,9 +509,11 @@ export async function genesis(
     governanceValidator,
     governancePolicy,
     governanceAddress,
+    governanceScriptRef: scriptRef(governanceValidator),
     ballotValidator,
     ballotPolicy,
     ballotAddress,
+    ballotScriptRef: scriptRef(ballotValidator),
     treasuryValidator,
     treasuryPolicy,
     treasuryAddress,

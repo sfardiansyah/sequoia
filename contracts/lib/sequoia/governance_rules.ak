@@ -12,8 +12,8 @@ use sequoia/tx.{
   inline_datum, lower_bound, one_token_output, signed, spent_input, upper_bound,
 }
 use sequoia/types.{
-  Active, Config, ConfigDatum, Executed, MemberDatum, Open, Passed,
-  ProposalDatum, Rejected, VoteDatum, state_asset_name,
+  Active, Cancel, Config, ConfigDatum, Executed, MemberDatum, Open, Passed,
+  Project, ProposalDatum, Rejected, VoteDatum, state_asset_name,
 }
 use sequoia/voting
 
@@ -76,8 +76,8 @@ fn fresh_proposal(datum: ProposalDatum) -> Bool {
 }
 
 /// Creation is the PROPOSAL NFT mint: one proposal box, one board-attested
-/// eligible leaf set, and the payload fixed for the whole vote. M3 creates only
-/// `Config` proposals; the project kinds land with their rules (spec §7).
+/// eligible leaf set, and the payload fixed for the whole vote. The payload's
+/// constructor is the kind, so each kind checks only its own terms (spec §7).
 pub fn create_proposal(
   config: ConfigDatum,
   policy_id: PolicyId,
@@ -138,7 +138,34 @@ pub fn create_proposal(
         } else {
           True
         }
-      _ -> fail @"governance_rules: only config proposals are supported"
+      Project(spec) ->
+        if list.is_empty(spec.milestones) {
+          fail @"governance_rules: a project needs at least one milestone"
+        } else if !list.all(
+          spec.milestones,
+          fn(milestone) { milestone.amount > 0 },
+        ) {
+          fail @"governance_rules: every milestone amount must be positive"
+        } else if bytearray.length(spec.recipient_commitment) != 32 {
+          fail @"governance_rules: recipient commitment must be 32 bytes"
+        } else if !list.all(
+          spec.milestones,
+          fn(milestone) {
+            bytearray.length(milestone.evidence_commitment) == 32
+          },
+        ) {
+          fail @"governance_rules: evidence commitments must be 32 bytes"
+        } else if spec.deadline <= datum.reveal_end {
+          fail @"governance_rules: the deadline must follow the reveal window"
+        } else {
+          True
+        }
+      Cancel(project_id) ->
+        if bytearray.length(project_id) != 32 {
+          fail @"governance_rules: the cancel target must be a 32-byte project id"
+        } else {
+          True
+        }
     }
   }
 }
@@ -324,7 +351,9 @@ pub fn tally(
 }
 
 /// `Finalize` closes the proposal once every cast ballot is tallied or
-/// discarded (ADR 0009 §4, §7). Quorum and threshold come from the live config.
+/// discarded (ADR 0009 §4, §7). Quorum and the threshold come from the live
+/// config; the threshold follows the payload kind, because project spending is
+/// operational and a config change is structural (ADR 0010 §3).
 pub fn finalize(
   config: ConfigDatum,
   own_ref: OutputReference,
@@ -337,9 +366,13 @@ pub fn finalize(
   let cast_count = list.length(old.nullifiers)
   let eligible = list.length(old.eligible_leaves)
   let counted_votes = old.yes + old.no + old.abstain
+  let threshold = when old.payload is {
+    Config(_) -> config.structural_threshold_bps
+    _ -> config.project_threshold_bps
+  }
   let status = if and {
     voting.quorum_met(counted_votes, eligible, config.quorum_bps),
-    voting.threshold_met(old.yes, old.no, config.structural_threshold_bps),
+    voting.threshold_met(old.yes, old.no, threshold),
   } {
     Passed
   } else {

@@ -63,12 +63,60 @@ const proposalDatumSchema = Data.Object({
   finalized_at: Data.Nullable(Data.Integer()),
 });
 
+export type MilestoneTerms = {
+  amount: bigint;
+  evidenceCommitment: string;
+};
+
+export type ProjectSpecTerms = {
+  recipientCommitment: string;
+  deadline: bigint;
+  milestones: MilestoneTerms[];
+};
+
+/** The three proposal kinds; the payload constructor is the kind. */
+export type ProposalPayloadTerms =
+  | { kind: "Config" }
+  | { kind: "Project"; spec: ProjectSpecTerms }
+  | { kind: "Cancel"; projectId: string };
+
 export type ProposalTerms = {
   id: string;
   proposer: string;
   leaves: string[];
   start: bigint;
+  payload?: ProposalPayloadTerms;
 };
+
+/**
+ * The payload for the requested kind. A single-field variant wraps its value in
+ * a one-item tuple so the nesting matches `Constr(1, [Constr(0, specFields)])`.
+ */
+function proposalPayload(
+  roles: Roles,
+  config: TestConfig,
+  policies: PolicyHashes,
+  payload: ProposalPayloadTerms | undefined,
+): unknown {
+  if (payload?.kind === "Project") {
+    return {
+      Project: [
+        {
+          recipient_commitment: payload.spec.recipientCommitment,
+          deadline: payload.spec.deadline,
+          milestones: payload.spec.milestones.map((milestone) => ({
+            amount: milestone.amount,
+            evidence_commitment: milestone.evidenceCommitment,
+          })),
+        },
+      ],
+    };
+  }
+  if (payload?.kind === "Cancel") {
+    return { Cancel: [payload.projectId] };
+  }
+  return { Config: [configDatumFields(roles, config, policies)] };
+}
 
 export function proposalDatum(
   roles: Roles,
@@ -84,7 +132,7 @@ export function proposalDatum(
     {
       id: terms.id,
       proposer: terms.proposer,
-      payload: { Config: [configDatumFields(roles, config, policies)] },
+      payload: proposalPayload(roles, config, policies, terms.payload),
       eligible_leaves: terms.leaves,
       start: terms.start,
       end,
@@ -122,8 +170,13 @@ const STATUS_BY_INDEX: ProposalStatus[] = [
   "Executed",
 ];
 
+export type ProposalKind = "Config" | "Project" | "Cancel";
+
+const KIND_BY_INDEX: ProposalKind[] = ["Config", "Project", "Cancel"];
+
 export type ProposalFields = {
   id: string;
+  kind: ProposalKind;
   eligible_leaves: string[];
   start: bigint;
   end: bigint;
@@ -146,10 +199,12 @@ function proposalConstr(datum: string): ProposalConstr {
 
 export function decodeProposalDatum(datum: string): ProposalFields {
   const { fields } = proposalConstr(datum);
+  const payload = fields[2] as { index: number };
   const status = fields[13] as { index: number };
   const finalizedAt = fields[14] as { index: number; fields: unknown[] };
   return {
     id: fields[0] as string,
+    kind: KIND_BY_INDEX[payload.index]!,
     eligible_leaves: fields[3] as string[],
     start: fields[4] as bigint,
     end: fields[5] as bigint,

@@ -133,6 +133,17 @@ may not be `MCAP` or `PROJ`; those names share the policy's asset-name
 namespace. Board accounts are emulator accounts generated from a private key, so
 the tests can co-sign with `sign.withPrivateKey`.
 
+## Proposal kinds
+
+The payload constructor is the kind (`Config`, `Project`, `Cancel`), so each kind
+checks only its own creation terms: a config change keeps the immutable fields
+and the invariants; a project needs a non-empty ordered milestone list with
+positive amounts, 32-byte recipient and evidence commitments, and a deadline
+after the proposal's `reveal_end`, so a passed project always has a spending
+window; a cancel needs a 32-byte project id. The target project box is checked
+when the cancel executes, with the treasury rules, because a proposal cannot name
+the treasury script yet.
+
 ## Governance tally and finalize
 
 `Tally` spends 1–10 revealed ballots of one proposal and adds their choices to
@@ -140,7 +151,7 @@ the tests can co-sign with `sign.withPrivateKey`.
 a ballot can be counted once. Governance `Discard` requires the same burn, so it
 cannot pair with `Reveal` at the window boundary. `Finalize` runs after
 `reveal_end`, requires every cast ballot to be tallied or discarded, and decides
-`Passed` or `Rejected` from the live config's quorum and structural threshold. It
+`Passed` or `Rejected` from the live config's quorum and the kind's threshold. It
 stamps `finalized_at` from the validity upper bound for either outcome.
 
 ### Config execution
@@ -167,9 +178,10 @@ against anything but the real config.
 
 ### Live-config quorum and threshold
 
-`Finalize` reads `quorum_bps` and `structural_threshold_bps` from the live config
-box, never from the proposal's payload. A config executed while another proposal
-is open therefore changes that proposal's bar. The datum has no snapshot of these
+`Finalize` reads `quorum_bps` from the live config box and the threshold by kind:
+`structural_threshold_bps` for a `Config` payload, `project_threshold_bps` for
+`Project` and `Cancel`. A config executed while another proposal is open
+therefore changes that proposal's bar. The datum has no snapshot of these
 values; this is a known M2 limitation, acceptable at pilot scale and recorded in
 the plan.
 
@@ -192,7 +204,11 @@ the Scalus JS emulator, which runs the real ledger rules and publishes a Lucid
 provider adapter. Yaci DevKit stays the last resort.
 
 The emulator exposes submitted outputs only after a block is produced, so the
-tests call `emulator.awaitBlock(1)` after each submit.
+tests call `emulator.awaitBlock(1)` after each submit. Genesis also pays one
+reference-script UTxO per heavy validator (`governance`, `ballot`), and a batched
+tally reads them as reference inputs: the two witnesses are 13.7 KB of the
+ledger's 16 KB transaction limit, so the scripts stay out of the transaction
+body.
 
 `bun run test:contracts` runs the focused suites plus `test/end-to-end.test.ts`,
 which walks one v2 ledger through genesis, KYC, bank proof, join, contribution,
