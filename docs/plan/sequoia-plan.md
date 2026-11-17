@@ -70,7 +70,7 @@ The co-op is a member-owned organization that:
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken  
 **Test command:** `bun run check`  
-**Current status:** 370 tests pass, typecheck clean, 43 Postgres integration tests green  
+**Current status:** 373 tests pass, typecheck clean, 43 Postgres integration tests green
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 

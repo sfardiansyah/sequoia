@@ -38,6 +38,31 @@ export async function execMigrations(client: {
 let pglite: Promise<PGlite> | undefined;
 let schemaIsEmpty = false;
 
+/**
+ * A PGlite instance is shared per process for speed, so only one test section
+ * may use it at a time. Bun can schedule test files concurrently inside one
+ * worker process; without this lease two sections drop and migrate the same
+ * schema under each other.
+ */
+let tail: Promise<void> = Promise.resolve();
+let releaseLease: (() => void) | undefined;
+
+async function acquirePgliteLease(): Promise<void> {
+  const previous = tail;
+  let release!: () => void;
+  tail = new Promise((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  releaseLease = release;
+}
+
+function releasePgliteLease(): void {
+  const release = releaseLease;
+  releaseLease = undefined;
+  release?.();
+}
+
 async function dropSchema(target: PGlite): Promise<void> {
   await target.exec(
     "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;",
@@ -48,23 +73,35 @@ async function dropSchema(target: PGlite): Promise<void> {
 /**
  * A pristine, migrated PGlite database. Booting one costs ~1s, so the whole
  * test run shares a single instance (one per worker process under --parallel)
- * and every call wipes it. Tests must stay sequential inside a process.
+ * and every call wipes it. The lease serializes sections that Bun schedules
+ * concurrently in the same process.
  */
 export async function openPgliteTestDatabase(): Promise<PGlite> {
-  pglite ??= Promise.resolve(new PGlite());
-  const target = await pglite;
+  await acquirePgliteLease();
 
-  if (!schemaIsEmpty) await dropSchema(target);
-  schemaIsEmpty = false;
-  await execMigrations(target);
+  try {
+    pglite ??= Promise.resolve(new PGlite());
+    const target = await pglite;
 
-  return target;
+    if (!schemaIsEmpty) await dropSchema(target);
+    schemaIsEmpty = false;
+    await execMigrations(target);
+
+    return target;
+  } catch (error) {
+    releasePgliteLease();
+    throw error;
+  }
 }
 
-/** End of a test: throw away everything it wrote. */
+/** End of a test: throw away everything it wrote and free the lease. */
 export async function closePgliteTestDatabase(): Promise<void> {
-  if (!pglite) return;
-  if (!schemaIsEmpty) await dropSchema(await pglite);
+  try {
+    if (!pglite) return;
+    if (!schemaIsEmpty) await dropSchema(await pglite);
+  } finally {
+    releasePgliteLease();
+  }
 }
 
 type DatabaseTarget = {

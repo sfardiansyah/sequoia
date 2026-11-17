@@ -53,7 +53,7 @@ Implemented:
   and one v3 end-to-end emulator ledger carrying the spec §11 negative matrix;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Test suite: 370 tests (`bun run check`, PGlite and the Aiken emulator suites
+Test suite: 373 tests (`bun run check`, PGlite and the Aiken emulator suites
 included) and 43 Postgres integration tests (`bun run test:integration`).
 
 The pilot is synthetic and preprod: no real IDR, no chain, and no real personal
