@@ -17,6 +17,7 @@ import {
   poolUnit,
   scriptTime,
   submitTx,
+  submitWithBoard,
   type Genesis,
   type Ledger,
 } from "./harness";
@@ -40,6 +41,12 @@ export const attestPoolRedeemer = (
 
 /** `TreasuryRedeemer.ReserveProject`: the pool spend beside the `PROJECT` mint. */
 export const reserveProjectRedeemer = Data.to(new Constr(4, []));
+
+/** `TreasuryRedeemer.SpendTranche { evidence_hash, bank_ref_hash }` (types.ak). */
+export const spendTrancheRedeemer = (
+  evidenceHash: string,
+  bankRefHash: string,
+): string => Data.to(new Constr(1, [evidenceHash, bankRefHash]));
 
 export type AttestOptions = {
   balance: bigint;
@@ -233,6 +240,98 @@ export async function executeProject(
     proposal: await ledger.lucid.utxoByUnit(
       proposalUnit(m1.governancePolicy, proposal.id),
     ),
+    project: await ledger.lucid.utxoByUnit(unit),
+    pool: await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy)),
+  };
+}
+
+export type SpendTrancheOptions = {
+  projectId: string;
+  evidenceHash: string;
+  bankRefHash?: string;
+  /** Board co-signers to add; defaults to two, the test config's threshold. */
+  boardSigners?: number;
+  /** Negative tests only: the exact validity bounds. */
+  validFrom?: number;
+  validTo?: number;
+  /** Negative tests only: write these datums instead of the derived ones. */
+  poolDatum?: string;
+  projectDatum?: string;
+};
+
+/**
+ * `SpendTranche` (ADR 0010 §5): the board threshold and the treasurer sign the
+ * project and pool spend, the next milestone pays, and the last one closes the
+ * project. The selected wallet is the treasurer; the board co-signs.
+ */
+export async function spendTranche(
+  ledger: Ledger,
+  m1: Genesis,
+  options: SpendTrancheOptions,
+): Promise<{ project: UTxO; pool: UTxO }> {
+  const unit = projectUnit(m1.treasuryPolicy, options.projectId);
+  const projectBox = await ledger.lucid.utxoByUnit(unit);
+  const project = decodeProjectDatum(projectBox.datum!);
+  const milestone = project.spec.milestones[Number(project.nextMilestone)];
+  const poolBox = await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy));
+  const pool = decodePoolDatum(poolBox.datum!);
+  // A fully spent project has no next milestone; a zero tranche still lets the
+  // negative tests reach the rule's status check.
+  const amount = milestone?.amount ?? 0n;
+  const nextMilestone = milestone
+    ? project.nextMilestone + 1n
+    : project.nextMilestone;
+  const status: ProjectStatusName = milestone
+    ? nextMilestone === BigInt(project.spec.milestones.length)
+      ? "ProjectClosed"
+      : "ProjectOpen"
+    : project.status;
+  const now = scriptTime(ledger, ledger.emulator.now());
+  const redeemer = spendTrancheRedeemer(
+    options.evidenceHash,
+    options.bankRefHash ?? "ab".repeat(32),
+  );
+  // The selected wallet is the treasurer; the rule needs it as a required
+  // signer, not merely the fee payer (the board keys are added below).
+  const treasurer = await ledger.lucid.wallet().address();
+  const boardSigners = options.boardSigners ?? 2;
+
+  let tx = ledger.lucid
+    .newTx()
+    .addSigner(treasurer)
+    .collectFrom([projectBox, poolBox], redeemer)
+    .readFrom([m1.configUtxo])
+    .attach.SpendingValidator(m1.treasuryValidator)
+    .validFrom(options.validFrom ?? now)
+    .validTo(options.validTo ?? now + 60_000);
+  for (const key of ledger.roles.boardKeys.slice(0, boardSigners)) {
+    tx = tx.addSignerKey(key);
+  }
+  const built = await tx
+    .pay.ToContract(
+      m1.treasuryAddress,
+      {
+        kind: "inline",
+        value:
+          options.poolDatum ??
+          poolDatum(pool.balance - amount, pool.committed - amount),
+      },
+      poolBox.assets,
+    )
+    .pay.ToContract(
+      m1.treasuryAddress,
+      {
+        kind: "inline",
+        value:
+          options.projectDatum ??
+          projectDatum(options.projectId, project.spec, nextMilestone, status),
+      },
+      projectBox.assets,
+    )
+    .complete();
+  await submitWithBoard(built, ledger, boardSigners);
+  ledger.emulator.awaitBlock(1);
+  return {
     project: await ledger.lucid.utxoByUnit(unit),
     pool: await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy)),
   };

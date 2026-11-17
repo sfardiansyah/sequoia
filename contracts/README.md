@@ -5,8 +5,8 @@ implemented per `docs/adr/0008-m1-config-and-membership.md`; M2 governance
 (`governance` + `ballot`, config v2) follows
 `docs/adr/0009-m2-secret-ballot-governance.md`. M3 treasury follows
 `docs/adr/0010-m3-project-treasury.md`: genesis v3 (`POOL`, the pool box), the
-pool attestation, and project execution are implemented; the tranche, close, and
-cancel rules follow.
+pool attestation, project execution, and tranche spending are implemented; the
+close and cancel rules follow.
 
 ## Toolchain
 
@@ -54,8 +54,8 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/state_nft.ak` — one-shot `STATE` and `POOL` mint, parameterized by
   the seed output.
 - `validators/treasury.ak` — the pool box, the project boxes, and the `PROJECT`
-  NFT policy (ADR 0010 §1). The pool attestation and the project reserve are
-  live; the tranche, close, and cancel rules follow.
+  NFT policy (ADR 0010 §1). The pool attestation, the project reserve, and the
+  tranche are live; the close and cancel rules follow.
 - `validators/config.ak` — the config box; its only spend is a governance
   execution.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
@@ -74,8 +74,8 @@ scripts take the state NFT policy ID, which is derived from it.
   invariants (ADR 0009 §8), and the config execution gate.
 - `lib/sequoia/governance_rules.ak` — proposal creation, cast, discard, tally,
   finalize, execute, and the proposal-datum invariant.
-- `lib/sequoia/treasury_rules.ak` — the pool attestation and the project reserve
-  (ADR 0010 §2, §4).
+- `lib/sequoia/treasury_rules.ak` — the pool attestation, the project reserve,
+  and tranche spending (ADR 0010 §2, §4, §5).
 - `lib/sequoia/ballot_rules.ak` — ballot cast, reveal, discard, and count (ADR
   0009 §5–§7).
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
@@ -181,6 +181,24 @@ half can complete alone:
 The treasury policy is the script hash of the pool box's address, which is how
 the mint purpose learns its own policy without taking a self-referential
 parameter. Genesis therefore compiles the treasury before governance.
+
+## Tranche spending
+
+`SpendTranche` pays exactly one approved milestone and spends the project box
+and the pool box together (ADR 0010 §5–§6, spec §7). The redeemer carries the
+revealed `evidence_hash` and the hashed bank reference; the amount and the
+evidence requirement are the next milestone's, so an out-of-order or partial
+payout cannot be expressed. The rule requires `ProjectOpen`, a non-empty bank
+reference, `upper_bound <= deadline`, `board_threshold` board signatures, the
+treasurer signature, `amount <= balance`, and `amount <= committed` (the second
+check keeps a drifted `committed` from going negative). Effects: `next_milestone
++ 1`, the project id and spec byte-identical, and `balance` and `committed` each
+debited by the amount; the last milestone writes `ProjectClosed` in the same
+transaction. Both the `POOL` and `PROJECT` singletons stay at the script.
+
+The rule runs for each spent box because both are at the same script. It locates
+exactly one pool input and exactly one project input, and each invocation
+requires its own box to be one of them, so neither can be written alone.
 
 ## Governance tally and finalize
 

@@ -209,8 +209,8 @@ input holding one `PROJECT` token at this script.
   `status = ProjectOpen`, `next_milestone < length(milestones)`, and
   `amount = milestones[next_milestone].amount`; `evidence_hash` equals that
   milestone's `evidence_commitment`; `upper_bound <= deadline`;
-  `amount <= balance`; `bank_ref_hash` is non-empty; `board_threshold` board keys
-  sign and the treasurer signs. Effects: the project datum's `next_milestone`
+  `amount <= balance`; `amount <= committed`; `bank_ref_hash` is non-empty;
+  `board_threshold` board keys sign and the treasurer signs. Effects: the project datum's `next_milestone`
   becomes `+1`, and its status becomes `ProjectClosed` when it was the last
   milestone; the pool datum becomes `balance - amount` and `committed - amount`.
   Both tokens are held exactly once after the transaction. The spec and id are
@@ -313,7 +313,7 @@ Unchanged from M2 except the threshold selection.
 - **Evidence is committed, not verified.** The chain checks the tranche's
   evidence hash against the approved commitment, not the evidence's content.
 - **Milestones are exact.** A project that needs less than an approved milestone
-  needs a new proposal, not a partial draw.
+  needs a new proposal, not a partial payout.
 - **The deadline cannot be extended.** A failing project is cancelled and, if
   wanted, re-proposed. A project whose deadline passed before its execution can
   still be created and is then closed immediately, returning the reserve.
@@ -356,7 +356,7 @@ off-chain interface.
 | Project and cancel creation terms: milestones, amounts, 32-byte commitments, deadline after `reveal_end`, cancel id | `governance_rules.test.ak` | `proposal.test.ts` |
 | Pool attestation: treasurer-only, absolute balance, `committed` unchanged, negative or empty rejected | `treasury_rules.test.ak` | `pool.test.ts` |
 | Approval reserves at execution; unfunded pool rejected; project datum and singleton | `treasury_rules.test.ak` | `project.test.ts` |
-| Milestone order, exact amount, evidence equality, deadline, balance, auto-close | `treasury_rules.test.ak` | `tranche.test.ts` |
+| Milestone order, exact amount, evidence equality, deadline, balance and committed, auto-close | `treasury_rules.test.ak` | `tranche.test.ts` |
 | Board close, permissionless close after the deadline, remainder released | `treasury_rules.test.ak` | `close.test.ts` |
 | Cancel pairing, open project, remainder released | `governance_rules.test.ak`, `treasury_rules.test.ak` | `close.test.ts` |
 | Threshold by kind (5001 vs 6667), quorum unchanged | `governance_rules.test.ak`, `voting.test.ak` | `proposal.test.ts` |

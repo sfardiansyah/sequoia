@@ -161,6 +161,11 @@ signature (the existing `bank_issuer` credential), in the transaction that
 spends the project and pool boxes. The redeemer carries the evidence hash and
 the hashed bank reference; the amount is the approved milestone amount.
 
+`amount <= balance` and `amount <= committed` both hold: the first stops an
+underfunded tranche, and the second keeps a drifted `committed` from going
+negative. The amount is the next milestone's, so neither the builder nor the
+board can choose a partial payout.
+
 There is no separate spend-attestation UTxO. The bank transfer is off chain, so
 the chain cannot order an attestation against it; a second box would record the
 same fact twice without adding truth. Separation of duties is the two

@@ -1,3 +1,4 @@
+use aiken/interval
 use cardano/address.{VerificationKey, from_script, from_verification_key}
 use cardano/assets
 use cardano/transaction.{
@@ -5,9 +6,9 @@ use cardano/transaction.{
 }
 use sequoia/treasury_rules
 use sequoia/types.{
-  Config, ConfigDatum, Milestone, Passed, PoolDatum, Project, ProjectClosed,
-  ProjectDatum, ProjectOpen, ProjectSpec, ProposalDatum, ProposalPayload,
-  ProposalStatus, Rejected, pool_asset_name,
+  Config, ConfigDatum, Milestone, Passed, PoolDatum, Project, ProjectCancelled,
+  ProjectClosed, ProjectDatum, ProjectOpen, ProjectSpec, ProposalDatum,
+  ProposalPayload, ProposalStatus, Rejected, pool_asset_name,
 }
 
 const state_policy_id: ByteArray =
@@ -34,6 +35,9 @@ const treasury_script: ByteArray =
 const treasurer: ByteArray =
   #"77777777777777777777777777777777777777777777777777777777"
 
+const board: ByteArray =
+  #"78787878787878787878787878787878787878787878787878787878"
+
 const tx_id: ByteArray =
   #"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 
@@ -50,7 +54,7 @@ fn config() -> ConfigDatum {
     member_capital_bps: 7_000,
     capital_participation_bps: 3_000,
     standard_capital_participation_max_bps: 5_000,
-    board_keys: [treasurer],
+    board_keys: [board],
     board_threshold: 1,
     kyc_issuer: VerificationKey(treasurer),
     bank_issuer: VerificationKey(treasurer),
@@ -626,4 +630,340 @@ test reserve_rejects_a_second_pool_output() fail {
     ],
   }
   treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+// Tranche spending: one approved milestone per transaction, board and treasurer
+// signed, debiting the pool and closing the project on the last milestone
+// (spec §7, ADR 0010 §5–§6).
+
+fn project_input(datum: ProjectDatum, index: Int) -> Input {
+  Input { output_reference: ref(index), output: project_output(datum) }
+}
+
+fn tranche_tx(
+  old_pool: PoolDatum,
+  new_pool: PoolDatum,
+  old_project: ProjectDatum,
+  new_project: ProjectDatum,
+  signers: List<ByteArray>,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [pool_input(old_pool, 3), project_input(old_project, 5)],
+    reference_inputs: [config_input()],
+    extra_signatories: signers,
+    outputs: [pool_output(new_pool), project_output(new_project)],
+    validity_range: interval.between(0, 1_000_000),
+  }
+}
+
+fn first_tranche_tx() -> Transaction {
+  tranche_tx(
+    PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+    PoolDatum { balance: 7_000_000, committed: 2_000_000 },
+    open_project(),
+    ProjectDatum { ..open_project(), next_milestone: 1 },
+    [board, treasurer],
+  )
+}
+
+fn spend_first(tx: Transaction) -> Bool {
+  treasury_rules.spend_tranche(
+    state_policy_id,
+    evidence_a,
+    bank_ref,
+    ref(5),
+    tx,
+  )
+}
+
+test tranche_spends_the_next_milestone() {
+  spend_first(first_tranche_tx())
+}
+
+test tranche_spends_the_last_milestone_and_closes_the_project() {
+  let started = ProjectDatum { ..open_project(), next_milestone: 1 }
+  let closed = ProjectDatum {
+    ..open_project(),
+    next_milestone: 2,
+    status: ProjectClosed,
+  }
+  treasury_rules.spend_tranche(
+    state_policy_id,
+    evidence_b,
+    bank_ref,
+    ref(5),
+    tranche_tx(
+      PoolDatum { balance: 10_000_000, committed: 2_000_000 },
+      PoolDatum { balance: 8_000_000, committed: 0 },
+      started,
+      closed,
+      [board, treasurer],
+    ),
+  )
+}
+
+test tranche_rejects_wrong_evidence() fail {
+  treasury_rules.spend_tranche(
+    state_policy_id,
+    evidence_b,
+    bank_ref,
+    ref(5),
+    first_tranche_tx(),
+  )
+}
+
+test tranche_rejects_an_empty_bank_reference() fail {
+  treasury_rules.spend_tranche(
+    state_policy_id,
+    evidence_a,
+    #"",
+    ref(5),
+    first_tranche_tx(),
+  )
+}
+
+test tranche_rejects_a_late_spend() fail {
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    validity_range: interval.between(0, 2_000_000_001),
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_missing_board_signature() fail {
+  let tx = Transaction { ..first_tranche_tx(), extra_signatories: [treasurer] }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_missing_treasurer_signature() fail {
+  let tx = Transaction { ..first_tranche_tx(), extra_signatories: [board] }
+  spend_first(tx)
+}
+
+test tranche_rejects_an_insufficient_balance() fail {
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [
+      pool_input(PoolDatum { balance: 2_000_000, committed: 5_000_000 }, 3),
+      project_input(open_project(), 5),
+    ],
+    outputs: [
+      pool_output(PoolDatum { balance: 0, committed: 2_000_000 }),
+      project_output(ProjectDatum { ..open_project(), next_milestone: 1 }),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_an_amount_above_committed() fail {
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 1_000_000 }, 3),
+      project_input(open_project(), 5),
+    ],
+    outputs: [
+      pool_output(PoolDatum { balance: 7_000_000, committed: 0 }),
+      project_output(ProjectDatum { ..open_project(), next_milestone: 1 }),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_closed_project() fail {
+  let closed = ProjectDatum { ..open_project(), status: ProjectClosed }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 5_000_000 }, 3),
+      project_input(closed, 5),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_cancelled_project() fail {
+  let cancelled = ProjectDatum { ..open_project(), status: ProjectCancelled }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 5_000_000 }, 3),
+      project_input(cancelled, 5),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_fully_spent_project() fail {
+  let spent = ProjectDatum { ..open_project(), next_milestone: 2 }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 2_000_000 }, 3),
+      project_input(spent, 5),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_tampered_spec() fail {
+  let tampered = ProjectDatum {
+    ..open_project(),
+    next_milestone: 1,
+    spec: ProjectSpec { ..project_spec(), recipient_commitment: evidence_a },
+  }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    outputs: [
+      pool_output(PoolDatum { balance: 7_000_000, committed: 2_000_000 }),
+      project_output(tampered),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_skipped_milestone() fail {
+  let skipped = ProjectDatum { ..open_project(), next_milestone: 2 }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    outputs: [
+      pool_output(PoolDatum { balance: 7_000_000, committed: 2_000_000 }),
+      project_output(skipped),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_an_early_close() fail {
+  let closed = ProjectDatum {
+    ..open_project(),
+    next_milestone: 1,
+    status: ProjectClosed,
+  }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    outputs: [
+      pool_output(PoolDatum { balance: 7_000_000, committed: 2_000_000 }),
+      project_output(closed),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_renamed_project() fail {
+  let renamed = ProjectDatum {
+    ..open_project(),
+    project_id: other_project_id,
+    next_milestone: 1,
+  }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    outputs: [
+      pool_output(PoolDatum { balance: 7_000_000, committed: 2_000_000 }),
+      project_output(renamed),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_wrong_balance_debit() fail {
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    outputs: [
+      pool_output(PoolDatum { balance: 6_000_000, committed: 2_000_000 }),
+      project_output(ProjectDatum { ..open_project(), next_milestone: 1 }),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_wrong_committed_debit() fail {
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    outputs: [
+      pool_output(PoolDatum { balance: 7_000_000, committed: 1_000_000 }),
+      project_output(ProjectDatum { ..open_project(), next_milestone: 1 }),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_project_outside_the_treasury() fail {
+  let fake = Input {
+    output_reference: ref(5),
+    output: Output {
+      address: from_verification_key(treasurer),
+      value: assets.from_asset(treasury_script, project_id, 1),
+      datum: InlineDatum(open_project()),
+      reference_script: None,
+    },
+  }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 5_000_000 }, 3),
+      fake,
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_project_without_the_token() fail {
+  let fake = Input {
+    output_reference: ref(5),
+    output: Output {
+      address: from_script(treasury_script),
+      value: assets.from_lovelace(2_000_000),
+      datum: InlineDatum(open_project()),
+      reference_script: None,
+    },
+  }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 5_000_000 }, 3),
+      fake,
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_missing_pool() fail {
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    inputs: [project_input(open_project(), 5)],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_a_second_project_output() fail {
+  let next = ProjectDatum { ..open_project(), next_milestone: 1 }
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    outputs: [
+      pool_output(PoolDatum { balance: 7_000_000, committed: 2_000_000 }),
+      project_output(next),
+      project_output(next),
+    ],
+  }
+  spend_first(tx)
+}
+
+test tranche_rejects_an_unbounded_validity_range() fail {
+  let tx = Transaction {
+    ..first_tranche_tx(),
+    validity_range: interval.after(0),
+  }
+  spend_first(tx)
+}
+
+test tranche_accepts_the_pool_box_own_ref() {
+  treasury_rules.spend_tranche(
+    state_policy_id,
+    evidence_a,
+    bank_ref,
+    ref(3),
+    first_tranche_tx(),
+  )
 }

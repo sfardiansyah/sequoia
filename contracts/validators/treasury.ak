@@ -1,11 +1,11 @@
 use cardano/assets.{PolicyId}
 use cardano/transaction.{OutputReference, Transaction}
 use sequoia/treasury_rules
-use sequoia/types.{AttestPool, ReserveProject, TreasuryRedeemer}
+use sequoia/types.{AttestPool, ReserveProject, SpendTranche, TreasuryRedeemer}
 
 /// Treasury pool and project boxes, and the `PROJECT` NFT policy (ADR 0010 §1).
 /// The pool is the input holding the one `POOL` token at this script; a project
-/// box holds a `PROJECT` token and is written by the reserve rule.
+/// box holds a `PROJECT` token and is written by the reserve and tranche rules.
 validator treasury(state_nft_policy: PolicyId) {
   spend(
     _datum: Option<Data>,
@@ -25,6 +25,14 @@ validator treasury(state_nft_policy: PolicyId) {
         )
       ReserveProject ->
         treasury_rules.reserve_project(state_nft_policy, Some(own_ref), self)
+      SpendTranche { evidence_hash, bank_ref_hash } ->
+        treasury_rules.spend_tranche(
+          state_nft_policy,
+          evidence_hash,
+          bank_ref_hash,
+          own_ref,
+          self,
+        )
       _ -> fail @"treasury: action lands with the project rules"
     }
   }

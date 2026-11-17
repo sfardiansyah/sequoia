@@ -4,11 +4,13 @@ use cardano/address.{Script, VerificationKey}
 use cardano/assets.{AssetName, PolicyId, quantity_of, tokens}
 use cardano/transaction.{Input, Output, OutputReference, Transaction}
 use sequoia/config_ref
-use sequoia/tx.{inline_datum, one_token_output, require_key_signer}
+use sequoia/config_rules
+use sequoia/tx.{inline_datum, one_token_output, require_key_signer, upper_bound}
 use sequoia/types.{
-  ConfigDatum, Milestone, Passed, PoolDatum, Project, ProjectDatum, ProjectOpen,
-  ProjectSpec, ProposalDatum, pool_asset_name,
+  ConfigDatum, Milestone, Passed, PoolDatum, Project, ProjectClosed,
+  ProjectDatum, ProjectOpen, ProjectSpec, ProposalDatum, pool_asset_name,
 }
+use sequoia/voting
 
 /// Treasury rules (ADR 0010 §1–§2). The treasury holds no money: the pool box
 /// carries the treasurer-attested IDR figures and the cash stays at the bank.
@@ -197,5 +199,100 @@ pub fn reserve_project(
     fail @"treasury: the pool cannot be oversubscribed"
   } else {
     True
+  }
+}
+
+/// The one input at the treasury script holding a `PROJECT` token, with its
+/// datum. The token name is the project id; the pool box holds `POOL` instead.
+fn only_project_input(
+  treasury_policy: PolicyId,
+  self: Transaction,
+) -> (Input, ProjectDatum) {
+  let holders = list.filter(
+    self.inputs,
+    fn(input) {
+      and {
+        input.output.address.payment_credential == Script(treasury_policy),
+        !dict.is_empty(tokens(input.output.value, treasury_policy)),
+      }
+    },
+  )
+  when holders is {
+    [input] -> {
+      expect [Pair(project_id, 1)] = tokens(input.output.value, treasury_policy)
+        |> dict.to_pairs()
+      let datum = project_datum_of(input.output)
+      if datum.project_id != project_id {
+        fail @"treasury: the project datum must name its token"
+      } else {
+        (input, datum)
+      }
+    }
+    _ -> fail @"treasury: exactly one project input required"
+  }
+}
+
+/// `SpendTranche` (ADR 0010 §5, spec §7): one approved milestone pays out. The
+/// board threshold and the treasurer sign; the amount and evidence are the next
+/// milestone's, not the builder's. The tranche debits `balance` and `committed`
+/// by the amount, and the last milestone closes the project in the same
+/// transaction. The recipient and evidence stay opaque commitments.
+pub fn spend_tranche(
+  state_nft_policy: PolicyId,
+  evidence_hash: ByteArray,
+  bank_ref_hash: ByteArray,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let pool = only_pool_input(state_nft_policy, self)
+  let policy_id = treasury_policy(pool)
+  let old_pool = datum_of(pool.output)
+  let (project, old) = only_project_input(policy_id, self)
+  let config = config_ref.find(state_nft_policy, self)
+  expect _treasurer = require_key_signer(config.bank_issuer, self)
+  let written = project_datum_of(
+    one_token_output(policy_id, old.project_id, policy_id, self),
+  )
+  let new_pool = datum_of(only_pool_output(pool, self, state_nft_policy))
+  if own_ref != pool.output_reference && own_ref != project.output_reference {
+    fail @"treasury: the tranche spends the project and the pool"
+  } else if old.status != ProjectOpen {
+    fail @"treasury: only an open project spends a tranche"
+  } else if bank_ref_hash == #"" {
+    fail @"treasury: the bank reference hash must not be empty"
+  } else if !voting.not_after(upper_bound(self), old.spec.deadline) {
+    fail @"treasury: the tranche is after the project deadline"
+  } else if config_rules.board_signers(config, self) < config.board_threshold {
+    fail @"treasury: board threshold not met"
+  } else {
+    expect Some(milestone) = list.at(old.spec.milestones, old.next_milestone)
+    let amount = milestone.amount
+    let next_milestone = old.next_milestone + 1
+    let next_status = if next_milestone == list.length(old.spec.milestones) {
+      ProjectClosed
+    } else {
+      ProjectOpen
+    }
+    if evidence_hash != milestone.evidence_commitment {
+      fail @"treasury: the evidence must be the approved milestone's"
+    } else if amount > old_pool.balance {
+      fail @"treasury: the tranche exceeds the attested balance"
+    } else if amount > old_pool.committed {
+      fail @"treasury: the tranche exceeds committed"
+    } else if written.project_id != old.project_id {
+      fail @"treasury: the tranche must keep the project id"
+    } else if written.spec != old.spec {
+      fail @"treasury: the tranche must keep the approved spec"
+    } else if written.next_milestone != next_milestone {
+      fail @"treasury: the tranche must consume exactly one milestone"
+    } else if written.status != next_status {
+      fail @"treasury: only the last tranche closes the project"
+    } else if new_pool.balance != old_pool.balance - amount {
+      fail @"treasury: the tranche must debit the balance"
+    } else if new_pool.committed != old_pool.committed - amount {
+      fail @"treasury: the tranche must debit committed"
+    } else {
+      True
+    }
   }
 }
