@@ -203,12 +203,15 @@ export function kycScript(stateNftPolicy: string): Script {
   };
 }
 
-export function governanceScript(stateNftPolicy: string): Script {
+export function governanceScript(
+  stateNftPolicy: string,
+  treasuryPolicy: string,
+): Script {
   return {
     type: "PlutusV3",
     script: applyParamsToScript(
       compiledValidator("governance.governance.mint").compiledCode,
-      [castTo(stateNftPolicy, Data.Bytes())],
+      [castTo(stateNftPolicy, Data.Bytes()), castTo(treasuryPolicy, Data.Bytes())],
     ),
   };
 }
@@ -417,15 +420,17 @@ export async function genesis(
   const bankValidator = bankScript();
   const bankPolicy = validatorToScriptHash(bankValidator);
   const bankAddress = validatorToAddress("Custom", bankValidator);
-  const governanceValidator = governanceScript(stateNftPolicy);
+  // Governance takes the treasury policy, and the treasury takes the state NFT
+  // policy, so the treasury script is compiled first (ADR 0010 §1).
+  const treasuryValidator = treasuryScript(stateNftPolicy);
+  const treasuryPolicy = validatorToScriptHash(treasuryValidator);
+  const treasuryAddress = validatorToAddress("Custom", treasuryValidator);
+  const governanceValidator = governanceScript(stateNftPolicy, treasuryPolicy);
   const governancePolicy = validatorToScriptHash(governanceValidator);
   const governanceAddress = validatorToAddress("Custom", governanceValidator);
   const ballotValidator = ballotScript(stateNftPolicy);
   const ballotPolicy = validatorToScriptHash(ballotValidator);
   const ballotAddress = validatorToAddress("Custom", ballotValidator);
-  const treasuryValidator = treasuryScript(stateNftPolicy);
-  const treasuryPolicy = validatorToScriptHash(treasuryValidator);
-  const treasuryAddress = validatorToAddress("Custom", treasuryValidator);
   const config_datum = configDatum(roles, config, {
     membership: membershipPolicy,
     kyc: kycPolicy,

@@ -4,7 +4,11 @@ use cardano/transaction.{
   InlineDatum, Input, Output, OutputReference, Transaction, placeholder,
 }
 use sequoia/treasury_rules
-use sequoia/types.{ConfigDatum, PoolDatum, pool_asset_name}
+use sequoia/types.{
+  Config, ConfigDatum, Milestone, Passed, PoolDatum, Project, ProjectClosed,
+  ProjectDatum, ProjectOpen, ProjectSpec, ProposalDatum, ProposalPayload,
+  ProposalStatus, Rejected, pool_asset_name,
+}
 
 const state_policy_id: ByteArray =
   #"11111111111111111111111111111111111111111111111111111111"
@@ -247,4 +251,379 @@ test attest_rejects_minting_the_pool_token() fail {
     mint: assets.from_asset(state_policy_id, pool_asset_name, 1),
   }
   treasury_rules.attest_pool(state_policy_id, 0, bank_ref, ref(3), tx)
+}
+
+// Project reservation: executing a passed `Project` proposal spends the pool,
+// mints the `PROJECT` NFT, and writes the project box (spec §7).
+
+const project_id: ByteArray =
+  #"dededededededededededededededededededededededededededededededede"
+
+const other_project_id: ByteArray =
+  #"dfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdf"
+
+const foreign_policy_id: ByteArray =
+  #"9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+
+const recipient: ByteArray =
+  #"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+
+const evidence_a: ByteArray =
+  #"a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2"
+
+const evidence_b: ByteArray =
+  #"a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3"
+
+const leaf: ByteArray =
+  #"b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+
+fn project_spec() -> ProjectSpec {
+  ProjectSpec {
+    recipient_commitment: recipient,
+    deadline: 2_000_000_000,
+    milestones: [
+      Milestone { amount: 3_000_000, evidence_commitment: evidence_a },
+      Milestone { amount: 2_000_000, evidence_commitment: evidence_b },
+    ],
+  }
+}
+
+fn open_project() -> ProjectDatum {
+  ProjectDatum {
+    project_id,
+    spec: project_spec(),
+    next_milestone: 0,
+    status: ProjectOpen,
+  }
+}
+
+fn project_output(datum: ProjectDatum) -> Output {
+  Output {
+    address: from_script(treasury_script),
+    value: assets.from_asset(treasury_script, datum.project_id, 1),
+    datum: InlineDatum(datum),
+    reference_script: None,
+  }
+}
+
+fn project_proposal(
+  payload: ProposalPayload,
+  status: ProposalStatus,
+) -> ProposalDatum {
+  ProposalDatum {
+    id: project_id,
+    proposer: treasurer,
+    payload,
+    eligible_leaves: [leaf],
+    start: 0,
+    end: 1,
+    reveal_end: 2,
+    nullifiers: [],
+    discarded: 0,
+    tallied: 0,
+    yes: 0,
+    no: 0,
+    abstain: 0,
+    status,
+    finalized_at: None,
+  }
+}
+
+fn proposal_input(proposal: ProposalDatum) -> Input {
+  named_proposal_input(proposal, proposal.id)
+}
+
+fn named_proposal_input(proposal: ProposalDatum, name: ByteArray) -> Input {
+  Input {
+    output_reference: ref(4),
+    output: Output {
+      address: from_script(governance_policy_id),
+      value: assets.from_asset(governance_policy_id, name, 1),
+      datum: InlineDatum(proposal),
+      reference_script: None,
+    },
+  }
+}
+
+fn project_mint() {
+  assets.from_asset(treasury_script, project_id, 1)
+}
+
+fn reserve_tx(
+  old: PoolDatum,
+  new: PoolDatum,
+  project: ProjectDatum,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [
+      pool_input(old, 3),
+      proposal_input(project_proposal(Project(project_spec()), Passed)),
+    ],
+    reference_inputs: [config_input()],
+    mint: project_mint(),
+    outputs: [pool_output(new), project_output(project)],
+  }
+}
+
+test reserve_accepts_a_funded_project() {
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 2_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 7_000_000 },
+      open_project(),
+    ),
+  )
+}
+
+test reserve_accepts_the_spent_pool_box() {
+  treasury_rules.reserve_project(
+    state_policy_id,
+    Some(ref(3)),
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+  )
+}
+
+test reserve_rejects_an_unfunded_pool() fail {
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 4_000_000, committed: 0 },
+      PoolDatum { balance: 4_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+  )
+}
+
+test reserve_rejects_a_tampered_spec() fail {
+  let tampered = ProjectDatum {
+    ..open_project(),
+    spec: ProjectSpec { ..project_spec(), milestones: [] },
+  }
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      tampered,
+    ),
+  )
+}
+
+test reserve_rejects_a_project_that_names_another_token() fail {
+  let renamed = ProjectDatum { ..open_project(), project_id: other_project_id }
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      renamed,
+    ),
+  )
+}
+
+test reserve_rejects_a_missing_mint() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    mint: assets.zero,
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_second_project_name() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    mint: assets.from_asset_list(
+      [Pair(treasury_script, [Pair(project_id, 1), Pair(other_project_id, 1)])],
+    ),
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_mint_from_another_policy() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    mint: assets.from_asset(foreign_policy_id, project_id, 1),
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_changed_balance() fail {
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 9_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+  )
+}
+
+test reserve_rejects_an_unraised_committed() fail {
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+    ),
+  )
+}
+
+test reserve_rejects_a_project_outside_the_treasury() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    outputs: [
+      pool_output(PoolDatum { balance: 10_000_000, committed: 5_000_000 }),
+      Output {
+        address: from_verification_key(treasurer),
+        value: project_mint(),
+        datum: InlineDatum(open_project()),
+        reference_script: None,
+      },
+    ],
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_rejected_proposal() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 0 }, 3),
+      proposal_input(project_proposal(Project(project_spec()), Rejected)),
+    ],
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_proposal_whose_datum_names_another_id() fail {
+  let proposal = ProposalDatum {
+    ..project_proposal(Project(project_spec()), Passed),
+    id: other_project_id,
+  }
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 0 }, 3),
+      named_proposal_input(proposal, project_id),
+    ],
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_config_proposal() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 0 }, 3),
+      proposal_input(project_proposal(Config(config()), Passed)),
+    ],
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_missing_proposal() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    inputs: [pool_input(PoolDatum { balance: 10_000_000, committed: 0 }, 3)],
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
+}
+
+test reserve_rejects_a_started_project() fail {
+  let started = ProjectDatum { ..open_project(), next_milestone: 1 }
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      started,
+    ),
+  )
+}
+
+test reserve_rejects_a_closed_project() fail {
+  let closed = ProjectDatum { ..open_project(), status: ProjectClosed }
+  treasury_rules.reserve_project(
+    state_policy_id,
+    None,
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      closed,
+    ),
+  )
+}
+
+test reserve_rejects_another_spent_box() fail {
+  treasury_rules.reserve_project(
+    state_policy_id,
+    Some(ref(7)),
+    reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+  )
+}
+
+test reserve_rejects_a_second_pool_output() fail {
+  let tx = Transaction {
+    ..reserve_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      open_project(),
+    ),
+    outputs: [
+      pool_output(PoolDatum { balance: 10_000_000, committed: 5_000_000 }),
+      pool_output(PoolDatum { balance: 10_000_000, committed: 5_000_000 }),
+      project_output(open_project()),
+    ],
+  }
+  treasury_rules.reserve_project(state_policy_id, None, tx)
 }

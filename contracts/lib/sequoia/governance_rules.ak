@@ -6,6 +6,7 @@ use cardano/address.{Script}
 use cardano/assets.{PolicyId, quantity_of, tokens}
 use cardano/transaction.{Input, Output, OutputReference, Transaction}
 use sequoia/ballot_rules
+use sequoia/config_ref
 use sequoia/config_rules
 use sequoia/kyc_rules
 use sequoia/tx.{
@@ -414,14 +415,32 @@ fn config_spent_input(state_nft_policy: PolicyId, self: Transaction) -> Input {
   }
 }
 
-/// `Execute` consumes a passed `Config` proposal and the config box it writes
-/// (ADR 0009 §1, §6). The config box is spent, not referenced, so the live
-/// config comes from that input. The config validator owns the write gate —
-/// timelock, immutable fields, invariants — so governance only requires that
-/// the write happened and records the status change. The project kinds get their
-/// execution with the treasury rules (spec §7).
+/// The status half of execution, shared by the kinds: `Passed` becomes
+/// `Executed` and nothing else moves.
+fn executed(old: ProposalDatum, new: ProposalDatum) -> Bool {
+  if old.status != Passed {
+    fail @"governance_rules: execute requires a passed proposal"
+  } else if !keep_proposal(old, new) {
+    fail @"governance_rules: execute must preserve the proposal identity"
+  } else if !counters_unchanged(old, new) {
+    fail @"governance_rules: execute must not touch the vote counters"
+  } else if new.finalized_at != old.finalized_at {
+    fail @"governance_rules: execute must not touch the finalize time"
+  } else if new.status != Executed {
+    fail @"governance_rules: execute must mark the proposal executed"
+  } else {
+    True
+  }
+}
+
+/// `Execute` consumes a passed proposal and performs its kind's effect
+/// (ADR 0009 §1, §6; ADR 0010 §1, §3). The effects live in the owning
+/// validator: the config validator owns the config write, the treasury mint
+/// owns the reserve and the project box. `Config` waits for the timelock;
+/// project kinds execute without one.
 pub fn execute(
   state_nft_policy: PolicyId,
+  treasury_policy: PolicyId,
   own_ref: OutputReference,
   self: Transaction,
 ) -> Bool {
@@ -436,23 +455,27 @@ pub fn execute(
         config_input,
         self,
       )
-      if old.status != Passed {
-        fail @"governance_rules: execute requires a passed proposal"
-      } else if !keep_proposal(old, new) {
-        fail @"governance_rules: execute must preserve the proposal identity"
-      } else if !counters_unchanged(old, new) {
-        fail @"governance_rules: execute must not touch the vote counters"
-      } else if new.finalized_at != old.finalized_at {
-        fail @"governance_rules: execute must not touch the finalize time"
-      } else if new.status != Executed {
-        fail @"governance_rules: execute must mark the proposal executed"
-      } else if written != proposed {
+      expect executed(old, new)
+      if written != proposed {
         fail @"governance_rules: execute must write the proposed config"
       } else {
         True
       }
     }
-    _ -> fail @"governance_rules: only config execution is supported"
+    Project(_) -> {
+      // The project's own execution runs in the treasury mint; here the
+      // passed proposal is spent and the exact `PROJECT` mint is required.
+      let config = config_ref.find(state_nft_policy, self)
+      let new = returned_proposal(config, old.id, self)
+      expect executed(old, new)
+      if quantity_of(self.mint, treasury_policy, old.id) != 1 {
+        fail @"governance_rules: project execution must mint the project token"
+      } else {
+        True
+      }
+    }
+    Cancel(_) ->
+      fail @"governance_rules: cancel execution lands with the cancel rules"
   }
 }
 

@@ -21,7 +21,7 @@ const milestoneSchema = Data.Object({
   evidence_commitment: Data.Bytes(),
 });
 
-const projectSpecSchema = Data.Object({
+export const projectSpecSchema = Data.Object({
   recipient_commitment: Data.Bytes(),
   deadline: Data.Integer(),
   milestones: Data.Array(milestoneSchema),
@@ -74,6 +74,35 @@ export type ProjectSpecTerms = {
   milestones: MilestoneTerms[];
 };
 
+/** The spec fields as `types.ak` encodes them; the one snake-case mapping. */
+export type ProjectSpecFields = {
+  recipient_commitment: string;
+  deadline: bigint;
+  milestones: { amount: bigint; evidence_commitment: string }[];
+};
+
+export function specFields(spec: ProjectSpecTerms): ProjectSpecFields {
+  return {
+    recipient_commitment: spec.recipientCommitment,
+    deadline: spec.deadline,
+    milestones: spec.milestones.map((milestone) => ({
+      amount: milestone.amount,
+      evidence_commitment: milestone.evidenceCommitment,
+    })),
+  };
+}
+
+export function specTerms(fields: ProjectSpecFields): ProjectSpecTerms {
+  return {
+    recipientCommitment: fields.recipient_commitment,
+    deadline: fields.deadline,
+    milestones: fields.milestones.map((milestone) => ({
+      amount: milestone.amount,
+      evidenceCommitment: milestone.evidence_commitment,
+    })),
+  };
+}
+
 /** The three proposal kinds; the payload constructor is the kind. */
 export type ProposalPayloadTerms =
   | { kind: "Config" }
@@ -99,18 +128,7 @@ function proposalPayload(
   payload: ProposalPayloadTerms | undefined,
 ): unknown {
   if (payload?.kind === "Project") {
-    return {
-      Project: [
-        {
-          recipient_commitment: payload.spec.recipientCommitment,
-          deadline: payload.spec.deadline,
-          milestones: payload.spec.milestones.map((milestone) => ({
-            amount: milestone.amount,
-            evidence_commitment: milestone.evidenceCommitment,
-          })),
-        },
-      ],
-    };
+    return { Project: [specFields(payload.spec)] };
   }
   if (payload?.kind === "Cancel") {
     return { Cancel: [payload.projectId] };
@@ -284,6 +302,18 @@ export function payloadConfigDatum(datum: string): string {
   const payload = proposalConstr(datum).fields[2] as ProposalConstr;
   if (payload.index !== 0) throw new Error("proposal payload is not Config");
   return Data.to(payload.fields[0] as never);
+}
+
+/** The spec a `Project` proposal carries, re-encoded for the project box. */
+export function payloadProjectSpec(datum: string): ProjectSpecTerms {
+  const payload = proposalConstr(datum).fields[2] as ProposalConstr;
+  if (payload.index !== 1) throw new Error("proposal payload is not Project");
+  return specTerms(
+    Data.from(
+      Data.to(payload.fields[0] as never),
+      projectSpecSchema,
+    ) as unknown as ProjectSpecFields,
+  );
 }
 
 /** The proposer's wallet must be selected; the board co-signs. */

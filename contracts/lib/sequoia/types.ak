@@ -215,10 +215,12 @@ pub type ProjectDatum {
 }
 
 /// Treasury actions. `SpendTranche` and `CloseProject` change the pool, so each
-/// spends the project box and the pool box together (spec §7).
+/// spends the project box and the pool box together (spec §7). `ReserveProject`
+/// is the pool spend that runs beside the `PROJECT` mint at execution.
 pub type TreasuryRedeemer {
   AttestPool { balance: Int, bank_ref_hash: ByteArray }
   SpendTranche { evidence_hash: ByteArray, bank_ref_hash: ByteArray }
   CloseProject
   CancelProject
+  ReserveProject
 }

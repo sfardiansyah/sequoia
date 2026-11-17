@@ -1354,6 +1354,10 @@ test finalize_uses_the_live_config_not_the_proposed_config() {
 const config_policy_id: ByteArray =
   #"5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
 
+/// The treasury policy `governance` takes as its second parameter (ADR 0010 §1).
+const treasury_policy_id: ByteArray =
+  #"9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+
 fn passed_proposal() -> ProposalDatum {
   let datum = proposal_datum()
   ProposalDatum {
@@ -1422,6 +1426,7 @@ test execute_accepts_a_passed_proposal() {
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
   )
@@ -1432,6 +1437,7 @@ test execute_rejects_an_open_proposal() fail {
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
   )
@@ -1442,6 +1448,7 @@ test execute_rejects_a_rejected_proposal() fail {
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
   )
@@ -1452,6 +1459,7 @@ test execute_rejects_a_missing_config_box() fail {
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [], execute_outputs(old)),
   )
@@ -1462,6 +1470,7 @@ test execute_rejects_two_config_boxes() fail {
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [config_spent_input(), config_spent_input()], []),
   )
@@ -1472,6 +1481,7 @@ test execute_rejects_a_config_that_is_not_the_proposed_one() fail {
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(
       old,
@@ -1487,6 +1497,7 @@ test execute_rejects_a_config_output_at_another_address() fail {
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(
       old,
@@ -1509,6 +1520,7 @@ test execute_rejects_a_changed_counter() fail {
   let new = ProposalDatum { ..old, status: Executed, yes: old.yes + 1 }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
   )
@@ -1523,6 +1535,7 @@ test execute_rejects_a_changed_finalize_time() fail {
   }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
   )
@@ -1537,6 +1550,7 @@ test execute_rejects_a_changed_proposed_config() fail {
   }
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, new, [config_spent_input()], execute_outputs(old)),
   )
@@ -1546,7 +1560,172 @@ test execute_rejects_a_proposal_that_stays_passed() fail {
   let old = passed_proposal()
   governance_rules.execute(
     state_policy_id,
+    treasury_policy_id,
     ref(3),
     execute_tx(old, old, [config_spent_input()], execute_outputs(old)),
+  )
+}
+
+// Project execution: a passed `Project` proposal mints the `PROJECT` token and
+// the treasury mint owns the reserve (spec §7, ADR 0010 §1).
+
+fn execute_project_spec() -> ProjectSpec {
+  ProjectSpec {
+    recipient_commitment: #"c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+    deadline: 2_000_000_000,
+    milestones: [
+      Milestone {
+        amount: 5_000_000,
+        evidence_commitment: #"c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2",
+      },
+    ],
+  }
+}
+
+fn passed_project_proposal() -> ProposalDatum {
+  let datum = proposal_datum()
+  ProposalDatum {
+    ..datum,
+    id: project_id,
+    payload: Project(execute_project_spec()),
+    nullifiers: [nullifier_a],
+    tallied: 1,
+    yes: 1,
+    status: Passed,
+    finalized_at: Some(datum.reveal_end + 1_000),
+  }
+}
+
+fn project_mint() {
+  assets.from_asset(treasury_policy_id, project_id, 1)
+}
+
+fn execute_project_tx(
+  old: ProposalDatum,
+  new: ProposalDatum,
+  mint,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(old)],
+    reference_inputs: [config_input()],
+    mint,
+    validity_range: interval.between(old.reveal_end, old.reveal_end + 1_000),
+    outputs: [proposal_output(new)],
+  }
+}
+
+test execute_project_accepts_a_passed_proposal() {
+  let old = passed_project_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(old, new, project_mint()),
+  )
+}
+
+test execute_project_rejects_a_missing_mint() fail {
+  let old = passed_project_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(old, new, assets.zero),
+  )
+}
+
+test execute_project_rejects_a_mint_with_another_name() fail {
+  let old = passed_project_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(
+      old,
+      new,
+      assets.from_asset(treasury_policy_id, proposal_id, 1),
+    ),
+  )
+}
+
+test execute_project_rejects_a_mint_from_another_policy() fail {
+  let old = passed_project_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(
+      old,
+      new,
+      assets.from_asset(governance_policy_id, project_id, 1),
+    ),
+  )
+}
+
+test execute_project_rejects_a_rejected_proposal() fail {
+  let old = ProposalDatum { ..passed_project_proposal(), status: Rejected }
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(old, new, project_mint()),
+  )
+}
+
+test execute_project_rejects_a_changed_payload() fail {
+  let old = passed_project_proposal()
+  let new = ProposalDatum {
+    ..old,
+    status: Executed,
+    payload: Project(ProjectSpec { ..execute_project_spec(), deadline: 1 }),
+  }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(old, new, project_mint()),
+  )
+}
+
+test execute_project_rejects_a_proposal_that_stays_passed() fail {
+  let old = passed_project_proposal()
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(old, old, project_mint()),
+  )
+}
+
+test execute_project_rejects_a_missing_mint_without_a_config_reference() fail {
+  let old = passed_project_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  let tx = Transaction {
+    ..execute_project_tx(old, new, project_mint()),
+    reference_inputs: [],
+  }
+  governance_rules.execute(state_policy_id, treasury_policy_id, ref(3), tx)
+}
+
+test execute_rejects_a_cancel_proposal() fail {
+  let old = ProposalDatum {
+    ..proposal_datum(),
+    id: project_id,
+    payload: Cancel(project_id),
+    status: Passed,
+    finalized_at: Some(proposal_datum().reveal_end + 1_000),
+  }
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_project_tx(old, new, assets.zero),
   )
 }

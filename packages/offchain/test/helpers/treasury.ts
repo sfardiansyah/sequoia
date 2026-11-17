@@ -1,5 +1,18 @@
 import { Constr, Data, type UTxO } from "@lucid-evolution/lucid";
 import {
+  decodeProposalDatum,
+  proposalUnit,
+  payloadProjectSpec,
+  projectSpecSchema,
+  specFields,
+  specTerms,
+  withExecuted,
+  type ProjectSpecFields,
+  type ProjectSpecTerms,
+} from "./proposal";
+import { governanceExecute } from "./ballot";
+import {
+  encode,
   poolDatum,
   poolUnit,
   scriptTime,
@@ -24,6 +37,9 @@ export const attestPoolRedeemer = (
   balance: bigint,
   bankRefHash: string,
 ): string => Data.to(new Constr(0, [balance, bankRefHash]));
+
+/** `TreasuryRedeemer.ReserveProject`: the pool spend beside the `PROJECT` mint. */
+export const reserveProjectRedeemer = Data.to(new Constr(4, []));
 
 export type AttestOptions = {
   balance: bigint;
@@ -81,4 +97,143 @@ export async function attestPool(
   await submitTx(built);
   ledger.emulator.awaitBlock(1);
   return ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy));
+}
+
+/** Minimum ADA a project box holds. */
+export const PROJECT_MIN_LOVELACE = 5_000_000n;
+
+export type ProjectStatusName =
+  | "ProjectOpen"
+  | "ProjectClosed"
+  | "ProjectCancelled";
+
+const projectDatumSchema = Data.Object({
+  project_id: Data.Bytes(),
+  spec: projectSpecSchema,
+  next_milestone: Data.Integer(),
+  status: Data.Enum([
+    Data.Literal("ProjectOpen"),
+    Data.Literal("ProjectClosed"),
+    Data.Literal("ProjectCancelled"),
+  ]),
+});
+
+export type ProjectFields = {
+  projectId: string;
+  spec: ProjectSpecTerms;
+  nextMilestone: bigint;
+  status: ProjectStatusName;
+};
+
+/** The `PROJECT` NFT name is the proposal id, under the treasury policy. */
+export function projectUnit(treasuryPolicy: string, id: string): string {
+  return treasuryPolicy + id;
+}
+
+/** The project box datum, in `types.ak` field order. */
+export function projectDatum(
+  projectId: string,
+  spec: ProjectSpecTerms,
+  nextMilestone = 0n,
+  status: ProjectStatusName = "ProjectOpen",
+): string {
+  return encode(
+    {
+      project_id: projectId,
+      spec: specFields(spec),
+      next_milestone: nextMilestone,
+      status,
+    },
+    projectDatumSchema,
+  );
+}
+
+export function decodeProjectDatum(datum: string): ProjectFields {
+  const raw = Data.from(datum, projectDatumSchema) as unknown as {
+    project_id: string;
+    spec: ProjectSpecFields;
+    next_milestone: bigint;
+    status: ProjectStatusName;
+  };
+  return {
+    projectId: raw.project_id,
+    spec: specTerms(raw.spec),
+    nextMilestone: raw.next_milestone,
+    status: raw.status,
+  };
+}
+
+export type ExecuteProjectOptions = {
+  /** Negative tests only: a spec other than the approved payload. */
+  spec?: ProjectSpecTerms;
+  /** Negative tests only: mint a second `PROJECT` name in the same transaction. */
+  extraMint?: { name: string; quantity: bigint };
+};
+
+/**
+ * Execute a passed `Project` proposal (ADR 0010 §1–§4): spend the proposal and
+ * the pool, mint the `PROJECT` NFT, reserve the budget, and write the project
+ * box. Permissionless, and no timelock.
+ */
+export async function executeProject(
+  ledger: Ledger,
+  m1: Genesis,
+  proposalBox: UTxO,
+  options: ExecuteProjectOptions = {},
+): Promise<{ proposal: UTxO; project: UTxO; pool: UTxO }> {
+  const proposal = decodeProposalDatum(proposalBox.datum!);
+  const spec = options.spec ?? payloadProjectSpec(proposalBox.datum!);
+  const budget = spec.milestones.reduce(
+    (total, milestone) => total + milestone.amount,
+    0n,
+  );
+  const pool = await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy));
+  const fields = decodePoolDatum(pool.datum!);
+  const unit = projectUnit(m1.treasuryPolicy, proposal.id);
+  const now = scriptTime(ledger, ledger.emulator.now());
+  const mint: Record<string, bigint> = { [unit]: 1n };
+  if (options.extraMint !== undefined) {
+    mint[m1.treasuryPolicy + options.extraMint.name] =
+      options.extraMint.quantity;
+  }
+
+  const built = await ledger.lucid
+    .newTx()
+    .collectFrom([proposalBox], governanceExecute)
+    .collectFrom([pool], reserveProjectRedeemer)
+    .readFrom([m1.configUtxo])
+    .attach.SpendingValidator(m1.governanceValidator)
+    .attach.SpendingValidator(m1.treasuryValidator)
+    .attach.MintingPolicy(m1.treasuryValidator)
+    .mintAssets(mint, Data.void())
+    .pay.ToContract(
+      m1.governanceAddress,
+      { kind: "inline", value: withExecuted(proposalBox.datum!) },
+      proposalBox.assets,
+    )
+    .pay.ToContract(
+      m1.treasuryAddress,
+      {
+        kind: "inline",
+        value: poolDatum(fields.balance, fields.committed + budget),
+      },
+      pool.assets,
+    )
+    .pay.ToContract(
+      m1.treasuryAddress,
+      { kind: "inline", value: projectDatum(proposal.id, spec) },
+      { lovelace: PROJECT_MIN_LOVELACE, [unit]: 1n },
+    )
+    .validFrom(now)
+    .validTo(now + 60_000)
+    .complete();
+  await submitTx(built);
+  ledger.emulator.awaitBlock(1);
+  return {
+    proposal: await ledger.lucid.utxoByUnit(
+      proposalUnit(m1.governancePolicy, proposal.id),
+    ),
+    project: await ledger.lucid.utxoByUnit(unit),
+    pool: await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy)),
+  };
 }

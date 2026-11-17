@@ -40,6 +40,20 @@ spend and mint purposes:
   that created it;
 - the pool and project boxes are distinguished by their datum and token.
 
+`governance` is parameterized by the state NFT policy and the treasury policy:
+the first locates the config, the second is the `PROJECT` mint that a passed
+project proposal must execute. `Execute(Project)` requires exactly that mint
+under that policy, and the treasury mint requires the spent `Passed` proposal,
+so neither can land alone. The treasury spends the pool at execution with a
+`ReserveProject` redeemer next to the mint: the mint has no `own_ref`, and a
+mint-only rule would leave the pool datum writable by whoever spends the pool
+box. Reserving also needs the treasury policy, which the script cannot name for
+itself, so the rule reads it from the pool box's own address — the script hash
+of the treasury — and checks the mint and the project box against it. Every pool
+action keeps the `POOL` token at its own address (`AttestPool` and
+`ReserveProject` both require it), so that hash is always the treasury itself;
+genesis is the deployer-trusted first write.
+
 The genesis one-shot `state_nft` policy mints `STATE` and `POOL` in the
 seed-spending transaction, so both singletons share one genesis policy. The
 treasury mint purpose cannot be one-shot itself, because it mints a `PROJECT`
@@ -194,9 +208,11 @@ and none is planned.
 A fresh preprod genesis, as M2: a new seed and policy set. `ConfigDatum` is
 unchanged from v2 — M3 adds no config field, because the treasurer is already
 `bank_issuer` and the treasury script is parameterized by the state NFT policy.
-The config validator's state NFT policy parameter changes, so every script hash
-and the `governance_policy` id change with it. The one-shot policy mints `STATE`
-and `POOL`; the pool opens at `{ balance: 0, committed: 0 }` and the first
+`governance` gains the treasury policy as its second parameter, because a passed
+project proposal must execute against that exact `PROJECT` policy. The config
+validator's state NFT policy parameter changes, so every script hash and the
+`governance_policy` id change with it. The one-shot policy mints `STATE` and
+`POOL`; the pool opens at `{ balance: 0, committed: 0 }` and the first
 attestation funds it. M1 and M2 boxes are abandoned. `contracts/plutus.json`
 remains the only off-chain interface.
 

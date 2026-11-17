@@ -195,6 +195,15 @@ input holding one `PROJECT` token at this script.
   `{ balance, committed: unchanged }`. The balance is absolute, not a delta, and
   may fall below `committed`.
 
+- **ReserveProject** (spend the pool box, beside the `PROJECT` mint).
+  Redeemer `ReserveProject`. The transaction mints one `PROJECT` token named the
+  id of a spent `Passed` `Project` proposal and writes its project box at this
+  script with `next_milestone = 0` and `ProjectOpen`; `committed` rises by the
+  proposal's budget and `balance` is unchanged. The mint purpose and this spend
+  carry the same rule, so neither can land alone. The treasury policy is the
+  script hash of the pool box's own address, which is how the mint finds the
+  `PROJECT` token without taking its own hash as a parameter.
+
 - **SpendTranche** (spend one project box and the pool box).
   Redeemer `SpendTranche { evidence_hash, bank_ref_hash }`.
   `status = ProjectOpen`, `next_milestone < length(milestones)`, and
@@ -229,6 +238,10 @@ input holding one `PROJECT` token at this script.
 
 ### `governance` additions
 
+`governance` is parameterized by the state NFT policy and the treasury policy
+(ADR 0010 §1, §8): the first locates the config, the second names the `PROJECT`
+mint that a passed project proposal must execute.
+
 - **CreateProposal** accepts all three kinds.
   - Shared: proposer signature, active member box with live KYC as reference
     inputs, `board_threshold` board signatures, exactly one `PROPOSAL` NFT named
@@ -252,7 +265,10 @@ input holding one `PROJECT` token at this script.
     as the new config datum.
   - `Project`: no timelock. Spends the proposal and the pool box, checks the
     reserve, mints the `PROJECT` NFT, writes the project box, and sets
-    `status = Executed`. Paired with the treasury mint.
+    `status = Executed`. Paired with the treasury mint. Governance requires the
+    exact mint (`treasury_policy`, the id of the proposal) and leaves the
+    reserve, the project datum, and the pool write to the treasury rules, which
+    in turn require this spent `Passed` proposal.
   - `CancelProject`: no timelock. Spends the proposal, the project box, and the
     pool box; the project must be open; the project becomes `Cancelled` with the
     remainder released; `status = Executed`. Paired with treasury

@@ -4,8 +4,9 @@ Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`) is
 implemented per `docs/adr/0008-m1-config-and-membership.md`; M2 governance
 (`governance` + `ballot`, config v2) follows
 `docs/adr/0009-m2-secret-ballot-governance.md`. M3 treasury follows
-`docs/adr/0010-m3-project-treasury.md`: genesis v3 (`POOL`, the pool box) and
-the pool attestation are implemented; the project rules follow.
+`docs/adr/0010-m3-project-treasury.md`: genesis v3 (`POOL`, the pool box), the
+pool attestation, and project execution are implemented; the tranche, close, and
+cancel rules follow.
 
 ## Toolchain
 
@@ -53,8 +54,8 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/state_nft.ak` — one-shot `STATE` and `POOL` mint, parameterized by
   the seed output.
 - `validators/treasury.ak` — the pool box, the project boxes, and the `PROJECT`
-  NFT policy (ADR 0010 §1). The pool attestation is live; the project actions
-  follow.
+  NFT policy (ADR 0010 §1). The pool attestation and the project reserve are
+  live; the tranche, close, and cancel rules follow.
 - `validators/config.ak` — the config box; its only spend is a governance
   execution.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
@@ -73,7 +74,8 @@ scripts take the state NFT policy ID, which is derived from it.
   invariants (ADR 0009 §8), and the config execution gate.
 - `lib/sequoia/governance_rules.ak` — proposal creation, cast, discard, tally,
   finalize, execute, and the proposal-datum invariant.
-- `lib/sequoia/treasury_rules.ak` — the pool attestation (ADR 0010 §2).
+- `lib/sequoia/treasury_rules.ak` — the pool attestation and the project reserve
+  (ADR 0010 §2, §4).
 - `lib/sequoia/ballot_rules.ak` — ballot cast, reveal, discard, and count (ADR
   0009 §5–§7).
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
@@ -153,9 +155,32 @@ checks only its own creation terms: a config change keeps the immutable fields
 and the invariants; a project needs a non-empty ordered milestone list with
 positive amounts, 32-byte recipient and evidence commitments, and a deadline
 after the proposal's `reveal_end`, so a passed project always has a spending
-window; a cancel needs a 32-byte project id. The target project box is checked
-when the cancel executes, with the treasury rules, because a proposal cannot name
-the treasury script yet.
+window; a cancel needs a 32-byte project id. The target project box is checked when the
+cancel executes, with the treasury rules: `governance` takes the treasury policy
+as a parameter (#38), so execution can require the exact `PROJECT` mint.
+
+## Project execution
+
+A passed `Project` proposal becomes a project box (ADR 0010 §1, §3–§4). Execution
+is permissionless and has no timelock; two validators split the gate so neither
+half can complete alone:
+
+- **governance** `Execute` spends the `Passed` proposal, marks it `Executed`,
+  keeps every other proposal field byte-identical, and requires exactly one
+  `PROJECT` mint named the proposal id under its `treasury_policy` parameter.
+  The project's own terms are not re-read here.
+- **treasury** owns the effect, from both purposes: the mint and the pool spend
+  (`ReserveProject`) carry one rule. It finds the one spent `Passed` `Project`
+  proposal by the config's governance policy and that name, compares the project
+  box's spec to the approved payload, requires `next_milestone = 0` and
+  `ProjectOpen`, mints exactly one `PROJECT` under the pool box's own script, and
+  raises `committed` by the proposal's budget without touching `balance`. The
+  reserve must hold (`committed + budget <= balance`), so an unfunded pool
+  rejects the execution and the proposal stays `Passed` for a retry.
+
+The treasury policy is the script hash of the pool box's address, which is how
+the mint purpose learns its own policy without taking a self-referential
+parameter. Genesis therefore compiles the treasury before governance.
 
 ## Governance tally and finalize
 

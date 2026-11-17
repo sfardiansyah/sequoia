@@ -5,9 +5,10 @@ use sequoia/governance_rules
 use sequoia/types.{Cast, Discard, Execute, Finalize, GovernanceRedeemer, Tally}
 
 /// Proposal box and PROPOSAL NFT (ADR 0009 §1, §5, §6). `state_nft_policy`
-/// locates the config box. Creation is the mint; cast, discard, tally, finalize,
-/// and execute are spends.
-validator governance(state_nft_policy: PolicyId) {
+/// locates the config box; `treasury_policy` is the `PROJECT` mint that a passed
+/// project proposal must execute (ADR 0010 §1). Creation is the mint; cast,
+/// discard, tally, finalize, and execute are spends.
+validator governance(state_nft_policy: PolicyId, treasury_policy: PolicyId) {
   mint(_redeemer: Data, policy_id: PolicyId, self: Transaction) {
     let config = config_ref.find(state_nft_policy, self)
     governance_rules.create_proposal(config, policy_id, self)
@@ -21,7 +22,13 @@ validator governance(state_nft_policy: PolicyId) {
   ) {
     expect action: GovernanceRedeemer = redeemer
     when action is {
-      Execute -> governance_rules.execute(state_nft_policy, own_ref, self)
+      Execute ->
+        governance_rules.execute(
+          state_nft_policy,
+          treasury_policy,
+          own_ref,
+          self,
+        )
       Cast -> {
         let config = config_ref.find(state_nft_policy, self)
         governance_rules.cast(config, own_ref, self)
