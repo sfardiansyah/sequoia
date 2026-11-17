@@ -14,7 +14,8 @@ use sequoia/tx.{
 }
 use sequoia/types.{
   Active, Cancel, Config, ConfigDatum, Executed, MemberDatum, Open, Passed,
-  Project, ProposalDatum, Rejected, VoteDatum, state_asset_name,
+  Project, ProjectCancelled, ProjectDatum, ProposalDatum, Rejected, VoteDatum,
+  state_asset_name,
 }
 use sequoia/voting
 
@@ -435,9 +436,9 @@ fn executed(old: ProposalDatum, new: ProposalDatum) -> Bool {
 
 /// `Execute` consumes a passed proposal and performs its kind's effect
 /// (ADR 0009 §1, §6; ADR 0010 §1, §3). The effects live in the owning
-/// validator: the config validator owns the config write, the treasury mint
-/// owns the reserve and the project box. `Config` waits for the timelock;
-/// project kinds execute without one.
+/// validator: the config validator owns the config write, and the treasury
+/// rules own the reserve, the project box, and the close/cancel release.
+/// `Config` waits for the timelock; project kinds execute without one.
 pub fn execute(
   state_nft_policy: PolicyId,
   treasury_policy: PolicyId,
@@ -474,8 +475,32 @@ pub fn execute(
         True
       }
     }
-    Cancel(_) ->
-      fail @"governance_rules: cancel execution lands with the cancel rules"
+    Cancel(project_id) -> {
+      // The treasury `CancelProject` rule owns the project and pool writes; the
+      // exact pairing is the spent project box and its `Cancelled` replacement.
+      let config = config_ref.find(state_nft_policy, self)
+      let new = returned_proposal(config, old.id, self)
+      expect executed(old, new)
+      let project_spent = list.any(
+        self.inputs,
+        fn(input) {
+          and {
+            input.output.address.payment_credential == Script(treasury_policy),
+            quantity_of(input.output.value, treasury_policy, project_id) == 1,
+          }
+        },
+      )
+      expect written: ProjectDatum = inline_datum(
+        one_token_output(treasury_policy, project_id, treasury_policy, self),
+      )
+      if !project_spent {
+        fail @"governance_rules: cancel needs the project box"
+      } else if written.status != ProjectCancelled {
+        fail @"governance_rules: cancel must cancel the project"
+      } else {
+        True
+      }
+    }
   }
 }
 

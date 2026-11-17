@@ -166,12 +166,12 @@ export async function castVote(
     options.salt,
   );
 
+  // Both heavy scripts ride as reference inputs, keeping the cast under the
+  // 16 KiB transaction limit.
   const tx = await ledger.lucid
     .newTx()
     .collectFrom([proposalBox], governanceCast)
-    .readFrom([m1.configUtxo])
-    .attach.SpendingValidator(m1.governanceValidator)
-    .attach.MintingPolicy(m1.ballotValidator)
+    .readFrom([m1.configUtxo, m1.governanceScriptRef, m1.ballotScriptRef])
     .validFrom(options.validFrom ?? now)
     .validTo(options.validTo ?? now + 60_000)
     .mintAssets({ [unit]: 1n }, ballotCast(options.leaf))
@@ -314,9 +314,6 @@ export async function tallyProposal(
     .collectFrom([proposalBox], governanceTally)
     .collectFrom(voteBoxes, ballotCount)
     .readFrom([m1.configUtxo, m1.governanceScriptRef, m1.ballotScriptRef])
-    .attach.SpendingValidator(m1.governanceValidator)
-    .attach.SpendingValidator(m1.ballotValidator)
-    .attach.MintingPolicy(m1.ballotValidator)
     .validFrom(options.validFrom ?? now)
     .validTo(options.validTo ?? now + 60_000)
     .mintAssets(burns, ballotCount)

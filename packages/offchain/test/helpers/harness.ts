@@ -465,6 +465,15 @@ export async function genesis(
       { kind: "inline", value: pool_datum },
       { lovelace: POOL_MIN_LOVELACE, [poolUnit(stateNftPolicy)]: 1n },
     )
+    .complete();
+  await submitTx(tx);
+  emulator.awaitBlock(1);
+
+  // The reference scripts are deployment plumbing, not part of the one-shot
+  // genesis transaction: publishing both there leaves no room under the 16 KiB
+  // transaction limit.
+  const references = await lucid
+    .newTx()
     .pay.ToAddressWithData(
       referenceAddress,
       undefined,
@@ -478,7 +487,7 @@ export async function genesis(
       ballotValidator,
     )
     .complete();
-  await submitTx(tx);
+  await submitTx(references);
   emulator.awaitBlock(1);
 
   const configUtxo = await lucid.utxoByUnit(unit);

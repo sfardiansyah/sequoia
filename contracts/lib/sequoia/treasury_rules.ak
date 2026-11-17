@@ -5,10 +5,13 @@ use cardano/assets.{AssetName, PolicyId, quantity_of, tokens}
 use cardano/transaction.{Input, Output, OutputReference, Transaction}
 use sequoia/config_ref
 use sequoia/config_rules
-use sequoia/tx.{inline_datum, one_token_output, require_key_signer, upper_bound}
+use sequoia/tx.{
+  inline_datum, lower_bound, one_token_output, require_key_signer, upper_bound,
+}
 use sequoia/types.{
-  ConfigDatum, Milestone, Passed, PoolDatum, Project, ProjectClosed,
-  ProjectDatum, ProjectOpen, ProjectSpec, ProposalDatum, pool_asset_name,
+  Cancel, ConfigDatum, Executed, Milestone, Passed, PoolDatum, Project,
+  ProjectCancelled, ProjectClosed, ProjectDatum, ProjectOpen, ProjectSpec,
+  ProjectStatus, ProposalDatum, pool_asset_name,
 }
 use sequoia/voting
 
@@ -21,6 +24,11 @@ fn datum_of(output: Output) -> PoolDatum {
 
 fn project_datum_of(output: Output) -> ProjectDatum {
   expect datum: ProjectDatum = inline_datum(output)
+  datum
+}
+
+fn proposal_datum_of(output: Output) -> ProposalDatum {
+  expect datum: ProposalDatum = inline_datum(output)
   datum
 }
 
@@ -118,6 +126,10 @@ fn treasury_policy(pool: Input) -> PolicyId {
 
 fn sum_milestones(milestones: List<Milestone>) -> Int {
   list.foldl(milestones, 0, fn(milestone, total) { total + milestone.amount })
+}
+
+fn remaining_amount(project: ProjectDatum) -> Int {
+  sum_milestones(list.drop(project.spec.milestones, project.next_milestone))
 }
 
 /// The spent `Passed` project proposal. Exactly one input holds this governance
@@ -294,5 +306,155 @@ pub fn spend_tranche(
     } else {
       True
     }
+  }
+}
+
+/// The shared close/cancel effect: the project keeps its id, spec, and
+/// `next_milestone` and flips to the requested final status; the pool releases
+/// the unspent milestones and keeps the balance (ADR 0010 §6, spec §7).
+fn release_project(
+  state_nft_policy: PolicyId,
+  policy_id: PolicyId,
+  status: ProjectStatus,
+  own_ref: OutputReference,
+  pool: Input,
+  old_pool: PoolDatum,
+  project: Input,
+  old: ProjectDatum,
+  self: Transaction,
+) -> Bool {
+  let written = project_datum_of(
+    one_token_output(policy_id, old.project_id, policy_id, self),
+  )
+  let new_pool = datum_of(only_pool_output(pool, self, state_nft_policy))
+  if own_ref != pool.output_reference && own_ref != project.output_reference {
+    fail @"treasury: the release spends the project and the pool"
+  } else if old.status != ProjectOpen {
+    fail @"treasury: only an open project can be released"
+  } else if written.project_id != old.project_id {
+    fail @"treasury: the release must keep the project id"
+  } else if written.spec != old.spec {
+    fail @"treasury: the release must keep the approved spec"
+  } else if written.next_milestone != old.next_milestone {
+    fail @"treasury: the release must keep next_milestone"
+  } else if written.status != status {
+    fail @"treasury: the release must write the final status"
+  } else if new_pool.balance != old_pool.balance {
+    fail @"treasury: the release must not change the balance"
+  } else if new_pool.committed != old_pool.committed - remaining_amount(old) {
+    fail @"treasury: the release must free the remaining milestones"
+  } else if new_pool.committed < 0 {
+    fail @"treasury: committed cannot go negative"
+  } else {
+    True
+  }
+}
+
+/// `CloseProject` (ADR 0010 §6, spec §7): the board threshold closes an open
+/// project before its deadline; from the deadline it is permissionless, because
+/// tranches have stopped and the only effect left is to return the remainder.
+pub fn close_project(
+  state_nft_policy: PolicyId,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let pool = only_pool_input(state_nft_policy, self)
+  let policy_id = treasury_policy(pool)
+  let old_pool = datum_of(pool.output)
+  let (project, old) = only_project_input(policy_id, self)
+  let permissionless = voting.not_before(lower_bound(self), old.spec.deadline)
+  // A permissionless close reads no config: the deadline alone is the authority.
+  let authorized = if permissionless {
+    True
+  } else {
+    let config = config_ref.find(state_nft_policy, self)
+    config_rules.board_signers(config, self) >= config.board_threshold
+  }
+  if authorized {
+    release_project(
+      state_nft_policy,
+      policy_id,
+      ProjectClosed,
+      own_ref,
+      pool,
+      old_pool,
+      project,
+      old,
+      self,
+    )
+  } else {
+    fail @"treasury: a close before the deadline needs the board"
+  }
+}
+
+/// The spent `Passed` cancel proposal for this project. The vote is the
+/// authority, so no signature is required (ADR 0010 §6).
+fn spent_cancel_proposal(
+  config: ConfigDatum,
+  project_id: AssetName,
+  self: Transaction,
+) -> ProposalDatum {
+  let proposals = list.filter(
+    self.inputs,
+    fn(input) {
+      if input.output.address.payment_credential != Script(
+        config.governance_policy,
+      ) {
+        False
+      } else {
+        expect proposal: ProposalDatum = inline_datum(input.output)
+        and {
+          proposal.payload == Cancel(project_id),
+          proposal.status == Passed,
+        }
+      }
+    },
+  )
+  when proposals is {
+    [input] -> {
+      expect proposal: ProposalDatum = inline_datum(input.output)
+      proposal
+    }
+    _ -> fail @"treasury: exactly one passed cancel proposal required"
+  }
+}
+
+/// `CancelProject` (ADR 0010 §6, spec §7): execute a passed cancel proposal
+/// against an open project. The treasury requires the spent proposal and its
+/// `Executed` output; governance requires this project's `Cancelled` box, so
+/// neither side can land alone.
+pub fn cancel_project(
+  state_nft_policy: PolicyId,
+  own_ref: OutputReference,
+  self: Transaction,
+) -> Bool {
+  let pool = only_pool_input(state_nft_policy, self)
+  let policy_id = treasury_policy(pool)
+  let old_pool = datum_of(pool.output)
+  let (project, old) = only_project_input(policy_id, self)
+  let config = config_ref.find(state_nft_policy, self)
+  let proposal = spent_cancel_proposal(config, old.project_id, self)
+  let executed_proposal = proposal_datum_of(
+    one_token_output(
+      config.governance_policy,
+      proposal.id,
+      config.governance_policy,
+      self,
+    ),
+  )
+  if executed_proposal.status != Executed {
+    fail @"treasury: the cancel proposal must execute in this transaction"
+  } else {
+    release_project(
+      state_nft_policy,
+      policy_id,
+      ProjectCancelled,
+      own_ref,
+      pool,
+      old_pool,
+      project,
+      old,
+      self,
+    )
   }
 }

@@ -304,6 +304,13 @@ export function payloadConfigDatum(datum: string): string {
   return Data.to(payload.fields[0] as never);
 }
 
+/** The project id a `Cancel` proposal targets. */
+export function payloadCancelProjectId(datum: string): string {
+  const payload = proposalConstr(datum).fields[2] as ProposalConstr;
+  if (payload.index !== 2) throw new Error("proposal payload is not Cancel");
+  return payload.fields[0] as string;
+}
+
 /** The spec a `Project` proposal carries, re-encoded for the project box. */
 export function payloadProjectSpec(datum: string): ProjectSpecTerms {
   const payload = proposalConstr(datum).fields[2] as ProposalConstr;

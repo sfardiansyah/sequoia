@@ -2,6 +2,7 @@ import { Constr, Data, type UTxO } from "@lucid-evolution/lucid";
 import {
   decodeProposalDatum,
   proposalUnit,
+  payloadCancelProjectId,
   payloadProjectSpec,
   projectSpecSchema,
   specFields,
@@ -47,6 +48,12 @@ export const spendTrancheRedeemer = (
   evidenceHash: string,
   bankRefHash: string,
 ): string => Data.to(new Constr(1, [evidenceHash, bankRefHash]));
+
+/** `TreasuryRedeemer.CloseProject`. */
+export const closeProjectRedeemer = Data.to(new Constr(2, []));
+
+/** `TreasuryRedeemer.CancelProject`. */
+export const cancelProjectRedeemer = Data.to(new Constr(3, []));
 
 export type AttestOptions = {
   balance: bigint;
@@ -332,6 +339,179 @@ export async function spendTranche(
   await submitWithBoard(built, ledger, boardSigners);
   ledger.emulator.awaitBlock(1);
   return {
+    project: await ledger.lucid.utxoByUnit(unit),
+    pool: await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy)),
+  };
+}
+
+/** The amount still unspent: the milestones after `next_milestone`. */
+export function remainingAmount(project: ProjectFields): bigint {
+  return project.spec.milestones
+    .slice(Number(project.nextMilestone))
+    .reduce((total, milestone) => total + milestone.amount, 0n);
+}
+
+export type CloseProjectOptions = {
+  projectId: string;
+  /** Board co-signers; defaults to two. A permissionless close passes zero. */
+  boardSigners?: number;
+  validFrom?: number;
+  validTo?: number;
+  /** Negative tests only: write these datums instead of the derived ones. */
+  poolDatum?: string;
+  projectDatum?: string;
+};
+
+/**
+ * `CloseProject` (ADR 0010 §6, spec §7): the board closes an open project
+ * before the deadline, or anyone closes it from the deadline. The remainder
+ * leaves `committed` and the project box stays at the treasury, `Closed`.
+ */
+export async function closeProject(
+  ledger: Ledger,
+  m1: Genesis,
+  options: CloseProjectOptions,
+): Promise<{ project: UTxO; pool: UTxO }> {
+  const unit = projectUnit(m1.treasuryPolicy, options.projectId);
+  const projectBox = await ledger.lucid.utxoByUnit(unit);
+  const project = decodeProjectDatum(projectBox.datum!);
+  const poolBox = await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy));
+  const pool = decodePoolDatum(poolBox.datum!);
+  const remaining = remainingAmount(project);
+  const now = scriptTime(ledger, ledger.emulator.now());
+  const boardSigners = options.boardSigners ?? 2;
+  const validFrom = options.validFrom ?? now;
+  // From the deadline the close is permissionless and reads no config.
+  const permissionless = validFrom >= Number(project.spec.deadline);
+
+  let tx = ledger.lucid
+    .newTx()
+    .collectFrom([projectBox, poolBox], closeProjectRedeemer)
+    .attach.SpendingValidator(m1.treasuryValidator)
+    .validFrom(validFrom)
+    .validTo(options.validTo ?? now + 60_000);
+  if (!permissionless) {
+    tx = tx.readFrom([m1.configUtxo]);
+  }
+  for (const key of ledger.roles.boardKeys.slice(0, boardSigners)) {
+    tx = tx.addSignerKey(key);
+  }
+  const built = await tx
+    .pay.ToContract(
+      m1.treasuryAddress,
+      {
+        kind: "inline",
+        value:
+          options.poolDatum ??
+          poolDatum(pool.balance, pool.committed - remaining),
+      },
+      poolBox.assets,
+    )
+    .pay.ToContract(
+      m1.treasuryAddress,
+      {
+        kind: "inline",
+        value:
+          options.projectDatum ??
+          projectDatum(
+            options.projectId,
+            project.spec,
+            project.nextMilestone,
+            "ProjectClosed",
+          ),
+      },
+      projectBox.assets,
+    )
+    .complete();
+  await submitWithBoard(built, ledger, boardSigners);
+  ledger.emulator.awaitBlock(1);
+  return {
+    project: await ledger.lucid.utxoByUnit(unit),
+    pool: await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy)),
+  };
+}
+
+export type ExecuteCancelOptions = {
+  /** Negative tests only: spend another project than the proposal targets. */
+  projectId?: string;
+  validFrom?: number;
+  validTo?: number;
+  /** Negative tests only: write these datums instead of the derived ones. */
+  poolDatum?: string;
+  projectDatum?: string;
+  proposalDatum?: string;
+};
+
+/**
+ * Execute a passed `Cancel` proposal (ADR 0010 §6, spec §7): the governance
+ * box is spent to `Executed` beside the treasury cancel of the target project.
+ * The vote is the authority, so no board or treasurer signature is needed.
+ */
+export async function executeCancel(
+  ledger: Ledger,
+  m1: Genesis,
+  proposalBox: UTxO,
+  options: ExecuteCancelOptions = {},
+): Promise<{ proposal: UTxO; project: UTxO; pool: UTxO }> {
+  const proposal = decodeProposalDatum(proposalBox.datum!);
+  const target = options.projectId ?? payloadCancelProjectId(proposalBox.datum!);
+  const unit = projectUnit(m1.treasuryPolicy, target);
+  const projectBox = await ledger.lucid.utxoByUnit(unit);
+  const project = decodeProjectDatum(projectBox.datum!);
+  const poolBox = await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy));
+  const pool = decodePoolDatum(poolBox.datum!);
+  const remaining = remainingAmount(project);
+  const now = scriptTime(ledger, ledger.emulator.now());
+
+  const built = await ledger.lucid
+    .newTx()
+    .collectFrom([proposalBox], governanceExecute)
+    .collectFrom([projectBox, poolBox], cancelProjectRedeemer)
+    .readFrom([m1.configUtxo])
+    .attach.SpendingValidator(m1.governanceValidator)
+    .attach.SpendingValidator(m1.treasuryValidator)
+    .validFrom(options.validFrom ?? now)
+    .validTo(options.validTo ?? now + 60_000)
+    .pay.ToContract(
+      m1.governanceAddress,
+      {
+        kind: "inline",
+        value: options.proposalDatum ?? withExecuted(proposalBox.datum!),
+      },
+      proposalBox.assets,
+    )
+    .pay.ToContract(
+      m1.treasuryAddress,
+      {
+        kind: "inline",
+        value:
+          options.poolDatum ??
+          poolDatum(pool.balance, pool.committed - remaining),
+      },
+      poolBox.assets,
+    )
+    .pay.ToContract(
+      m1.treasuryAddress,
+      {
+        kind: "inline",
+        value:
+          options.projectDatum ??
+          projectDatum(
+            target,
+            project.spec,
+            project.nextMilestone,
+            "ProjectCancelled",
+          ),
+      },
+      projectBox.assets,
+    )
+    .complete();
+  await submitTx(built);
+  ledger.emulator.awaitBlock(1);
+  return {
+    proposal: await ledger.lucid.utxoByUnit(
+      proposalUnit(m1.governancePolicy, proposal.id),
+    ),
     project: await ledger.lucid.utxoByUnit(unit),
     pool: await ledger.lucid.utxoByUnit(poolUnit(m1.stateNftPolicy)),
   };

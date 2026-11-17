@@ -8,8 +8,8 @@ use cardano/transaction.{
 use sequoia/governance_rules
 use sequoia/types.{
   Active, Cancel, Config, ConfigDatum, Executed, Inactive, KycDatum, MemberDatum,
-  Milestone, No, Open, Passed, Project, ProjectSpec, ProposalDatum, Rejected,
-  Standard, VoteDatum, Yes,
+  Milestone, No, Open, Passed, Project, ProjectCancelled, ProjectDatum,
+  ProjectOpen, ProjectSpec, ProposalDatum, Rejected, Standard, VoteDatum, Yes,
 }
 use sequoia/voting
 
@@ -1713,19 +1713,173 @@ test execute_project_rejects_a_missing_mint_without_a_config_reference() fail {
   governance_rules.execute(state_policy_id, treasury_policy_id, ref(3), tx)
 }
 
-test execute_rejects_a_cancel_proposal() fail {
-  let old = ProposalDatum {
-    ..proposal_datum(),
-    id: project_id,
+// Cancel execution: the passed proposal and the target project box are spent
+// together, and the project box is written `Cancelled` (spec §7, ADR 0010 §6).
+
+const other_project_id: ByteArray =
+  #"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+
+fn cancel_proposal() -> ProposalDatum {
+  let datum = proposal_datum()
+  ProposalDatum {
+    ..datum,
     payload: Cancel(project_id),
+    nullifiers: [nullifier_a],
+    tallied: 1,
+    yes: 1,
     status: Passed,
-    finalized_at: Some(proposal_datum().reveal_end + 1_000),
+    finalized_at: Some(datum.reveal_end + 1_000),
   }
+}
+
+fn project_box() -> ProjectDatum {
+  ProjectDatum {
+    project_id,
+    spec: ProjectSpec {
+      recipient_commitment: leaf_a,
+      deadline: 2_000_000_000,
+      milestones: [Milestone { amount: 1_000_000, evidence_commitment: leaf_a }],
+    },
+    next_milestone: 0,
+    status: ProjectOpen,
+  }
+}
+
+fn project_box_output(datum: ProjectDatum) -> Output {
+  Output {
+    address: from_script(treasury_policy_id),
+    value: assets.from_asset(treasury_policy_id, datum.project_id, 1),
+    datum: InlineDatum(datum),
+    reference_script: None,
+  }
+}
+
+fn project_box_input(datum: ProjectDatum) -> Input {
+  Input { output_reference: ref(6), output: project_box_output(datum) }
+}
+
+fn execute_cancel_tx(
+  old: ProposalDatum,
+  new: ProposalDatum,
+  project_input: Input,
+  project_output: Output,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [proposal_input(old), project_input],
+    reference_inputs: [config_input()],
+    validity_range: interval.between(old.reveal_end, old.reveal_end + 1_000),
+    outputs: [proposal_output(new), project_output],
+  }
+}
+
+fn cancelled_project() -> ProjectDatum {
+  ProjectDatum { ..project_box(), status: ProjectCancelled }
+}
+
+test execute_cancel_accepts_a_passed_proposal() {
+  let old = cancel_proposal()
   let new = ProposalDatum { ..old, status: Executed }
   governance_rules.execute(
     state_policy_id,
     treasury_policy_id,
     ref(3),
-    execute_project_tx(old, new, assets.zero),
+    execute_cancel_tx(
+      old,
+      new,
+      project_box_input(project_box()),
+      project_box_output(cancelled_project()),
+    ),
+  )
+}
+
+test execute_cancel_rejects_a_missing_project_box() fail {
+  let old = cancel_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  let tx = Transaction {
+    ..execute_cancel_tx(
+      old,
+      new,
+      project_box_input(project_box()),
+      project_box_output(cancelled_project()),
+    ),
+    inputs: [proposal_input(old)],
+  }
+  governance_rules.execute(state_policy_id, treasury_policy_id, ref(3), tx)
+}
+
+test execute_cancel_rejects_an_uncancelled_project() fail {
+  let old = cancel_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_cancel_tx(
+      old,
+      new,
+      project_box_input(project_box()),
+      project_box_output(project_box()),
+    ),
+  )
+}
+
+test execute_cancel_rejects_another_target() fail {
+  let other = ProposalDatum {
+    ..cancel_proposal(),
+    payload: Cancel(other_project_id),
+    status: Passed,
+  }
+  let new = ProposalDatum { ..other, status: Executed }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_cancel_tx(
+      other,
+      new,
+      project_box_input(project_box()),
+      project_box_output(cancelled_project()),
+    ),
+  )
+}
+
+test execute_cancel_rejects_a_project_outside_the_treasury() fail {
+  let old = cancel_proposal()
+  let new = ProposalDatum { ..old, status: Executed }
+  let fake = Input {
+    output_reference: ref(6),
+    output: Output {
+      address: from_script(governance_policy_id),
+      value: assets.from_asset(treasury_policy_id, project_id, 1),
+      datum: InlineDatum(project_box()),
+      reference_script: None,
+    },
+  }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_cancel_tx(old, new, fake, project_box_output(cancelled_project())),
+  )
+}
+
+test execute_cancel_rejects_a_changed_payload() fail {
+  let old = cancel_proposal()
+  let new = ProposalDatum {
+    ..old,
+    status: Executed,
+    payload: Cancel(other_project_id),
+  }
+  governance_rules.execute(
+    state_policy_id,
+    treasury_policy_id,
+    ref(3),
+    execute_cancel_tx(
+      old,
+      new,
+      project_box_input(project_box()),
+      project_box_output(cancelled_project()),
+    ),
   )
 }

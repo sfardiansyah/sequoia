@@ -6,9 +6,10 @@ use cardano/transaction.{
 }
 use sequoia/treasury_rules
 use sequoia/types.{
-  Config, ConfigDatum, Milestone, Passed, PoolDatum, Project, ProjectCancelled,
-  ProjectClosed, ProjectDatum, ProjectOpen, ProjectSpec, ProposalDatum,
-  ProposalPayload, ProposalStatus, Rejected, pool_asset_name,
+  Cancel, Config, ConfigDatum, Executed, Milestone, Open, Passed, PoolDatum,
+  Project, ProjectCancelled, ProjectClosed, ProjectDatum, ProjectOpen,
+  ProjectSpec, ProposalDatum, ProposalPayload, ProposalStatus, Rejected,
+  pool_asset_name,
 }
 
 const state_policy_id: ByteArray =
@@ -965,5 +966,487 @@ test tranche_accepts_the_pool_box_own_ref() {
     bank_ref,
     ref(3),
     first_tranche_tx(),
+  )
+}
+
+// Close and cancel: the unspent milestones return to the pool, the project box
+// keeps its identity and is locked at the final status (spec §7, ADR 0010 §6).
+
+const cancel_proposal_id: ByteArray =
+  #"e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"
+
+fn close_tx(
+  old_pool: PoolDatum,
+  new_pool: PoolDatum,
+  old_project: ProjectDatum,
+  new_project: ProjectDatum,
+  signers: List<ByteArray>,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [pool_input(old_pool, 3), project_input(old_project, 5)],
+    reference_inputs: [config_input()],
+    extra_signatories: signers,
+    outputs: [pool_output(new_pool), project_output(new_project)],
+    validity_range: interval.between(0, 1_000_000),
+  }
+}
+
+fn closed_project() -> ProjectDatum {
+  ProjectDatum { ..open_project(), status: ProjectClosed }
+}
+
+test close_releases_the_whole_remainder() {
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      closed_project(),
+      [board],
+    ),
+  )
+}
+
+test close_releases_a_partly_spent_project() {
+  let started = ProjectDatum { ..open_project(), next_milestone: 1 }
+  let closed = ProjectDatum { ..started, status: ProjectClosed }
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(3),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 2_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      started,
+      closed,
+      [board],
+    ),
+  )
+}
+
+test close_is_permissionless_after_the_deadline() {
+  let tx = Transaction {
+    ..close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      closed_project(),
+      [],
+    ),
+    validity_range: interval.between(2_000_000_000, 2_000_000_001),
+  }
+  treasury_rules.close_project(state_policy_id, ref(5), tx)
+}
+
+test close_is_permissionless_without_a_config_reference() {
+  let tx = Transaction {
+    ..close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      closed_project(),
+      [],
+    ),
+    reference_inputs: [],
+    validity_range: interval.between(2_000_000_000, 2_000_000_001),
+  }
+  treasury_rules.close_project(state_policy_id, ref(5), tx)
+}
+
+test close_accepts_the_board_after_the_deadline() {
+  let tx = Transaction {
+    ..close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      closed_project(),
+      [board],
+    ),
+    validity_range: interval.between(2_000_000_000, 2_000_000_001),
+  }
+  treasury_rules.close_project(state_policy_id, ref(5), tx)
+}
+
+test close_rejects_a_permissionless_close_before_the_deadline() fail {
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      closed_project(),
+      [],
+    ),
+  )
+}
+
+test close_rejects_a_second_close() fail {
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      closed_project(),
+      closed_project(),
+      [board],
+    ),
+  )
+}
+
+test close_rejects_a_cancelled_project() fail {
+  let cancelled = ProjectDatum { ..open_project(), status: ProjectCancelled }
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      cancelled,
+      closed_project(),
+      [board],
+    ),
+  )
+}
+
+test close_rejects_a_changed_spec() fail {
+  let tampered = ProjectDatum {
+    ..closed_project(),
+    spec: ProjectSpec { ..project_spec(), recipient_commitment: evidence_a },
+  }
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      tampered,
+      [board],
+    ),
+  )
+}
+
+test close_rejects_a_changed_next_milestone() fail {
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      ProjectDatum { ..closed_project(), next_milestone: 1 },
+      [board],
+    ),
+  )
+}
+
+test close_rejects_a_changed_balance() fail {
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000 - 1, committed: 0 },
+      open_project(),
+      closed_project(),
+      [board],
+    ),
+  )
+}
+
+test close_rejects_a_wrong_release() fail {
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 1_000_000 },
+      open_project(),
+      closed_project(),
+      [board],
+    ),
+  )
+}
+
+test close_rejects_a_negative_committed() fail {
+  treasury_rules.close_project(
+    state_policy_id,
+    ref(5),
+    close_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: -5_000_000 },
+      open_project(),
+      closed_project(),
+      [board],
+    ),
+  )
+}
+
+test close_rejects_a_missing_pool() fail {
+  let tx = Transaction {
+    ..close_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      closed_project(),
+      [board],
+    ),
+    inputs: [project_input(open_project(), 5)],
+  }
+  treasury_rules.close_project(state_policy_id, ref(5), tx)
+}
+
+fn cancel_proposal(status: ProposalStatus) -> ProposalDatum {
+  ProposalDatum {
+    id: cancel_proposal_id,
+    proposer: treasurer,
+    payload: Cancel(project_id),
+    eligible_leaves: [leaf],
+    start: 0,
+    end: 1,
+    reveal_end: 2,
+    nullifiers: [leaf],
+    discarded: 0,
+    tallied: 1,
+    yes: 1,
+    no: 0,
+    abstain: 0,
+    status,
+    finalized_at: Some(3),
+  }
+}
+
+fn proposal_output(proposal: ProposalDatum) -> Output {
+  Output {
+    address: from_script(governance_policy_id),
+    value: assets.from_asset(governance_policy_id, proposal.id, 1),
+    datum: InlineDatum(proposal),
+    reference_script: None,
+  }
+}
+
+fn cancel_tx(
+  old_pool: PoolDatum,
+  new_pool: PoolDatum,
+  old_project: ProjectDatum,
+  new_project: ProjectDatum,
+  old: ProposalDatum,
+  new: ProposalDatum,
+) -> Transaction {
+  Transaction {
+    ..placeholder,
+    inputs: [
+      pool_input(old_pool, 3),
+      project_input(old_project, 5),
+      named_proposal_input(old, old.id),
+    ],
+    reference_inputs: [config_input()],
+    outputs: [
+      pool_output(new_pool),
+      project_output(new_project),
+      proposal_output(new),
+    ],
+  }
+}
+
+fn cancelled_project() -> ProjectDatum {
+  ProjectDatum { ..open_project(), status: ProjectCancelled }
+}
+
+test cancel_releases_the_remainder_and_executes_the_proposal() {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
+  )
+}
+
+test cancel_releases_a_partly_spent_project() {
+  let started = ProjectDatum { ..open_project(), next_milestone: 1 }
+  let cancelled = ProjectDatum { ..started, status: ProjectCancelled }
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 2_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      started,
+      cancelled,
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
+  )
+}
+
+test cancel_accepts_the_pool_box_own_ref() {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(3),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
+  )
+}
+
+test cancel_rejects_a_missing_proposal() fail {
+  let tx = Transaction {
+    ..cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
+    inputs: [
+      pool_input(PoolDatum { balance: 10_000_000, committed: 5_000_000 }, 3),
+      project_input(open_project(), 5),
+    ],
+  }
+  treasury_rules.cancel_project(state_policy_id, ref(5), tx)
+}
+
+test cancel_rejects_a_project_proposal() fail {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      project_proposal(Project(project_spec()), Passed),
+      project_proposal(Project(project_spec()), Executed),
+    ),
+  )
+}
+
+test cancel_rejects_an_open_proposal() fail {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      cancel_proposal(Open),
+      cancel_proposal(Executed),
+    ),
+  )
+}
+
+test cancel_rejects_a_proposal_left_passed() fail {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      cancel_proposal(Passed),
+      cancel_proposal(Passed),
+    ),
+  )
+}
+
+test cancel_rejects_a_mismatched_proposal() fail {
+  let mismatched = ProposalDatum {
+    ..cancel_proposal(Passed),
+    payload: Cancel(other_project_id),
+  }
+  let executed = ProposalDatum { ..mismatched, status: Executed }
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      mismatched,
+      executed,
+    ),
+  )
+}
+
+test cancel_rejects_a_closed_project() fail {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      closed_project(),
+      cancelled_project(),
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
+  )
+}
+
+test cancel_rejects_a_changed_spec() fail {
+  let tampered = ProjectDatum {
+    ..cancelled_project(),
+    spec: ProjectSpec { ..project_spec(), recipient_commitment: evidence_a },
+  }
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 0 },
+      open_project(),
+      tampered,
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
+  )
+}
+
+test cancel_rejects_a_wrong_release() fail {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000, committed: 1_000_000 },
+      open_project(),
+      cancelled_project(),
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
+  )
+}
+
+test cancel_rejects_a_changed_balance() fail {
+  treasury_rules.cancel_project(
+    state_policy_id,
+    ref(5),
+    cancel_tx(
+      PoolDatum { balance: 10_000_000, committed: 5_000_000 },
+      PoolDatum { balance: 10_000_000 - 1, committed: 0 },
+      open_project(),
+      cancelled_project(),
+      cancel_proposal(Passed),
+      cancel_proposal(Executed),
+    ),
   )
 }
