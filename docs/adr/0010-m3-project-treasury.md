@@ -3,8 +3,8 @@
 ## Status
 
 Accepted. 2026-11-15. Applies to M3 (`treasury`, the governance project kinds,
-and genesis v3). The spec is `docs/plan/m3-treasury.md`; the two are kept in
-agreement.
+and genesis v3). Delivered in M3 (tickets #34–#41). The spec is
+`docs/plan/m3-treasury.md`; the two are kept in agreement.
 
 ## Context
 

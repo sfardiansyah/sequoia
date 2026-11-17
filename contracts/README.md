@@ -2,11 +2,10 @@
 
 Aiken project for the Sequoia co-op validators. M1 (`config` + `membership`) is
 implemented per `docs/adr/0008-m1-config-and-membership.md`; M2 governance
-(`governance` + `ballot`, config v2) follows
-`docs/adr/0009-m2-secret-ballot-governance.md`. M3 treasury follows
-`docs/adr/0010-m3-project-treasury.md`: genesis v3 (`POOL`, the pool box), the
-pool attestation, project execution, and tranche spending are implemented; the
-close and cancel rules follow.
+(`governance` + `ballot`, config v2) is implemented per
+`docs/adr/0009-m2-secret-ballot-governance.md`; and M3 treasury is implemented
+per `docs/adr/0010-m3-project-treasury.md`: genesis v3 (`POOL`, the pool box),
+the pool attestation, project execution, tranche spending, and close/cancel.
 
 ## Toolchain
 
@@ -54,8 +53,7 @@ scripts take the state NFT policy ID, which is derived from it.
 - `validators/state_nft.ak` — one-shot `STATE` and `POOL` mint, parameterized by
   the seed output.
 - `validators/treasury.ak` — the pool box, the project boxes, and the `PROJECT`
-  NFT policy (ADR 0010 §1). The pool attestation, the project reserve, and the
-  tranche are live; the close and cancel rules follow.
+  NFT policy (ADR 0010 §1): attestation, reserve, tranche, close, and cancel.
 - `validators/config.ak` — the config box; its only spend is a governance
   execution.
 - `validators/kyc_attestation.ak` — KYC NFT mint and the KYC box spend.
@@ -75,7 +73,7 @@ scripts take the state NFT policy ID, which is derived from it.
 - `lib/sequoia/governance_rules.ak` — proposal creation, cast, discard, tally,
   finalize, execute, and the proposal-datum invariant.
 - `lib/sequoia/treasury_rules.ak` — the pool attestation, the project reserve,
-  and tranche spending (ADR 0010 §2, §4, §5).
+  tranche spending, close, and cancel (ADR 0010 §2, §4–§6).
 - `lib/sequoia/ballot_rules.ak` — ballot cast, reveal, discard, and count (ADR
   0009 §5–§7).
 - `lib/sequoia/tx.ak` — shared signer, validity-bound, and token-output helpers.
@@ -139,8 +137,8 @@ the tests can co-sign with `sign.withPrivateKey`.
 ## Treasury pool attestation
 
 The pool box holds the one-shot `POOL` token and `PoolDatum { balance, committed }`;
-the cash stays at the bank (ADR 0010 §1–§2). `AttestPool` is the only action so
-far: the treasurer — the config's `bank_issuer` — must be a required signer, the
+the cash stays at the bank (ADR 0010 §1–§2). `AttestPool` is the treasurer's pool
+action: the treasurer — the config's `bank_issuer` — must be a required signer, the
 redeemer carries the absolute `balance` and a non-empty `bank_ref_hash`, and the
 datum written back keeps `committed` byte-identical. The balance is never a
 delta, and it may fall below `committed`: an honest shortfall is recorded rather
@@ -199,6 +197,24 @@ transaction. Both the `POOL` and `PROJECT` singletons stay at the script.
 The rule runs for each spent box because both are at the same script. It locates
 exactly one pool input and exactly one project input, and each invocation
 requires its own box to be one of them, so neither can be written alone.
+
+## Close and cancel
+
+`CloseProject` spends the project and pool boxes and releases
+`sum(milestones[next_milestone..].amount)` from `committed`; `balance` does not
+move because no cash left the bank (ADR 0010 §6, spec §7). Before the deadline
+`board_threshold` board keys sign; from `lower_bound >= deadline` the close is
+permissionless and reads no config. The spec and `next_milestone` stay
+byte-identical and the status becomes `ProjectClosed`; a closed or cancelled
+project has no further action.
+
+`CancelProject` is the treasury half of a passed `Cancel` proposal. The same
+transaction spends the project box, the pool box, and a `Passed` cancel proposal
+whose target is this project, writes the proposal `Executed`, releases the
+remainder like a close, and sets `ProjectCancelled`. The vote is the authority,
+so no board or treasurer signature is required. Governance requires this precise
+mint-and-spend pairing; the treasury rule finds the proposal by the config's
+governance policy and re-checks that the project is still `ProjectOpen`.
 
 ## Governance tally and finalize
 
@@ -267,6 +283,9 @@ ledger's 16 KB transaction limit, so the scripts stay out of the transaction
 body.
 
 `bun run test:contracts` runs the focused suites plus `test/end-to-end.test.ts`,
-which walks one v2 ledger through genesis, KYC, bank proof, join, contribution,
-proposal creation, secret cast/reveal, tally, finalize, the timelock, and config
-execution, and carries the ADR 0008 §11 and ADR 0009 §11 failure cases.
+which walks one v3 ledger through genesis, KYC, bank proof, join, contribution,
+pool attestation, a board-signed project proposal, secret cast/reveal, tally,
+finalize, execution, tranches, a board close, a permissionless close after the
+deadline, and a cancel; it carries the spec §11 negative matrix (unfunded
+execute, late tranche, wrong evidence, missing board or treasurer signature,
+cancel mismatch, a second `PROJECT` name, and a tampered datum).

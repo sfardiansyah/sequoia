@@ -8,10 +8,10 @@ Architecture: modular monolith + DDD + hexagonal ports/adapters.
 
 ## Status
 
-M1 — Aiken config and membership — and M2 — governance — are complete (ADR
-0008, ADR 0009; GitHub milestones `M1: Config + Membership` and
-`M2: Governance`). Next: **M3 — treasury** (ADR 0010,
-`docs/plan/m3-treasury.md`).
+Config and membership (M1), governance (M2), and treasury (M3) are complete
+(ADR 0008, ADR 0009, ADR 0010; GitHub milestones `M1: Config + Membership`,
+`M2: Governance`, and `M3: Treasury`). Next: **M4 — endowment, distribution,
+and exit** (ADR 0005, ADR 0006, `docs/plan/sequoia-plan.md`).
 
 Implemented:
 
@@ -44,9 +44,16 @@ Implemented:
   immutable config, KYC attestation issue/renew/revoke, bank-proof issue/cancel
   with a burn guard, membership join and non-transferability, and contribution
   with the config split, tested with Aiken and one Lucid emulator suite;
+- M2 on-chain governance (ADR 0009): config v2, board-attested eligible leaf
+  lists, secret-ballot cast/reveal/discard, batched tally and finalize, and
+  config execution after the timelock, with one v2 end-to-end emulator suite;
+- M3 on-chain treasury (ADR 0010): the treasurer-attested project pool,
+  kind-tagged project and cancel proposals, board-and-treasurer milestone
+  tranches, board and permissionless close, cancel with the remainder returned,
+  and one v3 end-to-end emulator ledger carrying the spec §11 negative matrix;
 - Docker Compose stack and integration tests against real PostgreSQL.
 
-Test suite: 333 tests (`bun run check`, PGlite and the Aiken emulator suites
+Test suite: 370 tests (`bun run check`, PGlite and the Aiken emulator suites
 included) and 43 Postgres integration tests (`bun run test:integration`).
 
 The pilot is synthetic and preprod: no real IDR, no chain, and no real personal
@@ -55,8 +62,8 @@ data. Its rows are provisional, not the co-op ledger. See
 
 Not built yet: provisioned KYC provider/bank
 adapters, the full capital context beyond contribution years, snapshots, and
-bank attestations, distributions, exits, the governance context, and the web
-app.
+bank attestations, distributions, exits, the off-chain governance context, and
+the web app.
 
 ## Commands
 
@@ -143,7 +150,7 @@ separate from Cardano wallet keys; production keys belong in a secret manager.
 ```text
 packages/shared/    domain primitives
 apps/               API, web, indexer, issuer (later)
-contracts/          Aiken validators (M1, ADR 0008)
+contracts/          Aiken validators (M1–M3, ADR 0008–0010)
 docs/adr/           architecture decisions
 ```
 

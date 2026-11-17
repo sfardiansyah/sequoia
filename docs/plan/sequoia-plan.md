@@ -63,14 +63,14 @@ The co-op is a member-owned organization that:
 | Database | PostgreSQL + Drizzle |
 | Initial network | Preprod with mock IDR and mock KYC |
 
-### Current implementation handoff — 2026-11-15
+### Current implementation handoff — 2026-11-17
 
 **Repository:** `Sequoia`  
 **Package scope:** `@sequoia/api`, `@sequoia/shared`  
 **Architecture:** modular monolith + DDD + hexagonal ports/adapters  
 **Stack:** Bun, Elysia, Drizzle, PostgreSQL, citty, Vite/React later, Aiken  
 **Test command:** `bun run check`  
-**Current status:** 328 tests pass, typecheck clean, 43 Postgres integration tests green  
+**Current status:** 370 tests pass, typecheck clean, 43 Postgres integration tests green  
 
 **Pilot MVP handoff:** `docs/plan/sequoia-pilot-mvp/` (spec; tickets are GitHub issues)
 
@@ -78,20 +78,24 @@ The co-op is a member-owned organization that:
 PostgreSQL rows are provisional, not the co-op ledger (ADR 0004's pilot
 exception).
 
-**Next milestone:** M3 — treasury and project spending (ADR 0004). The M3 spec
-is `docs/plan/m3-treasury.md`, the decisions are ADR 0010, and the tickets are
-issues #34–#41. M1 and M2 are complete. The `M1: Config + Membership` milestone
-(issues #17–#26) delivered the state NFT, config, KYC attestations, bank
-proofs, membership join/transfer/contribution, and one Lucid emulator suite. The
+**Next milestone:** M4 — endowment, distribution, and exit (ADR 0005, ADR 0006;
+plan §3.5–§3.8, §4.5, §5.5, §6.5–§6.6). No M4 spec is written yet. M1, M2, and
+M3 are complete. The `M1: Config + Membership` milestone (issues #17–#26)
+delivered the state NFT, config, KYC attestations, bank proofs, membership
+join/transfer/contribution, and one Lucid emulator suite. The
 `M2: Governance` milestone (issues #27–#33) delivered ADR 0009, the shared
 voting primitives, config v2 and its invariant library, secret-ballot
 commit-reveal over a board-attested leaf list, batched tally and finalize,
 config execution after the timelock, and one v2 end-to-end emulator suite. The
-M2 spec is `docs/plan/m2-governance.md`. M3 adds a treasurer-attested project
-pool, kind-tagged project and cancel proposals, milestone tranches signed by the
-board and the treasurer, and close/cancel (ADR 0010).
-M1 and M2 ran on preprod only: no real IDR, no real personal data, and no
-preprod deployment in either milestone.
+M2 spec is `docs/plan/m2-governance.md`. The `M3: Treasury` milestone (issues
+#34–#41) delivered ADR 0010, genesis v3 with the `POOL` box, the
+treasurer-attested project pool, kind-tagged project and cancel proposals,
+project execution with the budget committed, milestone tranches signed by the
+board and the treasurer, board and permissionless close, cancel with the
+remainder returned, and one v3 end-to-end emulator suite carrying the spec §11
+negative matrix. The M3 spec is `docs/plan/m3-treasury.md`.
+M1–M3 ran on preprod only: no real IDR, no real personal data, and no preprod
+deployment in any milestone.
 
 #### Completed milestones
 
@@ -117,6 +121,7 @@ preprod deployment in either milestone.
 20. M1 on-chain foundation (tickets #17–#21): Aiken toolchain pinned to v1.1.24, shared split/vesting primitives with cross-language vectors, ADR 0008, the one-shot `state_nft` policy and the immutable `config` validator, and an emulator genesis test (seed, one `STATE`, config box, and its negative cases).
 21. M1 config and membership (tickets #22–#26): KYC attestation issue/renew/revoke, bank-proof issue/cancel and the burn guard, membership join and non-transferability, contribution with the config split and standard cap, and one end-to-end Lucid emulator suite. `contracts/plutus.json` is the only off-chain interface.
 22. M2 governance (tickets #27–#33): ADR 0009 and the shared voting primitives, the config v2 datum and invariant library, governance proposal creation with a board-signed eligible leaf list, secret-ballot cast/reveal/discard, batched tally and finalize, config execution after the timelock, and one v2 end-to-end emulator suite carrying the ADR 0009 §11 negative matrix. Proposals carry no bond, no receipt NFT, and no cancel action.
+23. M3 treasury (tickets #34–#41): ADR 0010 and the M3 spec, genesis v3 with the `POOL` box, the treasurer-attested pool, kind-tagged project and cancel proposals, project execution with the budget committed, board-and-treasurer milestone tranches, board and permissionless close, cancel with the remainder returned, and one v3 end-to-end emulator suite carrying the spec §11 negative matrix.
 
 #### Current auth decisions
 
@@ -211,9 +216,9 @@ held by what each milestone must prove rather than by lines changed.
 - Redis is not wired into the application.
 - KYC evidence is never verified: `evidence_ref` is an auditable pointer, not a proof. It is not returned by the CLI or API; the database is the only read path.
 - Revoked or expired KYC blocks new contribution snapshots but does not freeze an existing member; voting/exit gates do not exist yet.
-- Board approval is recorded for admission and contribution years; M2
-  governance carries only `Config` proposals, so admission approvals remain an
-  off-chain board decision.
+- Board approval is recorded for admission and contribution years; on-chain
+  governance carries config, project, and cancel proposals, but no admission
+  proposal, so admission approvals remain an off-chain board decision.
 - Audit covers KYC issue/revoke, admission, contribution year setup, bank
   attestation, and contribution recording. The operator is a self-declared
   lowercase slug from `SEQUOIA_OPERATOR`; there is no operator registry, login,
@@ -223,11 +228,11 @@ held by what each milestone must prove rather than by lines changed.
 - `retain_until` is stored but no deletion job or retention schedule runs.
 - Associate membership is not offered; membership is Indonesian natural
   persons only.
-- M1 and M2 contracts (state NFT, config, KYC, bank proof, membership
+- M1–M3 contracts (state NFT, config, KYC, bank proof, membership
   join/transfer/contribution, governance proposals, secret ballots, tally,
-  finalize, and config execution) are built and emulator-tested. Treasury,
-  distribution/exit, the API/DB projections, and the frontend are not built
-  yet.
+  finalize, config execution, the treasury pool, project execution, tranches,
+  close, and cancel) are built and emulator-tested. Distribution, exit, the
+  API/DB projections, and the frontend are not built yet.
 
 #### Resume checklist
 
@@ -247,7 +252,7 @@ bun run sequoia kyc list
 bun run sequoia audit list
 ```
 
-Read this handoff section first, then continue with M2 (ADR 0004). The ADR 0004
+Read this handoff section first, then continue with M4 (ADR 0004). The ADR 0004
 order supersedes the off-chain-first reading of the priority list below.
 
 ---
